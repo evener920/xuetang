@@ -101,19 +101,37 @@
         });
       });
     });
+    // 数学「公式」按「一、二、三…」小节拆分为单条：一小节一卡，每日打卡只取 2 小节（原来整单元太重）
+    const FMQ = [];
+    [...CUSTOM, ...EXTRA].filter(x=>x.subject==="数学" && x.type==="公式").forEach(src=>{
+      splitFormulaSections(effBody(src)).forEach(s=>{
+        const st = s.t || (src.title||"知识点");
+        const it = {
+          key:"fmq:"+strHash((src.title||"")+"::"+st),
+          subject:"数学", type:"公式",
+          title:st, sub:src.title||"", body:s.b,
+          grade:src.grade||"", volume:src.volume||"", unit:src.unit||"",
+          tags:(src.tags||[]).slice(), videos:[]
+        };
+        const ov=(state.overrides||{})[it.key]; // 该小节被单独编辑过 → 用覆盖版
+        if(ov){ if(ov.body!=null) it.body=ov.body; if(ov.title) it.title=ov.title; if(ov.sub!=null) it.sub=ov.sub; if(ov.grade!=null) it.grade=ov.grade; }
+        FMQ.push(it);
+      });
+    });
     // 打散练习入口（全部题目均匀交错，弹窗内逐题配「答案提示」）
     const PRACTICE_ENTRY = { key:"practice:maththought", subject:"数学", type:"思维母题",
       title:"🧠 思维母题 · 打散练习", sub:"全部题目跨专题均匀打散，每题配「答案提示」", body:"", grade:"四年级", tags:["思维母题"], videos:[] };
-    const restCustom = CUSTOM.filter(x=>!(x.subject==="数学"&&x.type==="思维母题"));
-    const restExtra  = EXTRA.filter(x=>!(x.subject==="数学"&&x.type==="思维母题") && !OVSET.has(x.key));
-    // 内置条目被「覆盖编辑」后，以覆盖版本替换原内置项（思维母题母题源以拆分单题形式反映覆盖，故此处排除）
+    const isSplit = x=>x.subject==="数学" && (x.type==="思维母题"||x.type==="公式");
+    const restCustom = CUSTOM.filter(x=>!isSplit(x));
+    const restExtra  = EXTRA.filter(x=>!isSplit(x) && !OVSET.has(x.key));
+    // 内置条目被「覆盖编辑」后，以覆盖版本替换原内置项（思维母题/公式源以拆分条目形式反映覆盖，故此处排除）
     const OV_ITEMS = [];
     EXTRA.forEach(x=>{
-      if(OVSET.has(x.key) && !(x.subject==="数学" && x.type==="思维母题")){
+      if(OVSET.has(x.key) && !isSplit(x)){
         OV_ITEMS.push(Object.assign({}, x, OV[x.key], {key:x.key}));
       }
     });
-    ALL=[...POEMS,...IDIOMS,...WORDS,...GALLERY,...WENYAN,...restCustom,...restExtra,...OV_ITEMS,...MOTHER_QS,PRACTICE_ENTRY];
+    ALL=[...POEMS,...IDIOMS,...WORDS,...GALLERY,...WENYAN,...restCustom,...restExtra,...OV_ITEMS,...MOTHER_QS,...FMQ,PRACTICE_ENTRY];
     INDEX={}; ALL.forEach(it=>INDEX[it.key]=it);
   }
   // 将后台表单/批量数据归一化为标准条目；诗词年级为空时按诗题自动匹配
@@ -164,7 +182,7 @@
     "语文·诗词":5, "英语·单词":5,
     "语文·成语":3, "数学·每日一练":3,
     "数学·计算题":2, "数学·应用题":2, "英语·听力":2,
-    "数学·思维母题":2
+    "数学·思维母题":2, "数学·公式":2
   };
   function weekFreqOf(subject,type){
     const k = checkinKey(subject,type);
@@ -246,6 +264,24 @@
       if(q) out.push({q, a});
     });
     return out;
+  }
+  /* ---------- 数学「公式」：整单元 → 按「一、二、三…」小节拆开 ---------- */
+  // 一小节一卡，避免整单元一次打卡过重；兼容首行缺序号的「、xxx」写法（数据里「一」有丢失）
+  function splitFormulaSections(body){
+    const lines=(body||"").split("\n");
+    const secs=[]; let cur=null, seen=false;
+    lines.forEach(ln=>{
+      const t=ln.trim(); if(!t) return;
+      const m=t.match(/^[一二三四五六七八九十]+、/);
+      if(m || (!seen && /^、/.test(t))){
+        const label = m ? t : ("一、"+t.replace(/^、/,"").trim());
+        cur={t:label,b:""}; secs.push(cur); seen=true; return;
+      }
+      if(!cur){ cur={t:"",b:""}; secs.push(cur); }
+      cur.b += (cur.b?"\n":"")+t;
+    });
+    secs.forEach(s=>{ s.b=(s.b||"").trim(); });
+    return secs;
   }
   // 收集所有「数学·思维母题」的单题（跨十大母题，便于打散组合）
   function mathThoughtQuestions(){
@@ -534,6 +570,8 @@
     if(subject==="语文" && type==="文言")  return [...WENYAN, ...cus];
     if(subject==="语文" && type==="成语动画廊") return [...GALLERY, ...cus];
     if(subject==="英语" && type==="单词")  return [...WORDS, ...cus];
+    // 数学·公式：整单元已按「一、二、三…」小节拆为单条，取拆分后的条目（ALL）
+    if(subject==="数学" && type==="公式") return ALL.filter(c=>c.subject===subject && c.type===type);
     return [...cus, ...EXTRA.filter(c=>c.subject===subject && c.type===type)]; // 其余类型：后台自定义 + 内置教材素材
   }
   /* ---------- 首页：今日学习 ---------- */
@@ -747,7 +785,7 @@
       pool = [...WORDS.filter(w=>w.grade===state.grade && w.volume===v.volume),
               ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"&&c.grade===state.grade&&c.volume===v.volume)];
     }else{
-      // 统一从 ALL 取（思维母题已拆分为单题条目；打散练习入口随后置顶）
+      // 统一从 ALL 取（思维母题已拆分为单题、公式已拆分为小节；打散练习入口随后置顶）
       pool = ALL.filter(c=>c.subject===subject && c.type===v.type);
       if(subject==="数学" && v.type==="思维母题"){
         const pe = pool.filter(x=>x.key==="practice:maththought");
@@ -1038,7 +1076,8 @@
   }
   // 编辑内容表单：内置条目走「覆盖版本」(state.overrides)，自定义条目直接改 state.custom
   function renderEditForm(it){
-    const isExtra = it.key.indexOf("extra:")===0;
+    // extra: 内置条目；fmq: 由整单元公式拆分出的小节条目——两者都走「覆盖版本」
+    const isExtra = it.key.indexOf("extra:")===0 || it.key.indexOf("fmq:")===0;
     const ov = (state.overrides||{})[it.key];
     const cur = isExtra ? (ov || {title:it.title, sub:it.sub, grade:it.grade, body:it.body}) : it;
     const cg = cur.grade || "";
@@ -1389,7 +1428,8 @@
       get ALL(){ return ALL; },
       get INDEX(){ return INDEX; },
       rebuildAll, switchStudent, applyPerStudent, syncPerStudent, save,
-      openModal, mathBodyHTML, effBody, renderAdmin
+      openModal, mathBodyHTML, effBody, renderAdmin,
+      todayTasks, poolFor, splitFormulaSections, weekDatesMondayStart
     };
   }
 })();
