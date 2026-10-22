@@ -1,0 +1,8 @@
+.workbuddy/
+*.bak
+_*.py
+_*.js
+_*.json
+Thumbs.db
+.DS_Store
+*副本.html
