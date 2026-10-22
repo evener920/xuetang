@@ -104,7 +104,7 @@
     // 数学「公式」按「一、二、三…」小节拆分为单条：一小节一卡，每日打卡只取 2 小节（原来整单元太重）
     const FMQ = [];
     [...CUSTOM, ...EXTRA].filter(x=>x.subject==="数学" && x.type==="公式").forEach(src=>{
-      splitFormulaSections(effBody(src)).forEach(s=>{
+      splitSections(effBody(src)).forEach(s=>{
         const st = s.t || (src.title||"知识点");
         const it = {
           key:"fmq:"+strHash((src.title||"")+"::"+st),
@@ -118,10 +118,29 @@
         FMQ.push(it);
       });
     });
+    // 数学「每日一练」按「一、口算 / 二、列竖式 / 三、脱式 / 四、思维题」小节拆分为单条
+    // （原来一次打卡要吞下 30+ 道题；现在一小节一卡，并按天顺序轮转，一学期可练完 45 天）
+    const DLQ = [];
+    [...CUSTOM, ...EXTRA].filter(x=>x.subject==="数学" && x.type==="每日一练").forEach(src=>{
+      splitSections(effBody(src)).forEach(s=>{
+        const st = s.t || (src.title||"练习");
+        const it = {
+          key:"dlq:"+strHash((src.title||"")+"::"+st),
+          subject:"数学", type:"每日一练",
+          title:(src.title||"").replace(/\s*每日一练\s*$/,"").trim()+" · "+st,
+          sub:src.sub||"", body:s.b,
+          grade:src.grade||"", volume:src.volume||"", unit:src.unit||"",
+          tags:(src.tags||[]).slice(), videos:[]
+        };
+        const ov=(state.overrides||{})[it.key];
+        if(ov){ if(ov.body!=null) it.body=ov.body; if(ov.title) it.title=ov.title; if(ov.sub!=null) it.sub=ov.sub; if(ov.grade!=null) it.grade=ov.grade; }
+        DLQ.push(it);
+      });
+    });
     // 打散练习入口（全部题目均匀交错，弹窗内逐题配「答案提示」）
     const PRACTICE_ENTRY = { key:"practice:maththought", subject:"数学", type:"思维母题",
       title:"🧠 思维母题 · 打散练习", sub:"全部题目跨专题均匀打散，每题配「答案提示」", body:"", grade:"四年级", tags:["思维母题"], videos:[] };
-    const isSplit = x=>x.subject==="数学" && (x.type==="思维母题"||x.type==="公式");
+    const isSplit = x=>x.subject==="数学" && (x.type==="思维母题"||x.type==="公式"||x.type==="每日一练");
     const restCustom = CUSTOM.filter(x=>!isSplit(x));
     const restExtra  = EXTRA.filter(x=>!isSplit(x) && !OVSET.has(x.key));
     // 内置条目被「覆盖编辑」后，以覆盖版本替换原内置项（思维母题/公式源以拆分条目形式反映覆盖，故此处排除）
@@ -131,7 +150,7 @@
         OV_ITEMS.push(Object.assign({}, x, OV[x.key], {key:x.key}));
       }
     });
-    ALL=[...POEMS,...IDIOMS,...WORDS,...GALLERY,...WENYAN,...restCustom,...restExtra,...OV_ITEMS,...MOTHER_QS,...FMQ,PRACTICE_ENTRY];
+    ALL=[...POEMS,...IDIOMS,...WORDS,...GALLERY,...WENYAN,...restCustom,...restExtra,...OV_ITEMS,...MOTHER_QS,...DLQ,...FMQ,PRACTICE_ENTRY];
     INDEX={}; ALL.forEach(it=>INDEX[it.key]=it);
   }
   // 将后台表单/批量数据归一化为标准条目；诗词年级为空时按诗题自动匹配
@@ -175,12 +194,12 @@
   const WEEK_NAMES = ["周日","周一","周二","周三","周四","周五","周六"];
   const MAIN_SUBJECTS = ["语文","数学","英语"];
   // 每类型每日配额（控制每日总量）
-  const TYPE_QUOTA = {"诗词":1,"成语":2,"单词":5,"听力":2,"阅读":2,"每日一练":1};
+  const TYPE_QUOTA = {"诗词":1,"成语":2,"单词":5,"听力":2,"阅读":2,"每日一练":2};
   function typeQuota(t){ return TYPE_QUOTA[t]!==undefined ? TYPE_QUOTA[t] : 2; }
   // 每类型每周频次（主课多、副课少；未列出的主课类型每周 1 次）
   const WEEK_FREQ_OVER = {
     "语文·诗词":5, "英语·单词":5,
-    "语文·成语":3, "数学·每日一练":3,
+    "语文·成语":3, "数学·每日一练":5,
     "数学·计算题":2, "数学·应用题":2, "英语·听力":2,
     "数学·思维母题":2, "数学·公式":2
   };
@@ -265,9 +284,9 @@
     });
     return out;
   }
-  /* ---------- 数学「公式」：整单元 → 按「一、二、三…」小节拆开 ---------- */
-  // 一小节一卡，避免整单元一次打卡过重；兼容首行缺序号的「、xxx」写法（数据里「一」有丢失）
-  function splitFormulaSections(body){
+  /* ---------- 数学「公式 / 每日一练」：整篇 → 按「一、二、三…」小节拆开 ---------- */
+  // 一小节一卡，避免一次打卡内容过重；兼容首行缺序号的「、xxx」写法（数据里「一」有丢失）
+  function splitSections(body){
     const lines=(body||"").split("\n");
     const secs=[]; let cur=null, seen=false;
     lines.forEach(ln=>{
@@ -360,6 +379,20 @@
   state.habitLog = state.habitLog || {};   // 日期 → {习惯名: true}
   state.reviewed = state.reviewed || {};   // 日期 → {条目key: true}（艾宾浩斯复习打卡）
   state.semesterStart = state.semesterStart || fmt(new Date()); // 学期第 1 天（90 天学期）
+  /* ---------- 后台登录口令（存本机，防止孩子随手改动后台内容；非服务端鉴权） ---------- */
+  function pwHash(pw, salt){
+    let h=2166136261>>>0; const s=(salt||"")+"::"+(pw||"");
+    for(let i=0;i<s.length;i++){ h=(h^s.charCodeAt(i))>>>0; h=Math.imul(h,16777619)>>>0; }
+    let g=5381>>>0; const s2=(pw||"")+"#"+(salt||"");
+    for(let i=0;i<s2.length;i++){ g=(Math.imul(g,33)^s2.charCodeAt(i))>>>0; }
+    return h.toString(16)+"-"+g.toString(16);
+  }
+  function setAdminPassword(pw){
+    const salt=Math.random().toString(36).slice(2,10);
+    state.admin={ user:(state.admin&&state.admin.user)||"admin", salt, hash:pwHash(pw,salt) };
+  }
+  if(!state.admin || !state.admin.hash) setAdminPassword("123456"); // 默认口令 admin / 123456
+  state.adminAuthed = !!state.adminAuthed; // 登录状态（本机保持，可退出）
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
   const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart"];
@@ -570,8 +603,8 @@
     if(subject==="语文" && type==="文言")  return [...WENYAN, ...cus];
     if(subject==="语文" && type==="成语动画廊") return [...GALLERY, ...cus];
     if(subject==="英语" && type==="单词")  return [...WORDS, ...cus];
-    // 数学·公式：整单元已按「一、二、三…」小节拆为单条，取拆分后的条目（ALL）
-    if(subject==="数学" && type==="公式") return ALL.filter(c=>c.subject===subject && c.type===type);
+    // 数学·公式 / 数学·每日一练：整篇已按「一、二、三…」小节拆为单条，取拆分后的条目（ALL）
+    if(subject==="数学" && (type==="公式"||type==="每日一练")) return ALL.filter(c=>c.subject===subject && c.type===type);
     return [...cus, ...EXTRA.filter(c=>c.subject===subject && c.type===type)]; // 其余类型：后台自定义 + 内置教材素材
   }
   /* ---------- 首页：今日学习 ---------- */
@@ -583,6 +616,16 @@
     const tasks = {}; // key=学科·类型 → 今日条目数组
     (plan[day]||[]).forEach(({subject,type})=>{
       const key = checkinKey(subject,type);
+      // 数学·每日一练：按天顺序轮转取 N 小节（Day01 一→二→三→四 → Day02 …），一学期练完 45 天
+      if(type==="每日一练"){
+        const q = typeQuota(type);
+        const dp = poolFor(subject,type);
+        if(!dp.length){ tasks[key]=[]; return; }
+        const off = (Math.max(0, dayDiff(state.semesterStart)) * q) % dp.length;
+        const arr2=[]; for(let i=0;i<q && i<dp.length;i++) arr2.push(dp[(off+i)%dp.length]);
+        tasks[key]=arr2;
+        return;
+      }
       // 数学思维母题：一题一卡，按天从「均匀打散序列」轮转取 5 题（一次打卡=5 道题）
       if(type==="思维母题"){
         const mq = motherOrdered();
@@ -1076,8 +1119,8 @@
   }
   // 编辑内容表单：内置条目走「覆盖版本」(state.overrides)，自定义条目直接改 state.custom
   function renderEditForm(it){
-    // extra: 内置条目；fmq: 由整单元公式拆分出的小节条目——两者都走「覆盖版本」
-    const isExtra = it.key.indexOf("extra:")===0 || it.key.indexOf("fmq:")===0;
+    // extra: 内置条目；fmq:/dlq: 由整篇公式 / 每日一练拆分出的小节条目——都走「覆盖版本」
+    const isExtra = it.key.indexOf("extra:")===0 || it.key.indexOf("fmq:")===0 || it.key.indexOf("dlq:")===0;
     const ov = (state.overrides||{})[it.key];
     const cur = isExtra ? (ov || {title:it.title, sub:it.sub, grade:it.grade, body:it.body}) : it;
     const cg = cur.grade || "";
@@ -1169,11 +1212,69 @@
   }
 
   /* ---------- 内容后台（添加素材 · 自动归类筛选） ---------- */
+  /* ---------- 后台登录 / 修改口令（口令存本机，防止随手改动后台内容） ---------- */
+  function renderAdminLogin(){
+    const el = $("#view-admin");
+    el.innerHTML = `
+      <div class="subj-head"><h2>🔒 后台登录</h2><span class="cnt">内容后台需验证口令</span></div>
+      <p class="subj-desc">后台可以添加 / 修改学习素材，所以加了一道口令。默认账号 <b>admin</b>、密码 <b>123456</b>；登录后点后台顶部「🔑 修改密码」即可改成你自己的。</p>
+      <div class="admin-form" style="max-width:460px">
+        <div class="af-row"><label class="af-grow">账号<input id="lgUser" value="${esc(state.admin.user)}" placeholder="admin" /></label></div>
+        <div class="af-row"><label class="af-grow">密码<input id="lgPwd" type="password" placeholder="请输入密码" /></label></div>
+        <div class="af-actions">
+          <button class="btn primary" id="lgBtn">登录</button>
+          <button class="btn" id="lgReset">忘记密码</button>
+        </div>
+        <p class="af-tip">口令只保存在本机浏览器（localStorage），没有服务器，它防的是随手点开，不是专业破解。</p>
+      </div>`;
+    const tryLogin=()=>{
+      const u=$("#lgUser").value.trim(), p=$("#lgPwd").value;
+      if(!p){ toast("请输入密码"); return; }
+      if(u!==state.admin.user || pwHash(p,state.admin.salt)!==state.admin.hash){
+        toast("账号或密码不正确"); $("#lgPwd").value=""; $("#lgPwd").focus(); return;
+      }
+      state.adminAuthed=true; save(); toast("登录成功 ✅"); renderAdmin();
+    };
+    $("#lgBtn").onclick=tryLogin;
+    $("#lgPwd").addEventListener("keydown", e=>{ if(e.key==="Enter") tryLogin(); });
+    $("#lgReset").onclick=()=>{
+      if(!confirm("口令无法在线找回。重置为默认 admin / 123456 吗？（不会清空学习数据）")) return;
+      setAdminPassword("123456"); save(); toast("已重置为 admin / 123456");
+    };
+  }
+  function renderAdminPwdForm(){
+    const el = $("#view-admin");
+    el.innerHTML = `
+      <div class="subj-head"><h2>🔑 修改后台口令</h2><span class="cnt">当前账号：${esc(state.admin.user)}</span></div>
+      <div class="admin-form" style="max-width:460px">
+        <div class="af-row"><label class="af-grow">当前密码<input id="pwOld" type="password" /></label></div>
+        <div class="af-row"><label class="af-grow">新密码<input id="pwNew" type="password" placeholder="至少 4 位" /></label></div>
+        <div class="af-row"><label class="af-grow">确认新密码<input id="pwNew2" type="password" /></label></div>
+        <div class="af-actions">
+          <button class="btn primary" id="pwSave">保存</button>
+          <button class="btn" id="pwCancel">取消</button>
+        </div>
+      </div>`;
+    $("#pwCancel").onclick=()=>renderAdmin();
+    $("#pwSave").onclick=()=>{
+      const o=$("#pwOld").value, n=$("#pwNew").value, n2=$("#pwNew2").value;
+      if(pwHash(o,state.admin.salt)!==state.admin.hash){ toast("当前密码不正确"); return; }
+      if(n.length<4){ toast("新密码至少 4 位"); return; }
+      if(n!==n2){ toast("两次输入的新密码不一致"); return; }
+      setAdminPassword(n); save(); toast("密码已修改 ✅"); renderAdmin();
+    };
+  }
+
   function renderAdmin(){
     const el = $("#view-admin");
     const subjects = Object.keys(SUBJECT_TYPES);
     el.innerHTML = `
       <div class="subj-head"><h2>🛠 内容后台</h2><span class="cnt">添加素材，系统自动归类到 学科 / 类型 / 年级</span></div>
+      <div class="chips">
+        <span class="badge" style="background:#eef2ff;color:#3730a3">🔒 已登录：${esc(state.admin.user)}</span>
+        <button class="btn" id="btnChgPwd">🔑 修改密码</button>
+        <button class="btn" id="btnLogout">退出登录</button>
+      </div>
       <p class="subj-desc">填写下表即可新增一条素材；系统会按你选择的「学科 + 类型 + 年级 + 册」自动归入对应栏目与筛选，并在首页、标签、搜索中同步出现。已添加的内容保存在本机浏览器（localStorage）。</p>
       <div class="admin-form">
         <div class="af-row">
@@ -1225,6 +1326,10 @@
         : '<div class="placeholder"><div class="big">📝</div>还没有修改过内置内容；在任意内置条目弹窗点「✏️ 编辑内容」即可覆盖</div>'}
       </div>
     `;
+    // 后台口令：修改 / 退出登录
+    const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
+    if(bLogout) bLogout.onclick=()=>{ state.adminAuthed=false; save(); toast("已退出登录"); go("home"); };
+    if(bPwd) bPwd.onclick=()=>renderAdminPwdForm();
     // 类型联动
     const subSel=$("#afSubject"), typeSel=$("#afType");
     function fillTypes(){ const t=SUBJECT_TYPES[subSel.value]||[]; typeSel.innerHTML=t.map(x=>`<option>${x}</option>`).join(""); }
@@ -1283,7 +1388,7 @@
     else if(view.name==="subject") renderSubject(view.param);
     else if(view.name==="tag") renderTag(view.param);
     else if(view.name==="search") renderSearch(view.param);
-    else if(view.name==="admin") renderAdmin();
+    else if(view.name==="admin"){ if(state.adminAuthed) renderAdmin(); else renderAdminLogin(); }
   }
 
   /* ---------- 事件绑定 ---------- */
@@ -1428,8 +1533,9 @@
       get ALL(){ return ALL; },
       get INDEX(){ return INDEX; },
       rebuildAll, switchStudent, applyPerStudent, syncPerStudent, save,
-      openModal, mathBodyHTML, effBody, renderAdmin,
-      todayTasks, poolFor, splitFormulaSections, weekDatesMondayStart
+      openModal, mathBodyHTML, effBody, renderAdmin, renderAdminLogin, renderAdminPwdForm,
+      pwHash, setAdminPassword,
+      todayTasks, poolFor, splitSections, weekDatesMondayStart
     };
   }
 })();
