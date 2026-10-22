@@ -395,10 +395,10 @@
   state.adminAuthed = !!state.adminAuthed; // 登录状态（本机保持，可退出）
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz"];
   function defaultPerStudent(){
     return { grade:"四年级", learned:{}, fav:{}, checkin:{},
-      habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()) };
+      habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{} };
   }
   function capturePerStudent(){
     const d={}; PER_STUDENT_FIELDS.forEach(f=>{ const v=state[f]; d[f]=(v===undefined?null:JSON.parse(JSON.stringify(v))); });
@@ -635,12 +635,16 @@
         return;
       }
       let pool = poolFor(subject,type);
-      // 英语单词：优先四年级上册示例（含后台四年级单词），不足再放宽
+      // 英语单词：按当前年级（上+下册）顺序轮转，每天 5 个新词 → 90 天学期内可整本过完再滚第二轮
       if(subject==="英语" && type==="单词"){
-        let wp = [...WORDS.filter(w=>w.grade==="四年级"&&w.volume==="上册"), ...CUSTOM.filter(c=>c.type==="单词"&&c.grade==="四年级"&&c.volume==="上册")];
-        if(wp.length<5) wp=[...WORDS.filter(w=>w.grade==="四年级"), ...CUSTOM.filter(c=>c.type==="单词"&&c.grade==="四年级")];
-        if(wp.length<5) wp=[...WORDS, ...CUSTOM.filter(c=>c.type==="单词")];
-        pool=wp;
+        let wp=[...WORDS.filter(w=>w.grade===state.grade), ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"&&c.grade===state.grade)];
+        if(wp.length<5) wp=[...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词")];
+        if(wp.length){
+          const qw=typeQuota(type);
+          const off=(Math.max(0, dayDiff(state.semesterStart)) * qw) % wp.length;
+          const wa=[]; for(let i=0;i<qw && i<wp.length;i++) wa.push(wp[(off+i)%wp.length]);
+          tasks[key]=wa; return;
+        }
       }
       let arr;
       if(type==="诗词")      arr = pool.length ? [pool[seed % pool.length]] : [];
@@ -991,6 +995,67 @@
 
   /* ---------- 详情弹窗 ---------- */
   let modalKey=null, modalVid=0, modalAdmin=false, modalEdit=false;
+
+  /* ---------- 单词趣味学习：遮释义自测 + 四选一小测 ---------- */
+  function wordQuizToday(){
+    const d=fmt(new Date());
+    state.wordQuiz = state.wordQuiz || {};
+    if(!state.wordQuiz[d]) state.wordQuiz[d]={right:0,wrong:0};
+    return state.wordQuiz[d];
+  }
+  // 生成 4 个选项（1 正确 + 3 干扰），同一单词每次生成的干扰项固定
+  function wordQuizOptions(it, n){
+    const meaning=(it.body||"").trim();
+    let pool = WORDS.filter(w=>w.key!==it.key && (w.body||"").trim() && (w.body||"").trim()!==meaning);
+    const same = pool.filter(w=>w.grade===it.grade);
+    if(same.length>=n) pool=same;
+    let seed=strHash(it.key)+7;
+    const rnd=()=>{ seed=(seed*1103515245+12345)>>>0; return seed/4294967296; };
+    const picked=[], seen=new Set([meaning]);
+    let guard=0;
+    while(picked.length<n && pool.length && guard<300){
+      guard++;
+      const w=pool[Math.floor(rnd()*pool.length)];
+      const m=(w.body||"").trim();
+      if(!m || seen.has(m)) continue;
+      seen.add(m); picked.push(m);
+    }
+    const opts=picked.map(m=>({t:m, ok:false}));
+    opts.push({t:meaning, ok:true});
+    for(let i=opts.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); const t=opts[i]; opts[i]=opts[j]; opts[j]=t; }
+    return opts;
+  }
+  function renderWordQuiz(it){
+    const box=$("#wqQuiz"); if(!box) return;
+    if(!(it.body||"").trim()){ box.hidden=false; box.innerHTML=`<p class="wq-foot">这个单词还没有释义，先在弹窗里「✏️ 编辑内容」补充中文意思。</p>`; return; }
+    const opts=wordQuizOptions(it,3);
+    const st=wordQuizToday();
+    box.hidden=false;
+    box.innerHTML=`
+      <div class="wq-q">🎯 「${esc(it.title)}」是什么意思？</div>
+      <div class="wq-opts">${opts.map((o,i)=>`<button class="wq-opt" data-q="${i}">${esc(o.t)}</button>`).join("")}</div>
+      <div class="wq-foot" id="wqFoot">今日小测：✅ ${st.right} · ❌ ${st.wrong}${it.sub?"　"+esc(it.sub):""}</div>`;
+    box.querySelectorAll("[data-q]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        const o=opts[parseInt(b.dataset.q,10)];
+        const all=box.querySelectorAll("[data-q]");
+        const st2=wordQuizToday();
+        if(o.ok){
+          b.classList.add("ok"); st2.right++;
+          speak(it.title, "en-US");
+          toast("答对了 🎉 "+it.title);
+        }else{
+          b.classList.add("no"); st2.wrong++;
+          opts.forEach((x,i)=>{ if(x.ok) all[i].classList.add("ok"); });
+          toast("记住啦："+it.title+" = "+it.body);
+        }
+        all.forEach(x=>x.disabled=true);
+        save();
+        const foot=$("#wqFoot"); if(foot) foot.textContent="今日小测：✅ "+st2.right+" · ❌ "+st2.wrong;
+      });
+    });
+  }
+
   function openModal(it, vidIdx){
     // 「打散练习」入口：全题均匀交错弹窗；拆分后的单题(mtq:)按普通文章渲染并附答案提示按钮
     if(it.key==="practice:maththought"){ renderPracticeModal(it); return; }
@@ -1009,8 +1074,14 @@
       ${vids.length>1?`<div class="chips" style="margin:0 0 8px">${vids.map((u,i)=>`<button class="chip ${i===modalVid?"on":""}" data-vid="${i}">视频 ${i+1}</button>`).join("")}</div>`:""}
       ${playerHTML(cur)}` : "";
     const OVSET = new Set(Object.keys(state.overrides||{}));
+    // 英语单词：卡片式学习（可遮住释义自测 + 四选一小测），其余保持原渲染
     const bodyHTML = isWord
-      ? `<p class="m-body word-text">${esc(it.title)}<span class="phon">${esc(it.sub)}</span><span class="cn">${esc(it.body)}</span></p>`
+      ? `<div class="wq-card">
+           <div class="wq-word">${esc(it.title)}</div>
+           ${it.sub?`<div class="wq-phon">${esc(it.sub)}</div>`:""}
+           <div class="wq-cn" id="wqCn">${esc(it.body||"")}</div>
+         </div>
+         <div class="wq-quiz" id="wqQuiz" hidden></div>`
       : (it.body ? (it.subject==="数学"
           ? `<div class="m-math">${mathBodyHTML(it.body)}</div>`
           : `<p class="m-body">${esc(it.body).replace(/\n/g,"<br>").replace(/([。？！；])/g,"$1<br>")}</p>`)
@@ -1034,6 +1105,7 @@
         <button class="btn ${learned?"done":"primary"}" data-act="learn">${learned?"✓ 已学会（点击取消）":"标记为学会 📅"}</button>
         <button class="btn" data-act="fav">${fav?"★ 已收藏":"☆ 收藏"}</button>
         <button class="btn" data-act="speak">🔊 朗读</button>
+        ${isWord?`<button class="btn" data-act="togglecn">🙈 遮住释义</button><button class="btn pa" data-act="quiz">🎯 考考我</button>`:""}
         <button class="btn" data-act="addvideo">🎬 ${vids.length?"管理视频":"添加视频"}</button>
         ${it.key.indexOf("mtq:")===0?"":`<button class="btn" data-act="edit">✏️ 编辑内容</button>`}
         ${OVSET.has(it.key)?`<button class="btn" data-act="revert">⤺ 还原内置</button>`:""}
@@ -1092,6 +1164,13 @@
             resolveDouyinShort(val).then(full=>{ if(!full) toast("短链未解析成功，已按原链接保存"); pushAndRefresh(full||val); });
           }else pushAndRefresh(val);
           return;
+        }else if(act==="togglecn"){
+          const cn=$("#wqCn"); if(!cn) return;
+          cn.hidden=!cn.hidden;
+          btn.textContent = cn.hidden ? "👀 显示释义" : "🙈 遮住释义";
+          return;
+        }else if(act==="quiz"){
+          renderWordQuiz(it); return;
         }else if(act==="edit"){
           modalEdit=true; openModal(it); return;
         }else if(act==="revert"){
@@ -1213,6 +1292,14 @@
 
   /* ---------- 内容后台（添加素材 · 自动归类筛选） ---------- */
   /* ---------- 后台登录 / 修改口令（口令存本机，防止随手改动后台内容） ---------- */
+  /* ---------- 后台：内置教材浏览 / 修改（无需知道条目在哪，搜标题即可改） ---------- */
+  let biView = { q:"", type:"全部", limit:30 };
+  function openAdminEdit(key){
+    const it = INDEX[key] || EXTRA.find(e=>e.key===key);
+    if(!it){ toast("没找到这条内容"); return; }
+    modalKey=it.key; modalVid=0; modalAdmin=false; modalEdit=true;
+    renderEditForm(it);
+  }
   function renderAdminLogin(){
     const el = $("#view-admin");
     el.innerHTML = `
@@ -1268,6 +1355,17 @@
   function renderAdmin(){
     const el = $("#view-admin");
     const subjects = Object.keys(SUBJECT_TYPES);
+    // 内置教材清单（含已拆散的小节条目）：均可在后台直接修改
+    const builtins = ALL.filter(x=>/^(extra|fmq|dlq|mtq):/.test(x.key));
+    const biCntMap = {};
+    builtins.forEach(x=>{ biCntMap[x.type]=(biCntMap[x.type]||0)+1; });
+    const biCounts = [["全部",builtins.length], ...Object.keys(biCntMap).sort().map(t=>[t,biCntMap[t]])];
+    const biFiltered = builtins.filter(x=>{
+      if(biView.type!=="全部" && x.type!==biView.type) return false;
+      if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
+      return true;
+    });
+    const biShow = biFiltered.slice(0, biView.limit);
     el.innerHTML = `
       <div class="subj-head"><h2>🛠 内容后台</h2><span class="cnt">添加素材，系统自动归类到 学科 / 类型 / 年级</span></div>
       <div class="chips">
@@ -1314,6 +1412,27 @@
         : '<div class="placeholder"><div class="big">📭</div>还没有在后台添加的素材</div>'}
       </div>
 
+      <div class="sec-title">📚 内置教材 · 可直接修改（${builtins.length}）<small>站内所有现成内容都能改，改错了点「⤺」即还原原文</small></div>
+      <div class="chips">
+        <input id="biSearch" class="search-input" style="width:220px" placeholder="搜标题…（如 一、口算）" value="${esc(biView.q)}" />
+        ${biCounts.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
+      </div>
+      <div class="admin-list" id="biList">
+        ${biShow.length?biShow.map(x=>{
+          const ov=(state.overrides||{})[x.key];
+          return `<div class="admin-item" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
+            <div class="ai-main"><b>${esc(x.title)}</b> ${badge(x.type)} ${ov?`<span class="badge" style="background:#fef3c7;color:#b45309">已改</span>`:""}${x.grade?`<span class="tag" style="cursor:default">#${esc(x.grade)}</span>`:""}${x.sub?`<span class="muted" style="font-size:12px;color:var(--muted)">${esc(x.sub.slice(0,28))}</span>`:""}</div>
+            <div style="display:flex;gap:6px;flex:0 0 auto">
+              ${ov?`<button class="btn" data-bi-revert="${esc(x.key)}" title="还原原文">⤺</button>`:""}
+              <button class="btn" data-bi-edit="${esc(x.key)}">✏️ 修改</button>
+            </div>
+          </div>`;
+        }).join("")
+        : '<div class="placeholder"><div class="big">🔍</div>没有匹配的内容，换个关键词试试</div>'}
+        ${builtins.length>biView.limit?`<div style="margin-top:10px"><button class="btn" id="biMore">显示更多（当前 ${Math.min(biView.limit,biFiltered.length)} / ${biFiltered.length}）</button></div>`:""}
+        <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 修改只存在本机浏览器，不会写回代码仓库。</p>
+      </div>
+
       <div class="sec-title">✏️ 已修改的内置内容（${Object.keys(state.overrides||{}).length}）<small>覆盖内置教材，可一键还原</small></div>
       <div class="admin-list">
         ${(Object.keys(state.overrides||{}).length)? Object.keys(state.overrides).map(k=>{
@@ -1326,6 +1445,25 @@
         : '<div class="placeholder"><div class="big">📝</div>还没有修改过内置内容；在任意内置条目弹窗点「✏️ 编辑内容」即可覆盖</div>'}
       </div>
     `;
+    // 内置教材：搜索过滤 / 修改 / 还原 / 显示更多
+    const biSearch=$("#biSearch");
+    if(biSearch) biSearch.addEventListener("input", ()=>{
+      biView.q=biSearch.value.trim();
+      const q=biView.q.toLowerCase();
+      document.querySelectorAll("#biList [data-bi-row]").forEach(r=>{
+        r.hidden = !!(q && !(r.getAttribute("data-bi-text")||"").includes(q));
+      });
+    });
+    el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{
+      biView.type=b.dataset.biType; renderAdmin();
+    }));
+    el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
+    el.querySelectorAll("[data-bi-revert]").forEach(b=>b.addEventListener("click", ()=>{
+      const k=b.dataset.biRevert;
+      if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原原文 ⤺"); renderAdmin(); }
+    }));
+    const biMore=$("#biMore");
+    if(biMore) biMore.addEventListener("click", ()=>{ biView.limit+=30; renderAdmin(); });
     // 后台口令：修改 / 退出登录
     const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
     if(bLogout) bLogout.onclick=()=>{ state.adminAuthed=false; save(); toast("已退出登录"); go("home"); };
@@ -1534,7 +1672,7 @@
       get INDEX(){ return INDEX; },
       rebuildAll, switchStudent, applyPerStudent, syncPerStudent, save,
       openModal, mathBodyHTML, effBody, renderAdmin, renderAdminLogin, renderAdminPwdForm,
-      pwHash, setAdminPassword,
+      pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
       todayTasks, poolFor, splitSections, weekDatesMondayStart
     };
   }

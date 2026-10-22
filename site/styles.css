@@ -384,3 +384,29 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 60px;}
   .hd-rate{flex-basis:42px;font-size:12px;}
   .habit-dash{padding:8px 8px;}
 }
+
+/* ===== 单词趣味学习：卡片 + 四选一小测 ===== */
+.wq-card{
+  background:linear-gradient(135deg,#ecfdf5,#f0fdfa);border:1px solid #a7f3d0;border-radius:16px;
+  padding:22px 18px;margin:0 0 14px;text-align:center;
+}
+.wq-word{font-size:38px;font-weight:800;letter-spacing:.5px;color:#0f766e;line-height:1.2;}
+.wq-phon{font-size:15px;color:var(--accent2);margin-top:6px;}
+.wq-cn{font-size:20px;font-weight:700;margin-top:12px;color:var(--fg);}
+.wq-cn[hidden]{display:none;}
+.wq-quiz{margin:2px 0 14px;}
+.wq-q{font-size:16px;font-weight:700;margin-bottom:10px;}
+.wq-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.wq-opt{
+  padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;
+  font-size:15px;font-weight:600;cursor:pointer;transition:.15s;text-align:left;
+}
+.wq-opt:hover:not(:disabled){border-color:var(--accent);background:#f8fafc;}
+.wq-opt:disabled{cursor:default;}
+.wq-opt.ok{background:#dcfce7;border-color:var(--green);color:#166534;}
+.wq-opt.no{background:#fee2e2;border-color:#ef4444;color:#991b1b;}
+.wq-foot{margin-top:10px;font-size:13px;color:var(--muted);}
+@media (max-width:720px){
+  .wq-word{font-size:30px;}
+  .wq-opts{grid-template-columns:1fr;}
+}
