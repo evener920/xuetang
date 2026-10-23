@@ -683,14 +683,19 @@
     s = s.replace(/(href|src)\s*=\s*("|')\s*(javascript|vbscript|data)\s*:[^"']*\2/gi, "");
     return s;
   }
-  // 首次启动：把「七年级历史·第一单元 学习指南」作为后台素材注入（grade:"七年级"，仅七年级可见，可在后台删除）
+  // 首次启动：把内置指南/练习作为后台素材注入（按 grade 限定年级，可在后台删除；删除后不再重生）
   function seedDefaultContent(){
-    if(state.seeded && state.seeded.historyGuide) return;
+    const seeds = [
+      {flag:"historyGuide", src:(typeof window!=="undefined" && window.HISTORY_GUIDE_7)||[]},
+      {flag:"englishReading4", src:(typeof window!=="undefined" && window.ENGLISH_READING_4)||[]}
+    ];
     state.seeded = state.seeded || {};
-    const src = (typeof window!=="undefined" && window.HISTORY_GUIDE_7) || [];
     const have = new Set((state.custom||[]).map(x=>x.key));
-    src.forEach(it=>{ if(it && it.key && !have.has(it.key)) (state.custom=state.custom||[]).push(it); });
-    state.seeded.historyGuide = true;
+    seeds.forEach(s=>{
+      if(state.seeded[s.flag]) return;
+      s.src.forEach(it=>{ if(it && it.key && !have.has(it.key)) (state.custom=state.custom||[]).push(it); });
+      state.seeded[s.flag] = true;
+    });
     save();
   }
 
@@ -1349,19 +1354,19 @@
       ${vids.length>1?`<div class="chips" style="margin:0 0 8px">${vids.map((u,i)=>`<button class="chip ${i===modalVid?"on":""}" data-vid="${i}">视频 ${i+1}</button>`).join("")}</div>`:""}
       ${playerHTML(cur)}` : "";
     const OVSET = new Set(Object.keys(state.overrides||{}));
-    // 英语单词：卡片式学习（可遮住释义自测 + 四选一小测），其余保持原渲染
-    const bodyHTML = isWord
+    // 富文本（html:true）优先：英语阅读等内嵌指南/练习按原样渲染；其余按学科回落
+    const bodyHTML = it.html
+      ? `<div class="${it.htmlClass||"guide-body"}">${sanitizeRich(it.body)}</div>`
+      : isWord
       ? `<div class="wq-card">
            <div class="wq-word">${esc(it.title)}</div>
            ${it.sub?`<div class="wq-phon">${esc(it.sub)}</div>`:""}
            <div class="wq-cn" id="wqCn">${esc(it.body||"")}</div>
          </div>
          <div class="wq-quiz" id="wqQuiz" hidden></div>`
-      : (it.body ? (it.html
-          ? `<div class="guide-body">${sanitizeRich(it.body)}</div>`
-          : (it.subject==="数学"
-              ? `<div class="m-math">${mathBodyHTML(it.body)}</div>`
-              : `<p class="m-body">${esc(it.body).replace(/\n/g,"<br>").replace(/([。？！；])/g,"$1<br>")}</p>`))
+      : (it.body ? (it.subject==="数学"
+          ? `<div class="m-math">${mathBodyHTML(it.body)}</div>`
+          : `<p class="m-body">${esc(it.body).replace(/\n/g,"<br>").replace(/([。？！；])/g,"$1<br>")}</p>`)
         : "");
     $("#modal-body").innerHTML = `
       <div class="m-type">${badge(it.type)}
