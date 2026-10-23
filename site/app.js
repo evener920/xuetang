@@ -592,6 +592,57 @@
     save(); rebuildAll(); render();
     toast("已还原到 "+a.t+"（还原前已自动备份，可再次回退）");
   }
+  // 整库备份：导出 / 导入成文件（防清缓存、换设备丢失，如七年级英语词库）
+  function exportBackup(){
+    const data = JSON.stringify(state);
+    const blob = new Blob([data], {type:"application/json"});
+    const url = (window.URL||URL).createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date();
+    a.href = url; a.download = "学堂备份-"+fmt(d)+".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>{ try{ (window.URL||URL).revokeObjectURL(url); }catch(e){} }, 1000);
+    toast("已导出备份文件 💾");
+  }
+  function importBackupFile(file){
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const obj = JSON.parse(reader.result);
+        if(!obj || typeof obj!=="object" || Array.isArray(obj)) throw new Error("不是有效的备份文件");
+        if(!("custom" in obj) && !("learned" in obj) && !("students" in obj)) throw new Error("缺少学堂数据字段");
+        const keepAdmin = state.admin, keepAuthed = state.adminAuthed;
+        const snap = JSON.parse(JSON.stringify(obj));
+        Object.keys(state).forEach(k=>{ delete state[k]; });
+        Object.assign(state, snap);
+        state.grade = state.grade || "四年级";
+        state.learned = state.learned || {};
+        state.fav = state.fav || {};
+        state.videos = state.videos || {};
+        state.custom = state.custom || [];
+        state.overrides = state.overrides || {};
+        state.checkin = state.checkin || {};
+        state.lastKey = state.lastKey || null;
+        state.habits = Array.isArray(state.habits)?state.habits:["房间卫生","早睡早起","学校作业"];
+        state.habitLog = state.habitLog || {};
+        state.reviewed = state.reviewed || {};
+        state.semesterStart = state.semesterStart || fmt(new Date());
+        state.points = typeof state.points==="number"?state.points:0;
+        state.pointLog = Array.isArray(state.pointLog)?state.pointLog:[];
+        state.redeems = Array.isArray(state.redeems)?state.redeems:[];
+        if(!state.students || !Object.keys(state.students).length){
+          state.students = { s1:{name:"学生1", data: defaultPerStudent()} };
+          state.currentStudent = "s1";
+        } else if(!state.students[state.currentStudent]){ state.currentStudent = Object.keys(state.students)[0]; }
+        state.admin = keepAdmin; state.adminAuthed = keepAuthed;
+        save(); rebuildAll(); render();
+        toast("已从备份恢复全部数据 ✅");
+      }catch(e){ toast("导入失败："+e.message); }
+    };
+    reader.onerror = ()=>{ toast("读取文件失败"); };
+    reader.readAsText(file);
+  }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
   const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems"];
@@ -1022,6 +1073,14 @@
 
       <div class="sec-title">🔥 热门标签 <small>来自 ${POEMS.length} 首诗词 · 点击直达专题</small></div>
       <div class="tagcloud">${hot.map(t=>`<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>
+
+      <div class="sec-title">🧭 内容直达 <small>快速进入各类型</small></div>
+      <div class="tagcloud">
+        <button class="tag" data-cn-type="成语">🀄 全部成语</button>
+        <button class="tag" data-cn-type="成语动画廊">🎬 成语动画</button>
+        <button class="tag" data-goto-subject="英语">🔤 英语单词</button>
+        <button class="tag" data-goto-subject="英语">📖 英语阅读</button>
+      </div>
     `;
   }
 
@@ -1426,6 +1485,7 @@
           <h3>${esc(cnView.type)}内容待导入</h3>
           <p>整年级的${esc(cnView.type)}内容批量导入后，系统将自动匹配年级与上下册并归入本类型。</p>
           <p>导入即可上线，结构无需改动。</p>
+          <p style="margin-top:8px"><b>想现在就上线？</b>去「🛠 后台」添加${esc(cnView.type)}素材，或在「📚 资源 · 批量导入」整批粘贴，会自动归位于此。</p>
         </div>
       `;
       return;
@@ -2025,7 +2085,7 @@
         <div class="ov-card"><div class="ov-num">${ovCnt}</div><div class="ov-lbl">已修改</div></div>
       </div>
 
-      <p class="subj-desc">这里汇总站内所有内容：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在最前，其后是内置的诗词 / 成语 / 单词 / 动画 / 数学教材。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库。</p>
+      <p class="subj-desc">这里汇总站内所有内容：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在最前，其后是内置的诗词 / 成语 / 单词 / 动画 / 数学教材。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
 
       <details class="res-import" ${D.customCnt?"":"open"}>
         <summary>📥 批量导入素材（粘贴 JSON）<small>从「后台」移来 · 整批添加内容</small></summary>
@@ -2254,6 +2314,14 @@
         : '<div class="placeholder"><div class="big">🗄</div>还没有存档；点上方「💾 立即存档」保存当前全部进度</div>'; })()}
       </div>
       <p class="af-tip">存档内容：学习进度、打卡、习惯、复习记录、后台素材与所有内容修改。最多保留 ${ARCHIVE_MAX} 份，超出时自动淘汰最早的「自动」存档；手动存档优先保留。每天首次打开网站会自动存一份。</p>
+
+      <div class="sec-title">💾 数据备份（导出 / 导入文件）<small>把全部数据（含后台素材、七年级英语词库等）存成文件，换设备 / 清缓存前请先备份</small></div>
+      <div class="chips">
+        <button class="btn primary" id="btnExport">⬇️ 导出备份文件</button>
+        <button class="btn" id="btnImport">⬆️ 导入备份文件</button>
+        <input id="impFile" type="file" accept="application/json,.json" style="display:none" />
+      </div>
+      <p class="af-tip">⚠️ 所有数据<strong>仅存本机浏览器</strong>，清缓存 / 换设备会丢失（例如七年级英语词库只在本机）。导出的 <code>.json</code> 文件可安全保存；导入会用备份<strong>整体覆盖</strong>当前数据（登录口令保留）。建议把这份备份也放进代码仓库或云盘，作为固化素材的来源。</p>
     `;
     // 内置教材：搜索过滤 / 修改 / 还原 / 显示更多
     // 兑换审核 · 自定义奖励
@@ -2325,6 +2393,12 @@
     el.querySelectorAll("[data-arc-del]").forEach(b=>b.onclick=()=>{
       const arcs=loadArchives(); arcs.splice(parseInt(b.dataset.arcDel,10),1); saveArchives(arcs); renderAdmin(); toast("已删除该存档");
     });
+    // 数据备份：导出 / 导入文件
+    const btnExport=$("#btnExport");
+    if(btnExport) btnExport.onclick=()=>exportBackup();
+    const btnImport=$("#btnImport"), impFile=$("#impFile");
+    if(btnImport) btnImport.onclick=()=>{ if(impFile) impFile.click(); };
+    if(impFile) impFile.onchange=()=>{ const f=impFile.files&&impFile.files[0]; if(f) importBackupFile(f); if(impFile) impFile.value=""; };
     // 后台口令：修改 / 退出登录
     const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
     if(bLogout) bLogout.onclick=()=>{ state.adminAuthed=false; save(); toast("已退出登录"); go("home"); };
@@ -2481,6 +2555,8 @@
     if(card){ const it=INDEX[card.dataset.key]; if(it) openModal(it); return; }
     const tag=e.target.closest(".tag[data-tag]");
     if(tag){ go("tag", tag.dataset.tag); return; }
+    const gsub=e.target.closest("[data-goto-subject]");
+    if(gsub){ go("subject", gsub.dataset.gotoSubject); return; }
     const cnT=e.target.closest("[data-cn-type]");
     if(cnT){ cnView.type=cnT.dataset.cnType; cnView.grade="全部"; cnView.q=""; renderSubject("语文"); return; }
     const cnG=e.target.closest("[data-cn-grade]");
@@ -2541,7 +2617,7 @@
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
-      cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, get biView(){ return biView; },
+      cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport
     };
   }
