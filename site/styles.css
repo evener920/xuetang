@@ -410,3 +410,10 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 60px;}
   .wq-word{font-size:30px;}
   .wq-opts{grid-template-columns:1fr;}
 }
+
+/* ===== 奖励商城卡片 ===== */
+.rw-card{cursor:default;}
+.rw-bar{height:8px;border-radius:6px;background:var(--soft);overflow:hidden;margin:8px 0 6px;}
+.rw-bar>div{height:100%;background:linear-gradient(90deg,#fbbf24,#f59e0b);border-radius:6px;transition:.2s;}
+.rw-tip{font-size:12px;color:var(--muted);}
+.rw-card .btn:disabled{opacity:.6;cursor:default;}

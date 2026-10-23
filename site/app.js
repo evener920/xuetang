@@ -395,6 +395,93 @@
   }
   if(!state.admin || !state.admin.hash) setAdminPassword("123456"); // 默认口令 admin / 123456
   state.adminAuthed = !!state.adminAuthed; // 登录状态（本机保持，可退出）
+  /* ---------- 打卡积分奖励（账号按学生独立；奖励目录全局） ---------- */
+  state.points   = typeof state.points==="number" ? state.points : 0;
+  state.pointLog = Array.isArray(state.pointLog) ? state.pointLog : [];  // 流水 [{t,n,note,hook}]
+  state.redeems  = Array.isArray(state.redeems)  ? state.redeems  : [];  // 兑换记录 [{t,name,cost,status}]
+  /* ---------- 打卡积分：规则 · 发放 · 连续天数 · 兑奖 ---------- */
+  // 计分原则：① 即时反馈（打卡立刻到账）② 复习 > 学新（间隔重复收益最高）
+  // ③ 只加不减（不让孩子因漏打卡受挫）④ 短中长期目标并存（小额天天能换、大额需攒几个月）
+  // ⑤ 兑奖需家长在后台确认，避免自行「提现」
+  const POINT_RULES = {
+    learn: 10,      // 学会 / 打卡一条学习内容
+    review: 15,     // 完成一次艾宾浩斯到期复习
+    habit: 8,       // 完成一个当日习惯
+    quizRight: 2,   // 小测答对一题
+    allDone: 30     // 当日学习任务 + 习惯全勤奖
+  };
+  const QUIZ_CAP_DAY = 20;   // 小测积分每日上限，避免刷分
+  // 连续学习天数里程碑（一次性发放；断签只重置连续天数，不清空积分）
+  const STREAK_MILESTONES = [[3,20],[7,50],[14,100],[21,150],[30,200],[60,500],[100,1000]];
+  // 奖励目录：由「短周期即时反馈 → 长周期大目标」阶梯排布（可在后台自定义追加）
+  const DEFAULT_REWARDS = [
+    {id:"r1", icon:"🎟️", name:"小奖励券（贴纸 / 小零食）", cost:300,  tip:"约 2 天，建立即时反馈"},
+    {id:"r2", icon:"🖊️", name:"文具套装",                  cost:800,  tip:"约 5 天的小目标"},
+    {id:"r3", icon:"🧩", name:"益智拼装玩具",              cost:2000, tip:"约 2 周"},
+    {id:"r4", icon:"🧸", name:"盲盒 / 普通玩具",           cost:4000, tip:"约 1 个月"},
+    {id:"r5", icon:"🎨", name:"乐高中等套装",              cost:8000, tip:"约 2 个月"},
+    {id:"r6", icon:"🎧", name:"MP3 播放器",                cost:12000,tip:"约 3 个月"},
+    {id:"r7", icon:"🎮", name:"掌上游戏机",                cost:20000,tip:"约 5 个月 · 学期大目标"},
+    {id:"r8", icon:"📱", name:"手机",                      cost:30000,tip:"约 2 个学期 · 年度大目标"}
+  ];
+  function rewardList(){ return (Array.isArray(state.rewards)&&state.rewards.length) ? state.rewards : DEFAULT_REWARDS; }
+  function todayStrNow(){ return fmt(new Date()); }
+  function pointToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n>0).reduce((a,b)=>a+b.n,0); }
+  function pointWeek(){ const ws=weekDatesMondayStart(); return (state.pointLog||[]).filter(x=>x.n>0 && ws.indexOf(x.t)>=0).reduce((a,b)=>a+b.n,0); }
+  function hasAwardHook(h){ return (state.pointLog||[]).some(x=>x.hook===h); }
+  function award(n, note, hook){
+    if(hook && hasAwardHook(hook)) return false; // 同一事项不重复计分（取消再打卡也不刷分）
+    state.points += n;
+    state.pointLog.unshift({ t:todayStrNow(), n, note, hook:hook||"" });
+    if(state.pointLog.length>600) state.pointLog.length=600;
+    save();
+    return true;
+  }
+  function awardQuiet(n, note, hook, silent){
+    const okd = award(n, note, hook);
+    if(okd && !silent) toast("＋"+n+" 分 · "+note);
+    return okd;
+  }
+  // 学习日期集合（已打卡的日期）与连续天数
+  function studyDates(){
+    const s=new Set();
+    Object.values(state.learned||{}).forEach(v=>{ if(v) s.add(String(v)); });
+    return s;
+  }
+  function currentStreak(){
+    const ds=studyDates(); if(!ds.size) return 0;
+    const d=new Date();
+    if(!ds.has(fmt(d))) d.setDate(d.getDate()-1); // 今天还没学 → 从昨天起算
+    let n=0;
+    while(ds.has(fmt(d))){ n++; d.setDate(d.getDate()-1); }
+    return n;
+  }
+  // 今日是否全勤（学习任务 + 习惯都完成）
+  function allTodayDone(){
+    const tg=todayTasks(); const tasks=Object.keys(tg).reduce((a,k)=>a.concat(tg[k]||[]),[]);
+    if(!tasks.length) return false;
+    const tOk=tasks.every(t=>!!state.learned[t.key]);
+    const hs=state.habits||[];
+    const hOk=hs.length? hs.every(habitDone) : true;
+    return tOk && hOk;
+  }
+  // 每次打卡后统一结算：全勤奖 + 连续天数里程碑
+  function settleBonuses(){
+    if(allTodayDone()) awardQuiet(POINT_RULES.allDone, "今日全勤奖", "alldone:"+todayStrNow());
+    const n=currentStreak();
+    STREAK_MILESTONES.forEach(([d,p])=>{
+      if(n>=d) awardQuiet(p, "连续学习 "+d+" 天达成奖励", "streak:"+d+":"+todayStrNow());
+    });
+  }
+  function redeemReward(id){
+    const r=rewardList().find(x=>x.id===id); if(!r) return;
+    if(state.points<r.cost){ toast("还差 "+(r.cost-state.points)+" 分，继续加油 💪"); return; }
+    if(!confirm("用 "+r.cost+" 分兑换「"+r.name+"」？\n兑换后由家长在后台确认兑现。")) return;
+    state.points-=r.cost;
+    state.pointLog.unshift({ t:todayStrNow(), n:-r.cost, note:"兑换 "+r.name, hook:"" });
+    state.redeems.unshift({ t:todayStrNow(), name:r.name, icon:r.icon||"🎁", cost:r.cost, status:"待兑现" });
+    save(); toast("已提交兑换 🛍️ 请家长在后台确认"); renderReward(); setStudentLabel();
+  }
   /* ---------- 存档与版本（本机快照 · 可回退/撤回） ---------- */
   const ARCHIVE_KEY = "xuetang_archives_v1"; // 与主数据分开存，避免互相挤占
   const ARCHIVE_MAX = 12;
@@ -436,10 +523,11 @@
   }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems"];
   function defaultPerStudent(){
     return { grade:"四年级", learned:{}, fav:{}, checkin:{},
-      habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{} };
+      habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{},
+      points:0, pointLog:[], redeems:[] };
   }
   function capturePerStudent(){
     const d={}; PER_STUDENT_FIELDS.forEach(f=>{ const v=state[f]; d[f]=(v===undefined?null:JSON.parse(JSON.stringify(v))); });
@@ -747,6 +835,7 @@
         <div>
           <h2>今日学习</h2>
           <p>${d.getMonth()+1} 月 ${d.getDate()} 日 星期${WEEK[d.getDay()]} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 共 ${total} 项任务</p>
+          <div style="margin-top:6px"><span class="badge" style="background:#fef3c7;color:#b45309">🏆 今日 +${pointToday()} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
         </div>
         <div class="done" style="min-width:180px;">
           已完成 ${done} / ${total}
@@ -1122,6 +1211,9 @@
           b.classList.add("ok"); st2.right++;
           speak(it.title, "en-US");
           toast("答对了 🎉 "+it.title);
+          // 答对给分（每日小测积分上限）
+          const got=(state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n>0 && x.note.indexOf("小测答对")===0).reduce((a,c)=>a+c.n,0);
+          if(got < QUIZ_CAP_DAY) awardQuiet(POINT_RULES.quizRight, "小测答对 "+it.title, "", true);
         }else{
           b.classList.add("no"); st2.wrong++;
           opts.forEach((x,i)=>{ if(x.ok) all[i].classList.add("ok"); });
@@ -1216,7 +1308,10 @@
           const t=fmt(new Date());
           state.reviewed[t]=state.reviewed[t]||{};
           if(state.reviewed[t][it.key]){ delete state.reviewed[t][it.key]; toast("已取消复习打卡"); }
-          else { state.reviewed[t][it.key]=true; toast("复习完成 🔁 按遗忘曲线继续加油！"); }
+          else {
+            state.reviewed[t][it.key]=true; toast("复习完成 🔁 记忆效果最好的一步！");
+            awardQuiet(POINT_RULES.review, "复习《"+it.title+"》", "review:"+t+":"+it.key, true);
+          }
           save(); openModal(it); refreshIfVisible(); return;
         }else if(act==="learn"){
           if(state.learned[it.key]){
@@ -1225,7 +1320,12 @@
             if(state.reviewed[t]) delete state.reviewed[t][it.key];
             toast("已取消学会标记");
           }
-          else { state.learned[it.key]=fmt(new Date()); toast("已标记为学会，明天将按遗忘曲线安排复习 🔁"); }
+          else {
+            state.learned[it.key]=fmt(new Date());
+            toast("已标记为学会，明天将按遗忘曲线安排复习 🔁");
+            awardQuiet(POINT_RULES.learn, "学会《"+it.title+"》", "learn:"+it.key, true);
+            settleBonuses();
+          }
         }else if(act==="fav"){
           if(state.fav[it.key]){ delete state.fav[it.key]; toast("已取消收藏"); }
           else { state.fav[it.key]=true; toast("已收藏 ⭐"); }
@@ -1370,6 +1470,85 @@
 
   /* ---------- 内容后台（添加素材 · 自动归类筛选） ---------- */
   /* ---------- 后台登录 / 修改口令（口令存本机，防止随手改动后台内容） ---------- */
+  /* ---------- 奖励页：积分账户 · 规则 · 奖励商城 · 流水 ---------- */
+  function renderReward(){
+    const el = $("#view-reward");
+    const tg = todayTasks();
+    const tasks = Object.keys(tg).reduce((a,k)=>a.concat(tg[k]||[]),[]);
+    const hs = state.habits||[];
+    const taskMax = tasks.length*POINT_RULES.learn + hs.length*POINT_RULES.habit + POINT_RULES.allDone;
+    // 最近 7 天日均（用于「预计还需多少天」）
+    const last7=[]; for(let i=0;i<7;i++){ const d=new Date(); d.setDate(d.getDate()-i); last7.push(fmt(d)); }
+    const got7=(state.pointLog||[]).filter(x=>x.n>0 && last7.indexOf(x.t)>=0).reduce((a,b)=>a+b.n,0);
+    const days7=Math.max(1, new Set((state.pointLog||[]).filter(x=>x.n>0&&last7.indexOf(x.t)>=0).map(x=>x.t)).size);
+    const avg=Math.max(1, Math.round(got7/days7));
+    const streak=currentStreak();
+    const nextMile=STREAK_MILESTONES.find(([d])=>d>streak)||null;
+
+    el.innerHTML = `
+      <div class="hero">
+        <div>
+          <h2>🎁 我的积分</h2>
+          <p>${esc(state.grade)} · 今日 +${pointToday()} 分 · 本周 +${pointWeek()} 分 · 最近 7 天平均 ${avg} 分/天${nextMile?` · 再学 ${nextMile[0]-streak} 天解锁「连续 ${nextMile[0]} 天」+${nextMile[1]} 分`:""}</p>
+        </div>
+        <div class="done" style="min-width:200px;">
+          <div style="font-size:30px;font-weight:800;color:#b45309">${state.points} <span style="font-size:14px">分</span></div>
+          <div class="pbar"><div class="pfill" style="width:${taskMax?Math.min(100,Math.round(pointToday()/taskMax*100)):0}%"></div></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">今日还可拿到约 ${Math.max(0,taskMax-pointToday())} 分</div>
+        </div>
+      </div>
+
+      <div class="stat-strip">
+        <div class="stat"><div class="num">${state.points}</div><div class="lbl">总积分</div></div>
+        <div class="stat"><div class="num">${pointToday()}</div><div class="lbl">今日</div></div>
+        <div class="stat"><div class="num">${pointWeek()}</div><div class="lbl">本周</div></div>
+        <div class="stat"><div class="num">${streak}</div><div class="lbl">连续学习天数</div></div>
+        <div class="stat"><div class="num">${(state.redeems||[]).filter(r=>r.status==="待兑现").length}</div><div class="lbl">待家长兑现</div></div>
+        <div class="stat"><div class="num">${tasks.filter(t=>state.learned[t.key]).length}/${tasks.length}</div><div class="lbl">今日任务</div></div>
+      </div>
+
+      <div class="sec-title">🏅 积分规则 <small>只加不减 · 复习比学新更值钱 · 全勤与连续性额外加权</small></div>
+      <div class="dash-grid">
+        <div class="dash-card"><div class="dc-name">学会 / 打卡内容</div><div class="dc-row"><span>每条</span><b>+${POINT_RULES.learn}</b></div><div class="dc-row"><span>同一条重复标记</span><b>不重复计分</b></div></div>
+        <div class="dash-card"><div class="dc-name">完成到期复习</div><div class="dc-row"><span>每次</span><b>+${POINT_RULES.review}</b></div><div class="dc-row"><span>理由</span><b>间隔重复最能形成长期记忆</b></div></div>
+        <div class="dash-card"><div class="dc-name">习惯打卡</div><div class="dc-row"><span>每个</span><b>+${POINT_RULES.habit}</b></div><div class="dc-row"><span>每天</span><b>${hs.length} 个习惯</b></div></div>
+        <div class="dash-card"><div class="dc-name">小测答对</div><div class="dc-row"><span>每题</span><b>+${POINT_RULES.quizRight}</b></div><div class="dc-row"><span>每日上限</span><b>${QUIZ_CAP_DAY} 分</b></div></div>
+        <div class="dash-card"><div class="dc-name">今日全勤</div><div class="dc-row"><span>学习 + 习惯全做</span><b>+${POINT_RULES.allDone}</b></div><div class="dc-row"><span>今天状态</span><b>${allTodayDone()?"已达成 ✅":"进行中"}</b></div></div>
+        <div class="dash-card"><div class="dc-name">连续学习奖励</div><div class="dc-row"><span>已连续</span><b>${streak} 天</b></div><div class="dc-row"><span>里程碑</span><b>${STREAK_MILESTONES.map(([d,p])=>d+"天+"+p).slice(0,4).join(" · ")} …</b></div></div>
+      </div>
+
+      <div class="sec-title">🎁 奖励商城 <small>短中长期目标并存 · 按最近 7 天速度估算所需时间（仅供参考，实际要看每天完成情况）</small></div>
+      <div class="task-grid">
+        ${rewardList().map(r=>{
+          const can=state.points>=r.cost;
+          const need=r.cost-state.points;
+          const days=Math.ceil(need/avg);
+          const pct=Math.min(100, Math.round(state.points/r.cost*100));
+          return `<div class="card rw-card">
+            <div class="c-meta"><span class="badge" style="background:#fef3c7;color:#b45309">${esc(r.icon||"🎁")} ${r.cost} 分</span>${can?`<span style="color:var(--green);font-weight:700">可兑换</span>`:`<span style="color:var(--muted)">还差 ${need}</span>`}</div>
+            <h4>${esc(r.name)}</h4>
+            <div class="rw-bar"><div style="width:${pct}%"></div></div>
+            <div class="rw-tip">${esc(r.tip||"")}${can?"":` · 按 ${avg} 分/天约还需 ${days} 天`}</div>
+            <button class="btn ${can?"primary":""}" style="margin-top:8px;width:100%" data-redeem="${esc(r.id)}" ${can?"":"disabled"}>${can?"立即兑换 🛍️":"攒够自动解锁 🔒"}</button>
+          </div>`;
+        }).join("")}
+      </div>
+
+      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 获得的积分不会因为漏打卡被扣回</small></div>
+      ${(state.pointLog||[]).length?`<div class="admin-list">
+        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div></div>`).join("")}
+      </div>`:'<div class="placeholder" style="padding:16px">还没有积分记录，去首页完成今天的任务吧 🚀</div>'}
+
+      <div class="sec-title">📦 兑换记录 <small>兑换后需家长在「🛠 后台」确认兑现</small></div>
+      ${(state.redeems||[]).length?`<div class="admin-list">
+        ${(state.redeems||[]).map((r,i)=>`<div class="admin-item">
+          <div class="ai-main"><b>${esc(r.icon||"🎁")} ${esc(r.name)}</b> <span class="badge" style="background:${r.status==="已兑现"?"#ecfdf5":"#fff7ed"};color:${r.status==="已兑现"?"#16a34a":"#ea580c"}">${esc(r.status)}</span> <span style="font-size:12px;color:var(--muted)">-${r.cost} 分 · ${esc(r.t)}</span></div>
+        </div>`).join("")}
+      </div>`:'<div class="placeholder" style="padding:16px">还没有兑换过奖励</div>'}
+    `;
+    el.querySelectorAll("[data-redeem]").forEach(b=>b.addEventListener("click", ()=>redeemReward(b.dataset.redeem)));
+  }
+
   /* ---------- 后台：资源库（内置教材按 学科×年级×类型 交叉分类，可直接修改） ---------- */
   let biView = { q:"", type:"全部", subj:"全部", grade:"全部", limit:30 };
   function openAdminEdit(key){
@@ -1493,6 +1672,32 @@
         : '<div class="placeholder"><div class="big">📭</div>还没有在后台添加的素材</div>'}
       </div>
 
+      <div class="sec-title">🛍 兑换审核 · 奖励设置 <small>孩子提交的兑换需家长在这里确认兑现；可自定义奖励目录</small></div>
+      <div class="admin-list">
+        ${(state.redeems||[]).length? (state.redeems||[]).map((r,i)=>`<div class="admin-item">
+            <div class="ai-main"><b>${esc(r.icon||"🎁")} ${esc(r.name)}</b> <span class="badge" style="background:${r.status==="已兑现"?"#ecfdf5":"#fff7ed"};color:${r.status==="已兑现"?"#16a34a":"#ea580c"}">${esc(r.status)}</span> <span style="font-size:12px;color:var(--muted)">-${r.cost} 分 · ${esc(r.t)}</span></div>
+            <div style="display:flex;gap:6px;flex:0 0 auto">
+              ${r.status==="已兑现"
+                ?`<button class="btn" data-rd-undo="${i}" title="退回积分">↩ 退回</button>`
+                :`<button class="btn primary" data-rd-ok="${i}">✅ 已兑现</button><button class="btn" data-rd-undo="${i}" title="退回积分">↩ 退回</button>`}
+            </div>
+          </div>`).join("")
+        : '<div class="placeholder"><div class="big">🛍</div>还没有兑换记录；孩子在「🎁 奖励」页提交兑换后会显示在这里</div>'}
+      </div>
+      <div class="admin-form" style="margin-top:10px">
+        <div class="af-row">
+          <label>图标<input id="rwIcon" style="width:70px" value="🎁" /></label>
+          <label class="af-grow">奖励名称<input id="rwName" placeholder="如 周末去游乐园" /></label>
+          <label>所需积分<input id="rwCost" type="number" style="width:110px" placeholder="如 3000" /></label>
+        </div>
+        <label class="af-block">说明（可选）<input id="rwTip" placeholder="如 约 2 周 · 全家一起去" /></label>
+        <div class="af-actions">
+          <button class="btn primary" id="rwAdd">＋ 添加奖励</button>
+          <button class="btn" id="rwReset">恢复默认目录</button>
+        </div>
+        <p class="af-tip">当前生效目录：${rewardList().map(r=>esc(r.icon||"🎁")+r.name+"("+r.cost+")").join(" · ")}</p>
+      </div>
+
       <div class="sec-title">📚 资源库（${builtins.length}）<small>站内全部内置内容 · 按 学科 × 年级 × 类型 交叉筛选 · 可直接修改，改错点「⤺」还原原文</small></div>
       <div class="chips">
         <span class="lbl">学科：</span>
@@ -1575,6 +1780,34 @@
     }));
     const biMore=$("#biMore");
     if(biMore) biMore.addEventListener("click", ()=>{ biView.limit+=30; renderAdmin(); });
+    // 兑换审核 · 自定义奖励
+    el.querySelectorAll("[data-rd-ok]").forEach(b=>b.addEventListener("click", ()=>{
+      const r=(state.redeems||[])[parseInt(b.dataset.rdOk,10)]; if(!r) return;
+      r.status="已兑现"; save(); toast("已确认兑现 ✅"); renderAdmin(); if(view.name==="reward") renderReward();
+    }));
+    el.querySelectorAll("[data-rd-undo]").forEach(b=>b.addEventListener("click", ()=>{
+      const i=parseInt(b.dataset.rdUndo,10); const r=(state.redeems||[])[i]; if(!r) return;
+      if(!confirm("退回这次兑换？将返还 "+r.cost+" 分。")) return;
+      state.points += r.cost;
+      state.pointLog.unshift({ t:fmt(new Date()), n:r.cost, note:"退回兑换 "+r.name, hook:"" });
+      (state.redeems||[]).splice(i,1);
+      save(); toast("已退回 "+r.cost+" 分"); renderAdmin(); if(view.name==="reward") renderReward();
+    }));
+    const rwAdd=$("#rwAdd");
+    if(rwAdd) rwAdd.addEventListener("click", ()=>{
+      const name=($("#rwName").value||"").trim(), cost=parseInt($("#rwCost").value,10);
+      if(!name){ toast("请填写奖励名称"); return; }
+      if(!cost || cost<=0){ toast("请填写所需积分（正整数）"); return; }
+      state.rewards = Array.isArray(state.rewards) ? state.rewards.slice() : DEFAULT_REWARDS.slice();
+      state.rewards.push({ id:"rw"+Date.now(), icon:($("#rwIcon").value||"🎁").trim(), name, cost, tip:($("#rwTip").value||"").trim() });
+      state.rewards.sort((a,b)=>a.cost-b.cost);
+      save(); toast("已添加奖励 🎁"); renderAdmin();
+    });
+    const rwReset=$("#rwReset");
+    if(rwReset) rwReset.addEventListener("click", ()=>{
+      if(!confirm("恢复为系统默认奖励目录？自定义奖励将被清除。")) return;
+      state.rewards=null; save(); toast("已恢复默认目录"); renderAdmin();
+    });
     // 存档与版本：立即存档 / 还原 / 删除
     const arcNow=$("#arcNow");
     if(arcNow) arcNow.onclick=()=>{ archiveCreate("手动存档"); renderAdmin(); toast("已存档 💾 可随时在下方还原"); };
@@ -1644,13 +1877,14 @@
   function refreshView(){
     if(view.name==="home") renderHome();
     else if(view.name==="week") renderWeek();
+    else if(view.name==="reward") renderReward();
     else if(view.name==="subject") renderSubject(view.param);
     else if(view.name==="tag") renderTag(view.param);
     else if(view.name==="search") renderSearch(view.param);
     else if(view.name==="admin"){ if(state.adminAuthed) renderAdmin(); else renderAdminLogin(); }
   }
   function render(){
-    ["home","week","subject","tag","search","admin"].forEach(n=>{ $("#view-"+n).hidden = (n!==view.name); });
+    ["home","week","reward","subject","tag","search","admin"].forEach(n=>{ $("#view-"+n).hidden = (n!==view.name); });
     setNav(view.name);
     refreshView();
   }
@@ -1662,7 +1896,7 @@
     if(b.classList.contains("future")){ toast("该栏目规划中，内容导入后自动上线"); return; }
     const v=b.dataset.view;
     if(v==="admin"){ go("admin"); return; }
-    if(v==="week"){ go("week"); return; } // 本周页（复习/看板/周计划/打卡范围）
+    if(v==="home"||v==="week"||v==="reward"){ go(v); return; } // 首页 / 本周 / 奖励（非学科页）
     go(v==="home"?"home":"subject", v==="home"?null:v);
   });
   // 年级语境
@@ -1769,7 +2003,7 @@
     const hadd=e.target.closest("[data-habit-add]");
     if(hadd){ const inp=$("#habitNew"); const v=((inp&&inp.value)||"").trim(); if(v&&!state.habits.includes(v)){ state.habits.push(v); save(); toast("已添加习惯："+v); } refreshView(); return; }
     const hb=e.target.closest("[data-habit]");
-    if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else state.habitLog[t][h]=true; save(); refreshView(); return; }
+    if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else { state.habitLog[t][h]=true; awardQuiet(POINT_RULES.habit, "习惯打卡 · "+h, "habit:"+t+":"+h, true); settleBonuses(); } save(); refreshView(); return; }
   });
   // 学科内搜索（input 事件需单独绑定以保持焦点）
   document.querySelector("main").addEventListener("input", e=>{
@@ -1802,6 +2036,7 @@
       openModal, mathBodyHTML, effBody, renderAdmin, renderAdminLogin, renderAdminPwdForm,
       pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
       archiveCreate, archiveRestore, loadArchives, renderWeek, refreshView,
+      renderReward, award, awardQuiet, redeemReward, rewardList, currentStreak, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       todayTasks, poolFor, splitSections, weekDatesMondayStart
     };
   }
