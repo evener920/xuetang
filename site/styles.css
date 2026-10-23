@@ -426,3 +426,6 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 60px;}
 .rl-name{font-size:14px;font-weight:700;color:var(--fg);}
 .rl-val{font-size:20px;font-weight:800;color:#b45309;margin:6px 0 4px;letter-spacing:.3px;}
 .rl-tip{font-size:12px;line-height:1.7;color:var(--muted);}
+/* 行为扣分卡：与加分卡同结构，用红色区分方向 */
+.rule-card.pen{background:#fffafa;border-color:#fecaca;}
+.rl-val.neg{color:#b91c1c;}

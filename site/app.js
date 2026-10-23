@@ -425,6 +425,52 @@
     {id:"r8", icon:"📱", name:"手机",                      cost:30000,tip:"约 2 个学期 · 年度大目标"}
   ];
   function rewardList(){ return (Array.isArray(state.rewards)&&state.rewards.length) ? state.rewards : DEFAULT_REWARDS; }
+  /* ---------- 行为扣分（减分）----------
+     设计原则（行为矫正里的「反应代价 response cost」，讲究轻、准、可挽回）：
+     ① 只扣行为，不扣学习 —— 学习积分只加不减，连续天数、全勤奖不受行为扣分影响，两条账各记各的
+     ② 轻罚为主 —— 单项 5~10 分（约等于半天到一天的积累），重罚只留给说谎等原则问题
+     ③ 每日扣分有上限 —— 防止一天把孩子扣垮，也防止家长情绪化连点
+     ④ 欠分有下限 —— 余额最多扣到 -PENALTY_FLOOR，之后仍需记录但不再扣分，欠的靠之后挣回来
+     ⑤ 可挽回 —— 当天改正了，家长点「已改正」即全额返还，鼓励改进行为而非单纯惩罚
+     ⑥ 同一事项当天只记一次 —— 避免重复扣分变成情绪发泄                                */
+  const PENALTY_CAP_DAY = 30;   // 每日扣分上限
+  const PENALTY_FLOOR   = 50;   // 欠分下限（总积分最低可到 -50）
+  const DEFAULT_PENALTIES = [
+    {id:"p1", icon:"🧼", name:"不讲卫生", cost:5,  tip:"不洗手、不刷牙、不洗澡、衣物乱丢等"},
+    {id:"p2", icon:"🧹", name:"房间凌乱", cost:5,  tip:"玩具、书桌、床铺用完不收拾"},
+    {id:"p3", icon:"⏰", name:"磨蹭拖延", cost:5,  tip:"叫了很多遍还不动，作业/出门一拖再拖"},
+    {id:"p4", icon:"🌙", name:"晚睡",     cost:10, tip:"超过规定上床时间还没睡（作息是第二天的学习本钱）"},
+    {id:"p5", icon:"🙅", name:"不礼貌",   cost:10, tip:"对长辈/他人不礼貌、顶嘴、说脏话"},
+    {id:"p6", icon:"😤", name:"乱发脾气", cost:8,  tip:"无理取闹、摔东西、大喊大叫"},
+    {id:"p7", icon:"🤥", name:"说谎隐瞒", cost:20, tip:"撒谎、隐瞒作业或成绩（原则问题，扣得最重）"}
+  ];
+  function penaltyList(){ return (Array.isArray(state.penalties)&&state.penalties.length) ? state.penalties : DEFAULT_PENALTIES; }
+  function penaltyToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n<0).reduce((a,b)=>a-b.n,0); }
+  function penaltyLogToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n<0); }
+  // 扣分：返回实际扣掉的分数（0 表示未扣成）
+  function penalize(id){
+    const p = penaltyList().find(x=>x.id===id); if(!p) return 0;
+    const t = todayStrNow(), hook = "pen:"+id+":"+t;
+    if(hasAwardHook(hook)) return -1;                       // 同一事项当天已记过
+    if(penaltyToday() + p.cost > PENALTY_CAP_DAY) return -2; // 撞到每日上限
+    const real = Math.min(p.cost, Math.max(0, state.points + PENALTY_FLOOR));
+    if(real<=0) return -3;                                   // 已到欠分下限
+    state.points -= real;
+    state.pointLog.unshift({ t, n:-real, note:"行为扣分 · "+p.name, hook });
+    if(state.pointLog.length>600) state.pointLog.length=600;
+    save();
+    return real;
+  }
+  // 改正撤销：全额返还并删掉这条扣分记录
+  function undoPenalty(hook){
+    const i=(state.pointLog||[]).findIndex(x=>x.hook===hook && x.n<0);
+    if(i<0) return 0;
+    const e=state.pointLog[i];
+    state.points += (-e.n);
+    state.pointLog.splice(i,1);
+    save();
+    return -e.n;
+  }
   function todayStrNow(){ return fmt(new Date()); }
   function pointToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n>0).reduce((a,b)=>a+b.n,0); }
   function pointWeek(){ const ws=weekDatesMondayStart(); return (state.pointLog||[]).filter(x=>x.n>0 && ws.indexOf(x.t)>=0).reduce((a,b)=>a+b.n,0); }
@@ -1489,7 +1535,7 @@
       <div class="hero">
         <div>
           <h2>🎁 我的积分</h2>
-          <p>${esc(state.grade)} · 今日 +${pointToday()} 分 · 本周 +${pointWeek()} 分 · 最近 7 天平均 ${avg} 分/天${nextMile?` · 再学 ${nextMile[0]-streak} 天解锁「连续 ${nextMile[0]} 天」+${nextMile[1]} 分`:""}</p>
+          <p>${esc(state.grade)} · 今日 +${pointToday()} 分${penaltyToday()?` · <span style="color:#b91c1c">-${penaltyToday()} 分</span>`:""} · 本周 +${pointWeek()} 分 · 最近 7 天平均 ${avg} 分/天${nextMile?` · 再学 ${nextMile[0]-streak} 天解锁「连续 ${nextMile[0]} 天」+${nextMile[1]} 分`:""}</p>
         </div>
         <div class="done" style="min-width:200px;">
           <div style="font-size:30px;font-weight:800;color:#b45309">${state.points} <span style="font-size:14px">分</span></div>
@@ -1502,12 +1548,13 @@
         <div class="stat"><div class="num">${state.points}</div><div class="lbl">总积分</div></div>
         <div class="stat"><div class="num">${pointToday()}</div><div class="lbl">今日</div></div>
         <div class="stat"><div class="num">${pointWeek()}</div><div class="lbl">本周</div></div>
+        <div class="stat"><div class="num" style="${penaltyToday()?"color:#b91c1c":""}">${penaltyToday()?"-"+penaltyToday():"0"}</div><div class="lbl">今日行为扣分</div></div>
         <div class="stat"><div class="num">${streak}</div><div class="lbl">连续学习天数</div></div>
         <div class="stat"><div class="num">${(state.redeems||[]).filter(r=>r.status==="待兑现").length}</div><div class="lbl">待家长兑现</div></div>
         <div class="stat"><div class="num">${tasks.filter(t=>state.learned[t.key]).length}/${tasks.length}</div><div class="lbl">今日任务</div></div>
       </div>
 
-      <div class="sec-title">🏅 积分规则 <small>只加不减 · 复习比学新更值钱 · 全勤与连续性额外加权</small></div>
+      <div class="sec-title">🏅 加分规则 <small>只加不减 · 复习比学新更值钱 · 全勤与连续性额外加权</small></div>
       <div class="task-grid">
         <div class="rule-card"><div class="rl-name">学会 / 打卡内容</div><div class="rl-val">+${POINT_RULES.learn} 分</div><div class="rl-tip">每学会或打卡一条内容记一次；同一条内容重复标记，不重复计分。</div></div>
         <div class="rule-card"><div class="rl-name">完成到期复习</div><div class="rl-val">+${POINT_RULES.review} 分</div><div class="rl-tip">每完成一次艾宾浩斯到期复习；间隔重复最能形成长期记忆，所以比学新更值钱。</div></div>
@@ -1516,6 +1563,17 @@
         <div class="rule-card"><div class="rl-name">今日全勤</div><div class="rl-val">+${POINT_RULES.allDone} 分</div><div class="rl-tip">当天的学习任务和习惯全部完成；今天状态：${allTodayDone()?"已达成 ✅":"进行中"}。</div></div>
         <div class="rule-card"><div class="rl-name">连续学习奖励</div><div class="rl-val">已连续 ${streak} 天</div><div class="rl-tip">里程碑一次性发放：${STREAK_MILESTONES.map(([d,p])=>d+" 天 +"+p).join(" / ")}。断签只重置连续天数，已得积分不清零。</div></div>
       </div>
+
+      <div class="sec-title">⚠️ 行为扣分规则 <small>只扣行为，不扣学习 · 每日上限 ${PENALTY_CAP_DAY} 分 · 欠分下限 -${PENALTY_FLOOR} 分 · 当天改正可撤销返还 · 由家长在「🛠 后台」记录</small></div>
+      <div class="task-grid">
+        ${penaltyList().map(p=>`
+        <div class="rule-card pen">
+          <div class="rl-name">${esc(p.icon||"⚠️")} ${esc(p.name)}</div>
+          <div class="rl-val neg">-${p.cost} 分</div>
+          <div class="rl-tip">${esc(p.tip||"")}。当天改正后家长撤销即可返还，同一项一天只记一次。</div>
+        </div>`).join("")}
+      </div>
+      <p class="af-tip" style="margin:-4px 0 0">扣分只影响积分余额：<b>学习类积分只加不减</b>，连续天数与全勤奖都不受行为扣分影响 —— 忘打卡不会被追回，做得好才加分。</p>
 
       <div class="sec-title">🎁 奖励商城 <small>短中长期目标并存 · 按最近 7 天速度估算所需时间（仅供参考，实际要看每天完成情况）</small></div>
       <div class="task-grid">
@@ -1534,9 +1592,9 @@
         }).join("")}
       </div>
 
-      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 获得的积分不会因为漏打卡被扣回</small></div>
+      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 学习所得不会因漏打卡被扣回 · 行为扣分由家长记录，改正后可撤销</small></div>
       ${(state.pointLog||[]).length?`<div class="admin-list">
-        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div></div>`).join("")}
+        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${x.n<0?`<span class="badge" style="background:#fef2f2;color:#b91c1c">行为扣分</span>`:""}${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div></div>`).join("")}
       </div>`:'<div class="placeholder" style="padding:16px">还没有积分记录，去首页完成今天的任务吧 🚀</div>'}
 
       <div class="sec-title">📦 兑换记录 <small>兑换后需家长在「🛠 后台」确认兑现</small></div>
@@ -1790,6 +1848,32 @@
         <p class="af-tip">当前生效目录：${rewardList().map(r=>esc(r.icon||"🎁")+r.name+"("+r.cost+")").join(" · ")}</p>
       </div>
 
+      <div class="sec-title">⚠️ 行为扣分记录 <small>只扣行为不扣学习 · 每日上限 ${PENALTY_CAP_DAY} 分 · 欠分下限 -${PENALTY_FLOOR} 分 · 当天改正可撤销返还</small></div>
+      <div class="chips">
+        ${penaltyList().map(p=>`<button class="chip" data-pen="${esc(p.id)}" title="${esc(p.tip||"")}">${esc(p.icon||"⚠️")} ${esc(p.name)} -${p.cost}</button>`).join("")}
+        <span style="flex:1"></span>
+        <span class="lbl" style="align-self:center">今日已扣 <b style="color:${penaltyToday()?"#b91c1c":"var(--muted)"}">-${penaltyToday()}</b> / ${PENALTY_CAP_DAY}</span>
+      </div>
+      <div class="admin-list">
+        ${penaltyLogToday().length? penaltyLogToday().map(e=>`<div class="admin-item">
+            <div class="ai-main"><span class="badge" style="background:#fef2f2;color:#b91c1c">-${-e.n} 分</span> <b>${esc((e.note||"").replace("行为扣分 · ",""))}</b> <span style="font-size:12px;color:var(--muted)">${esc(e.t)}</span></div>
+            <button class="btn" data-pen-undo="${esc(e.hook)}" title="孩子已改正 → 返还积分">✅ 已改正 · 撤销</button>
+          </div>`).join("")
+        : '<div class="placeholder"><div class="big">🌟</div>今天还没有行为扣分，表现不错</div>'}
+      </div>
+      <div class="admin-form" style="margin-top:10px">
+        <div class="af-row">
+          <label>图标<input id="pnIcon" style="width:70px" value="⚠️" /></label>
+          <label class="af-grow">扣分项<input id="pnName" placeholder="如 挑食 / 打断别人说话" /></label>
+          <label>扣分值<input id="pnCost" type="number" style="width:100px" placeholder="如 5" /></label>
+        </div>
+        <div class="af-actions">
+          <button class="btn primary" id="pnAdd">＋ 添加扣分项</button>
+          <button class="btn" id="pnReset">恢复默认扣分项</button>
+        </div>
+        <p class="af-tip">建议单项 5~10 分（约半天到一天的积累），只把最重的分留给原则问题；扣分是为了提醒，不是为了让分数清零 —— 当天改正一定要记得撤销返还。</p>
+      </div>
+
 
       <div class="sec-title">✏️ 已修改的内置内容（${Object.keys(state.overrides||{}).length}）<small>覆盖内置教材，可一键还原</small></div>
       <div class="admin-list">
@@ -1845,6 +1929,36 @@
     if(rwReset) rwReset.addEventListener("click", ()=>{
       if(!confirm("恢复为系统默认奖励目录？自定义奖励将被清除。")) return;
       state.rewards=null; save(); toast("已恢复默认目录"); renderAdmin();
+    });
+    // 行为扣分：记录 / 改正撤销 / 自定义扣分项
+    el.querySelectorAll("[data-pen]").forEach(b=>b.addEventListener("click", ()=>{
+      const id=b.dataset.pen, p=penaltyList().find(x=>x.id===id); if(!p) return;
+      const r=penalize(id);
+      if(r===-1){ toast("「"+p.name+"」今天已经记过啦"); return; }
+      if(r===-2){ toast("今日扣分已达上限 "+PENALTY_CAP_DAY+" 分，明天再说"); return; }
+      if(r===-3){ toast("已到欠分下限 -"+PENALTY_FLOOR+" 分，先努力挣回来吧"); return; }
+      toast("行为扣分 · "+p.name+" -"+r+" 分");
+      renderAdmin(); if(view.name==="reward") renderReward();
+    }));
+    el.querySelectorAll("[data-pen-undo]").forEach(b=>b.addEventListener("click", ()=>{
+      const got=undoPenalty(b.dataset.penUndo);
+      if(got) toast("已改正，返还 +"+got+" 分 👍");
+      renderAdmin(); if(view.name==="reward") renderReward();
+    }));
+    const pnAdd=$("#pnAdd");
+    if(pnAdd) pnAdd.addEventListener("click", ()=>{
+      const name=($("#pnName").value||"").trim(), cost=parseInt($("#pnCost").value,10);
+      if(!name){ toast("请填写扣分项名称"); return; }
+      if(!cost || cost<=0){ toast("请填写扣分分值（正整数）"); return; }
+      state.penalties = (Array.isArray(state.penalties)&&state.penalties.length) ? state.penalties.slice() : DEFAULT_PENALTIES.slice();
+      state.penalties.push({ id:"pn"+Date.now(), icon:($("#pnIcon").value||"⚠️").trim(), name, cost, tip:"自定义扣分项" });
+      state.penalties.sort((a,b)=>a.cost-b.cost);
+      save(); toast("已添加扣分项"); renderAdmin();
+    });
+    const pnReset=$("#pnReset");
+    if(pnReset) pnReset.addEventListener("click", ()=>{
+      if(!confirm("恢复为系统默认扣分项？自定义项将被清除。")) return;
+      state.penalties=null; save(); toast("已恢复默认扣分项"); renderAdmin();
     });
     // 存档与版本：立即存档 / 还原 / 删除
     const arcNow=$("#arcNow");
@@ -2087,6 +2201,7 @@
       archiveCreate, archiveRestore, loadArchives, renderWeek, renderHome, refreshView,
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
+      penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan
     };
   }
