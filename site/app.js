@@ -1840,7 +1840,6 @@
           <label class="af-grow">奖励名称<input id="rwName" placeholder="如 周末去游乐园" /></label>
           <label>所需积分<input id="rwCost" type="number" style="width:110px" placeholder="如 3000" /></label>
         </div>
-        <label class="af-block">说明（可选）<input id="rwTip" placeholder="如 约 2 周 · 全家一起去" /></label>
         <div class="af-actions">
           <button class="btn primary" id="rwAdd">＋ 添加奖励</button>
           <button class="btn" id="rwReset">恢复默认目录</button>
@@ -1921,7 +1920,7 @@
       if(!name){ toast("请填写奖励名称"); return; }
       if(!cost || cost<=0){ toast("请填写所需积分（正整数）"); return; }
       state.rewards = Array.isArray(state.rewards) ? state.rewards.slice() : DEFAULT_REWARDS.slice();
-      state.rewards.push({ id:"rw"+Date.now(), icon:($("#rwIcon").value||"🎁").trim(), name, cost, tip:($("#rwTip").value||"").trim() });
+      state.rewards.push({ id:"rw"+Date.now(), icon:($("#rwIcon").value||"🎁").trim(), name, cost, tip:"" });
       state.rewards.sort((a,b)=>a.cost-b.cost);
       save(); toast("已添加奖励 🎁"); renderAdmin();
     });
