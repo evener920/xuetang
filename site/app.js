@@ -1887,6 +1887,10 @@
 
   /* ---------- 总渲染 ---------- */
   function refreshView(){
+    if(!$("#view-"+view.name)){ // 目标容器不存在（旧缓存）→ 退回首页，保证站点可用
+      if($("#view-home")){ view={name:"home", param:null}; setNav("home"); renderHome(); }
+      return;
+    }
     if(view.name==="home") renderHome();
     else if(view.name==="week") renderWeek();
     else     if(view.name==="reward") renderReward();
@@ -1897,7 +1901,13 @@
     else if(view.name==="admin"){ if(state.adminAuthed) renderAdmin(); else renderAdminLogin(); }
   }
   function render(){
-    ["home","week","reward","res","subject","tag","search","admin"].forEach(n=>{ $("#view-"+n).hidden = (n!==view.name); });
+    const VIEWS=["home","week","reward","res","subject","tag","search","admin"];
+    // 容错：若浏览器缓存了旧版 index.html（缺少新增的页面容器），不要整体崩掉
+    VIEWS.forEach(n=>{ const v=$("#view-"+n); if(v) v.hidden = (n!==view.name); });
+    if(!$("#view-"+view.name)){ // 当前页容器不存在 → 退回首页
+      view={name:"home", param:null};
+      VIEWS.forEach(n=>{ const v=$("#view-"+n); if(v) v.hidden = (n!=="home"); });
+    }
     setNav(view.name);
     refreshView();
   }
