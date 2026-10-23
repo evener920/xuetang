@@ -1534,7 +1534,8 @@
   const CN_TYPES = ["诗词","成语","文言","成语动画廊","作文","故事","阅读","课文"];
   let cnView = {type:"诗词", grade:"全部", q:""};
   function cnPool(type){
-    const cus = CUSTOM.filter(c=>c.type===type);
+    // 只取属于「语文」的自定义素材：避免英语阅读（subject=英语,type=阅读）等学科错配素材误入语文栏目
+    const cus = CUSTOM.filter(c=>c.type===type && c.subject==="语文");
     if(type==="诗词") return [...POEMS, ...cus];
     if(type==="成语") return [...IDIOMS, ...cus];
     if(type==="文言") return [...WENYAN, ...cus];        // 文言文：后台添加或整年级导入后自动匹配
@@ -2778,7 +2779,7 @@
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
-      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
+      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt, get state(){ return state; }
