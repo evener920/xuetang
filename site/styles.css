@@ -154,6 +154,11 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 60px;}
 .af-grow{flex:1;min-width:220px;}
 .af-grow input{width:100%;}
 .af-block{width:100%;font-family:inherit;font-size:14px;padding:10px;border:1px solid var(--line);border-radius:10px;outline:none;background:#fff;color:var(--fg);resize:vertical;margin-bottom:12px;}
+/* label.af-block：整行块级标签（文字在上、控件在下）；label 默认 inline 会导致 textarea 飘出压住其他行 */
+label.af-block{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);margin-bottom:12px;}
+label.af-block textarea{margin-bottom:0;}
+label.af-block input{font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;outline:none;background:#fff;color:var(--fg);}
+label.af-block textarea:focus,label.af-block input:focus{border-color:var(--accent);}
 .af-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px;}
 .af-tip{font-size:11px;color:#94a3b8;}
 .admin-list{display:flex;flex-direction:column;gap:8px;}
