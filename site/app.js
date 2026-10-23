@@ -166,7 +166,8 @@
       volume:(o.volume && o.volume!=="—") ? o.volume : "",
       unit:o.unit||"",
       tags:String(o.tags||"").split(/[,，]/).map(s=>s.trim()).filter(Boolean),
-      videos:String(o.videos||"").split(/[\n,，]/).map(s=>s.trim()).filter(Boolean)
+      videos:String(o.videos||"").split(/[\n,，]/).map(s=>s.trim()).filter(Boolean),
+      html: !!o.html
     };
   }
 
@@ -187,7 +188,7 @@
     "生物":["知识","练习"],
     "地理":["知识","练习"],
     "政治":["知识","练习"],
-    "历史":["史实","人物","练习"],
+    "历史":["史实","人物","知识","练习"],
     "物理":["知识","实验","练习"],
     "化学":["知识","实验","练习"]
   };
@@ -599,6 +600,7 @@
     applyPerStudent(state.currentStudent || Object.keys(state.students)[0]);
   }
   save(); // 首次即持久化多学生结构（含迁移）
+  seedDefaultContent(); // 七年级历史第一单元学习指南（后台素材，可删除）
   rebuildAll(); // 用主数据 + 后台素材填充 ALL / INDEX
   function save(){
     syncPerStudent(); // 先把当前学生的进度/打卡/年级/习惯写入其独立快照
@@ -634,7 +636,9 @@
       "诗词":["#f5f3ff","#7c3aed"],"成语":["#fdf2f8","#db2777"],"课文":["#eff6ff","#2563eb"],
       "文言":["#fff7ed","#ea580c"],"成语动画廊":["#fef3c7","#d97706"],"作文":["#ecfeff","#0891b2"],
       "故事":["#f0fdf4","#16a34a"],"阅读":["#eef2ff","#4f46e5"],
-      "单词":["#ecfdf5","#0d9488"],"应用题":["#fdf2f8","#db2777"],"计算题":["#ecfdf5","#0d9488"]
+      "单词":["#ecfdf5","#0d9488"],"应用题":["#fdf2f8","#db2777"],"计算题":["#ecfdf5","#0d9488"],
+      "知识":["#ecfdf5","#059669"],"练习":["#fff7ed","#ea580c"],
+      "史实":["#faf5ff","#9333ea"],"人物":["#fef2f2","#dc2626"]
     };
     const [bg,fg]=map[type]||["#f1f5f9","#475569"];
     return `<span class="badge" style="background:${bg};color:${fg}">${esc(type)}</span>`;
@@ -666,6 +670,28 @@
     if(!window.speechSynthesis){ toast("当前浏览器不支持朗读"); return; }
     const u=new SpeechSynthesisUtterance(text); u.lang=lang; u.rate=0.85;
     speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+  // 去除 HTML 标签，得到纯文本预览（用于富文本卡片的正面摘要）
+  function stripTags(s){ return String(s==null?"":s).replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim(); }
+  // 富文本净化：仅保留内容展示所需标签，剥离脚本/事件属性/危险协议（防御性，内容本身可信）
+  function sanitizeRich(html){
+    let s = String(html||"");
+    s = s.replace(/<\s*(script|style|iframe|object|embed|link|meta|base|form|input|button|textarea|select|option|svg|math)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "");
+    s = s.replace(/<\s*(script|style|iframe|object|embed|link|meta|base|form|input|button|textarea|select|option|svg|math)\b[^>]*\/?>/gi, "");
+    s = s.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
+    s = s.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
+    s = s.replace(/(href|src)\s*=\s*("|')\s*(javascript|vbscript|data)\s*:[^"']*\2/gi, "");
+    return s;
+  }
+  // 首次启动：把「七年级历史·第一单元 学习指南」作为后台素材注入（grade:"七年级"，仅七年级可见，可在后台删除）
+  function seedDefaultContent(){
+    if(state.seeded && state.seeded.historyGuide) return;
+    state.seeded = state.seeded || {};
+    const src = (typeof window!=="undefined" && window.HISTORY_GUIDE_7) || [];
+    const have = new Set((state.custom||[]).map(x=>x.key));
+    src.forEach(it=>{ if(it && it.key && !have.has(it.key)) (state.custom=state.custom||[]).push(it); });
+    state.seeded.historyGuide = true;
+    save();
   }
 
   /* ---------- 视频：条目挂载视频 + 链接解析 + 播放 ---------- */
@@ -768,11 +794,14 @@
         ${it.volume?`<span>#${esc(it.volume)}</span>`:""}
         ${it.unit?`<span>#${esc(it.unit)}</span>`:""}
         ${extraMeta||""}
+        ${it.html?`<span class="play">📖 图文</span>`:""}
         ${vids.length?`<span class="play">▶ ${it.type==="成语动画廊"?"动画":"视频"}</span>`:""}
       </div>
       <h4>${esc(it.title)}</h4>
       ${it.sub?`<div class="c-sub">${esc(it.sub)}</div>`:""}
-      <p class="c-body">${esc(it.body)}</p>
+      ${it.html
+        ? `<p class="c-body">${esc(stripTags(it.body).slice(0,64))}${stripTags(it.body).length>64?"…":""}</p>`
+        : `<p class="c-body">${esc(it.body)}</p>`}
       ${it.tags&&it.tags.length?`<div class="c-tags">${it.tags.slice(0,4).map(t=>`<span class="tag" style="cursor:default">#${esc(t)}</span>`).join("")}</div>`:""}
     </button>`;
   }
@@ -1328,9 +1357,11 @@
            <div class="wq-cn" id="wqCn">${esc(it.body||"")}</div>
          </div>
          <div class="wq-quiz" id="wqQuiz" hidden></div>`
-      : (it.body ? (it.subject==="数学"
-          ? `<div class="m-math">${mathBodyHTML(it.body)}</div>`
-          : `<p class="m-body">${esc(it.body).replace(/\n/g,"<br>").replace(/([。？！；])/g,"$1<br>")}</p>`)
+      : (it.body ? (it.html
+          ? `<div class="guide-body">${sanitizeRich(it.body)}</div>`
+          : (it.subject==="数学"
+              ? `<div class="m-math">${mathBodyHTML(it.body)}</div>`
+              : `<p class="m-body">${esc(it.body).replace(/\n/g,"<br>").replace(/([。？！；])/g,"$1<br>")}</p>`))
         : "");
     $("#modal-body").innerHTML = `
       <div class="m-type">${badge(it.type)}
@@ -2230,7 +2261,8 @@
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
-      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects
+      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
+      cardHTML, sanitizeRich, stripTags, seedDefaultContent
     };
   }
 })();
