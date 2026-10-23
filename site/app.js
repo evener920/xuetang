@@ -143,14 +143,16 @@
     const isSplit = x=>x.subject==="数学" && (x.type==="思维母题"||x.type==="公式"||x.type==="每日一练");
     const restCustom = CUSTOM.filter(x=>!isSplit(x));
     const restExtra  = EXTRA.filter(x=>!isSplit(x) && !OVSET.has(x.key));
-    // 内置条目被「覆盖编辑」后，以覆盖版本替换原内置项（思维母题/公式源以拆分条目形式反映覆盖，故此处排除）
+    // 内置条目（诗词/成语/单词/动画/教材）被「覆盖编辑」后，以覆盖版本替换原内置项
+    // （思维母题/公式/每日一练源以拆分条目形式反映覆盖，故此处排除）
+    const BASE_ALL = [...POEMS,...IDIOMS,...WORDS,...GALLERY,...WENYAN];
     const OV_ITEMS = [];
-    EXTRA.forEach(x=>{
+    [...BASE_ALL, ...EXTRA].forEach(x=>{
       if(OVSET.has(x.key) && !isSplit(x)){
         OV_ITEMS.push(Object.assign({}, x, OV[x.key], {key:x.key}));
       }
     });
-    ALL=[...POEMS,...IDIOMS,...WORDS,...GALLERY,...WENYAN,...restCustom,...restExtra,...OV_ITEMS,...MOTHER_QS,...DLQ,...FMQ,PRACTICE_ENTRY];
+    ALL=[...BASE_ALL.filter(x=>!OVSET.has(x.key)),...restCustom,...restExtra,...OV_ITEMS,...MOTHER_QS,...DLQ,...FMQ,PRACTICE_ENTRY];
     INDEX={}; ALL.forEach(it=>INDEX[it.key]=it);
   }
   // 将后台表单/批量数据归一化为标准条目；诗词年级为空时按诗题自动匹配
@@ -1274,8 +1276,8 @@
   }
   // 编辑内容表单：内置条目走「覆盖版本」(state.overrides)，自定义条目直接改 state.custom
   function renderEditForm(it){
-    // extra: 内置条目；fmq:/dlq: 由整篇公式 / 每日一练拆分出的小节条目——都走「覆盖版本」
-    const isExtra = it.key.indexOf("extra:")===0 || it.key.indexOf("fmq:")===0 || it.key.indexOf("dlq:")===0;
+    // extra:/fmq:/dlq:/poem:/idiom:/word:/gal: 均为内置条目——走「覆盖版本」（custom: 直接改 custom）
+    const isExtra = /^(extra|fmq|dlq|poem|idiom|word|gal):/.test(it.key);
     const ov = (state.overrides||{})[it.key];
     const cur = isExtra ? (ov || {title:it.title, sub:it.sub, grade:it.grade, body:it.body}) : it;
     const cg = cur.grade || "";
@@ -1368,8 +1370,8 @@
 
   /* ---------- 内容后台（添加素材 · 自动归类筛选） ---------- */
   /* ---------- 后台登录 / 修改口令（口令存本机，防止随手改动后台内容） ---------- */
-  /* ---------- 后台：内置教材浏览 / 修改（无需知道条目在哪，搜标题即可改） ---------- */
-  let biView = { q:"", type:"全部", limit:30 };
+  /* ---------- 后台：资源库（内置教材按 学科×年级×类型 交叉分类，可直接修改） ---------- */
+  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", limit:30 };
   function openAdminEdit(key){
     const it = INDEX[key] || EXTRA.find(e=>e.key===key);
     if(!it){ toast("没找到这条内容"); return; }
@@ -1431,12 +1433,15 @@
   function renderAdmin(){
     const el = $("#view-admin");
     const subjects = Object.keys(SUBJECT_TYPES);
-    // 内置教材清单（含已拆散的小节条目）：均可在后台直接修改
-    const builtins = ALL.filter(x=>/^(extra|fmq|dlq|mtq):/.test(x.key));
-    const biCntMap = {};
-    builtins.forEach(x=>{ biCntMap[x.type]=(biCntMap[x.type]||0)+1; });
-    const biCounts = [["全部",builtins.length], ...Object.keys(biCntMap).sort().map(t=>[t,biCntMap[t]])];
+    // 资源库（全部内置内容，含已拆散的小节条目）：按 学科 × 年级 × 类型 交叉筛选
+    const builtins = ALL.filter(x=>/^(extra|fmq|dlq|poem|idiom|word|gal):/.test(x.key));
+    const cntBy = (fn)=>{ const m={}; builtins.forEach(x=>{ const k=fn(x)||""; m[k]=(m[k]||0)+1; }); return m; };
+    const biCounts = [["全部",builtins.length], ...Object.entries(cntBy(x=>x.type)).sort()];
+    const biSubjCounts = [["全部",builtins.length], ...["语文","数学","英语","科学","人文"].filter(s=>cntBy(x=>x.subject)[s]).map(s=>[s,cntBy(x=>x.subject)[s]])];
+    const biGradeCounts = [["全部",builtins.length], ...Object.entries(cntBy(x=>x.grade)).sort((a,b)=>GRADES.indexOf(a[0])-GRADES.indexOf(b[0]))];
     const biFiltered = builtins.filter(x=>{
+      if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
+      if(biView.grade!=="全部" && x.grade!==biView.grade) return false;
       if(biView.type!=="全部" && x.type!==biView.type) return false;
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
@@ -1488,10 +1493,20 @@
         : '<div class="placeholder"><div class="big">📭</div>还没有在后台添加的素材</div>'}
       </div>
 
-      <div class="sec-title">📚 内置教材 · 可直接修改（${builtins.length}）<small>站内所有现成内容都能改，改错了点「⤺」即还原原文</small></div>
+      <div class="sec-title">📚 资源库（${builtins.length}）<small>站内全部内置内容 · 按 学科 × 年级 × 类型 交叉筛选 · 可直接修改，改错点「⤺」还原原文</small></div>
       <div class="chips">
-        <input id="biSearch" class="search-input" style="width:220px" placeholder="搜标题…（如 一、口算）" value="${esc(biView.q)}" />
+        <span class="lbl">学科：</span>
+        ${biSubjCounts.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
+      </div>
+      <div class="chips">
+        <span class="lbl">年级：</span>
+        ${biGradeCounts.map(([g,c])=>`<button class="chip ${biView.grade===g?"on":""}" data-bi-grade="${esc(g)}">${esc(g)} ${c}</button>`).join("")}
+      </div>
+      <div class="chips">
+        <span class="lbl">类型：</span>
         ${biCounts.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
+        <span style="flex:1"></span>
+        <input id="biSearch" class="search-input" style="width:200px" placeholder="搜标题…（如 一、口算）" value="${esc(biView.q)}" />
       </div>
       <div class="admin-list" id="biList">
         ${biShow.length?biShow.map(x=>{
@@ -1504,8 +1519,8 @@
             </div>
           </div>`;
         }).join("")
-        : '<div class="placeholder"><div class="big">🔍</div>没有匹配的内容，换个关键词试试</div>'}
-        ${builtins.length>biView.limit?`<div style="margin-top:10px"><button class="btn" id="biMore">显示更多（当前 ${Math.min(biView.limit,biFiltered.length)} / ${biFiltered.length}）</button></div>`:""}
+        : '<div class="placeholder"><div class="big">🔍</div>没有匹配的资源，换个筛选条件试试</div>'}
+        ${biFiltered.length>biView.limit?`<div style="margin-top:10px"><button class="btn" id="biMore">显示更多（当前 ${biShow.length} / ${biFiltered.length}）</button></div>`:""}
         <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 修改只存在本机浏览器，不会写回代码仓库。</p>
       </div>
 
@@ -1546,6 +1561,12 @@
     });
     el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{
       biView.type=b.dataset.biType; renderAdmin();
+    }));
+    el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{
+      biView.subj=b.dataset.biSubj; renderAdmin();
+    }));
+    el.querySelectorAll("[data-bi-grade]").forEach(b=>b.addEventListener("click", ()=>{
+      biView.grade=b.dataset.biGrade; renderAdmin();
     }));
     el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
     el.querySelectorAll("[data-bi-revert]").forEach(b=>b.addEventListener("click", ()=>{
@@ -1641,6 +1662,7 @@
     if(b.classList.contains("future")){ toast("该栏目规划中，内容导入后自动上线"); return; }
     const v=b.dataset.view;
     if(v==="admin"){ go("admin"); return; }
+    if(v==="week"){ go("week"); return; } // 本周页（复习/看板/周计划/打卡范围）
     go(v==="home"?"home":"subject", v==="home"?null:v);
   });
   // 年级语境
