@@ -170,7 +170,7 @@
     };
   }
 
-  const GRADES = ["一年级","二年级","三年级","四年级","五年级","六年级","初一","初二","初三","高一","高二","高三"];
+  const GRADES = ["一年级","二年级","三年级","四年级","五年级","六年级","七年级","八年级","九年级","高一","高二","高三"];
   const IDIOM_GRADES = [...new Set(IDIOMS.map(x=>x.grade))];
   const WORD_GRADES  = [...new Set(WORDS.map(x=>x.grade))];
   // 年级筛选按钮按 学级 顺序排（一二三…六），不按数据出现顺序
@@ -2183,7 +2183,7 @@
       get state(){ return state; },
       get ALL(){ return ALL; },
       get INDEX(){ return INDEX; },
-      rebuildAll, switchStudent, applyPerStudent, syncPerStudent, save,
+      rebuildAll, switchStudent, applyPerStudent, syncPerStudent, save, GRADES,
       openModal, mathBodyHTML, effBody, renderAdmin, renderAdminLogin, renderAdminPwdForm,
       pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
       archiveCreate, archiveRestore, loadArchives, renderWeek, renderHome, refreshView,
