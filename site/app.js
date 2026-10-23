@@ -1550,7 +1550,8 @@
   }
 
   /* ---------- 后台：资源库（内置教材按 学科×年级×类型 交叉分类，可直接修改） ---------- */
-  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", limit:30 };
+  const RES_STEP = 30;
+  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", limit:RES_STEP };
   function openAdminEdit(key){
     const it = INDEX[key] || EXTRA.find(e=>e.key===key);
     if(!it){ toast("没找到这条内容"); return; }
@@ -1612,8 +1613,26 @@
   /* ---------- 资源页（与后台平级）：站内全部内置内容，按 学科×年级×类型 交叉分类 ---------- */
   function biData(){
     const builtins = ALL.filter(x=>/^(extra|fmq|dlq|poem|idiom|word|gal):/.test(x.key));
-    const cntBy = (fn)=>{ const m={}; builtins.forEach(x=>{ const k=fn(x)||""; m[k]=(m[k]||0)+1; }); return m; };
-    const subjCnt = cntBy(x=>x.subject);
+    // 联动筛选：每个维度的候选与计数，都在「另外两个维度已选条件」的范围内计算
+    const matchExcept = except => builtins.filter(x=>{
+      if(except!=="subj"  && biView.subj !=="全部" && x.subject!==biView.subj)  return false;
+      if(except!=="grade" && biView.grade!=="全部" && x.grade !==biView.grade) return false;
+      if(except!=="type"  && biView.type !=="全部" && x.type  !==biView.type)  return false;
+      return true;
+    });
+    const cntBy=(arr,fn)=>{ const m=new Map(); arr.forEach(x=>{ const k=fn(x)||""; m.set(k,(m.get(k)||0)+1); }); return m; };
+    const chipsFor=(m, sel, order)=>{
+      // 当前选中的项即使计数为 0 也要保留（否则用户点不到「全部」回不去）
+      if(sel && sel!=="全部" && !m.has(sel)) m.set(sel, 0);
+      const out=[...m.entries()].filter(([k,c])=>c>0 || k===sel).sort((a,b)=>{
+        if(order){ const ia=order.indexOf(a[0]), ib=order.indexOf(b[0]); return (ia<0?99:ia)-(ib<0?99:ib); }
+        return a[0]<b[0]?-1:1;
+      });
+      return out;
+    };
+    const subjM=cntBy(matchExcept("subj"), x=>x.subject);
+    const gradeM=cntBy(matchExcept("grade"), x=>x.grade);
+    const typeM=cntBy(matchExcept("type"), x=>x.type);
     const filtered = builtins.filter(x=>{
       if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
       if(biView.grade!=="全部" && x.grade!==biView.grade) return false;
@@ -1623,9 +1642,10 @@
     });
     return {
       builtins, filtered, show: filtered.slice(0, biView.limit),
-      typeCounts: [["全部",builtins.length], ...Object.entries(cntBy(x=>x.type)).sort()],
-      subjCounts: [["全部",builtins.length], ...["语文","数学","英语","科学","人文"].filter(s=>subjCnt[s]).map(s=>[s,subjCnt[s]])],
-      gradeCounts:[["全部",builtins.length], ...Object.entries(cntBy(x=>x.grade)).sort((a,b)=>GRADES.indexOf(a[0])-GRADES.indexOf(b[0]))]
+      subjChips: [["全部", matchExcept("subj").length], ...chipsFor(subjM, biView.subj, ["语文","数学","英语","科学","人文"])],
+      gradeChips:[["全部", matchExcept("grade").length], ...chipsFor(gradeM, biView.grade, GRADES)],
+      typeChips: [["全部", matchExcept("type").length], ...chipsFor(typeM, biView.type)],
+      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||!!biView.q
     };
   }
   function renderRes(){
@@ -1637,17 +1657,18 @@
       <p class="subj-desc">这里列出站内所有现成内容（诗词 / 成语 / 单词 / 动画 / 数学教材 / 科学人文启蒙）。点「✏️ 修改」即可改内容，改过的会标「已改」，点「⤺」随时还原原文；修改只存在本机浏览器，不会写回代码仓库。</p>
       <div class="chips">
         <span class="lbl">学科：</span>
-        ${D.subjCounts.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
+        ${D.subjChips.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
       </div>
       <div class="chips">
         <span class="lbl">年级：</span>
-        ${D.gradeCounts.map(([g,c])=>`<button class="chip ${biView.grade===g?"on":""}" data-bi-grade="${esc(g)}">${esc(g)} ${c}</button>`).join("")}
+        ${D.gradeChips.map(([g,c])=>`<button class="chip ${biView.grade===g?"on":""}" data-bi-grade="${esc(g)}">${esc(g)} ${c}</button>`).join("")}
       </div>
       <div class="chips">
         <span class="lbl">类型：</span>
-        ${D.typeCounts.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
+        ${D.typeChips.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
         <span style="flex:1"></span>
         <input id="biSearch" class="search-input" style="width:200px" placeholder="搜标题…（如 一、口算）" value="${esc(biView.q)}" />
+        ${D.active?`<button class="btn" id="biReset" title="清空全部筛选条件">✕ 清空筛选</button>`:""}
       </div>
       <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}</span></div>
       <div class="admin-list" id="biList">
@@ -1685,8 +1706,13 @@
       const k=b.dataset.biRevert;
       if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原原文 ⤺"); renderRes(); }
     }));
+    const biReset=$("#biReset");
+    if(biReset) biReset.addEventListener("click", ()=>{
+      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.q=""; biView.limit=RES_STEP;
+      renderRes();
+    });
     const biMore=$("#biMore");
-    if(biMore) biMore.addEventListener("click", ()=>{ biView.limit+=30; renderRes(); });
+    if(biMore) biMore.addEventListener("click", ()=>{ biView.limit+=RES_STEP; renderRes(); });
   }
 
   function renderAdmin(){
@@ -2058,8 +2084,9 @@
       rebuildAll, switchStudent, applyPerStudent, syncPerStudent, save,
       openModal, mathBodyHTML, effBody, renderAdmin, renderAdminLogin, renderAdminPwdForm,
       pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
-      archiveCreate, archiveRestore, loadArchives, renderWeek, refreshView,
-      renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
+      archiveCreate, archiveRestore, loadArchives, renderWeek, renderHome, refreshView,
+      renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
+      get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan
     };
   }
