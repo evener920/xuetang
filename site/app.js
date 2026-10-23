@@ -342,7 +342,7 @@
   // 今日打卡用：拆分后的单题条目（mtq:）按同规则均匀交错排序
   function motherOrdered(){
     return interleaveTopics(
-      ALL.filter(x=>x.type==="思维母题" && x.key.indexOf("mtq:")===0),
+      ALL.filter(x=>x.type==="思维母题" && x.key.indexOf("mtq:")===0 && gradeOk(x)),
       it=>(it.sub||it.title).replace(/^母题[一二三四五六七八九十]+[：:]/,"").trim()
     );
   }
@@ -606,6 +606,9 @@
     return (dateSeed() + h) >>> 0;
   }
   function curStudentName(){ const s=state.students && state.students[state.currentStudent]; return (s&&s.name)?s.name:"学生"; }
+  // 年级匹配：带 grade 的条目严格按当前年级显示；无 grade 的共享内容（未分级诗词 / 动画廊等）对所有年级可见。
+  // 即：某年级没有该类型的分级内容时，这一栏就空着（不回退其他年级的内容）。
+  function gradeOk(it){ return !it.grade || it.grade === state.grade; }
   const WEEK = ["日","一","二","三","四","五","六"];
   function dayDiff(dateStr){ try{ return Math.floor((Date.now()-new Date(dateStr+"T00:00:00"))/86400000); }catch(e){ return 999; } }
   function pick(arr, n, seed){
@@ -770,18 +773,16 @@
   // 今日任务：按栏目分组；受「打卡范围」开关控制（state.checkin，默认全开）
   // 某个「学科·类型」的内容池（内置主数据 + 后台自定义）
   function poolFor(subject, type){
-    const cus = CUSTOM.filter(c=>c.subject===subject && c.type===type);
-    if(subject==="语文" && type==="诗词")  return [...POEMS, ...cus];
-    if(subject==="语文" && type==="成语"){
-      const g = IDIOMS.filter(i=>(i.grade||"")===state.grade);
-      return [...(g.length?g:IDIOMS), ...cus]; // 有本年级成语则用本年级；否则回退到全学段共享成语池
-    }
-    if(subject==="语文" && type==="文言")  return [...WENYAN, ...cus];
-    if(subject==="语文" && type==="成语动画廊") return [...GALLERY, ...cus];
-    if(subject==="英语" && type==="单词")  return [...WORDS, ...cus];
-    // 数学·公式 / 数学·每日一练：整篇已按「一、二、三…」小节拆为单条，取拆分后的条目（ALL）
-    if(subject==="数学" && (type==="公式"||type==="每日一练")) return ALL.filter(c=>c.subject===subject && c.type===type);
-    return [...cus, ...EXTRA.filter(c=>c.subject===subject && c.type===type)]; // 其余类型：后台自定义 + 内置教材素材
+    const cus = CUSTOM.filter(c=>c.subject===subject && c.type===type && gradeOk(c));
+    if(subject==="语文" && type==="诗词")  return [...POEMS.filter(gradeOk), ...cus];
+    if(subject==="语文" && type==="成语")  return [...IDIOMS.filter(gradeOk), ...cus];
+    if(subject==="语文" && type==="文言")  return [...WENYAN.filter(gradeOk), ...cus];
+    if(subject==="语文" && type==="成语动画廊") return [...GALLERY.filter(gradeOk), ...cus];
+    if(subject==="英语" && type==="单词")  return [...WORDS.filter(gradeOk), ...cus];
+    // 数学·公式 / 数学·每日一练：整篇已按「一、二、三…」小节拆为单条（ALL），按当前年级过滤
+    if(subject==="数学" && (type==="公式"||type==="每日一练")) return ALL.filter(c=>c.subject===subject && c.type===type && gradeOk(c));
+    // 其余类型：后台自定义（已按年级过滤）+ 内置教材素材（按当前年级过滤）
+    return [...cus, ...EXTRA.filter(c=>c.subject===subject && c.type===type && gradeOk(c))];
   }
   /* ---------- 首页：今日学习 ---------- */
   // 今日任务：只包含今天（按周计划）排到的「学科·类型」，每类型按配额取条目（控制每日总量）
@@ -813,8 +814,7 @@
       let pool = poolFor(subject,type);
       // 英语单词：按当前年级（上+下册）顺序轮转，每天 5 个新词 → 90 天学期内可整本过完再滚第二轮
       if(subject==="英语" && type==="单词"){
-        let wp=[...WORDS.filter(w=>w.grade===state.grade), ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"&&c.grade===state.grade)];
-        if(wp.length<5) wp=[...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词")];
+        const wp = poolFor(subject, type); // 已按当前年级严格过滤；某年级词不够也不回退其他年级
         if(wp.length){
           const qw=typeQuota(type);
           const off=(Math.max(0, dayDiff(state.semesterStart)) * qw) % wp.length;
@@ -2201,7 +2201,7 @@
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
-      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan
+      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered
     };
   }
 })();
