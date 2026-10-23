@@ -1727,7 +1727,7 @@
 
   /* ---------- 后台：资源库（内置教材按 学科×年级×类型 交叉分类，可直接修改） ---------- */
   const RES_STEP = 30;
-  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", limit:RES_STEP };
+  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", src:"全部", limit:RES_STEP };
   function openAdminEdit(key){
     const it = INDEX[key] || EXTRA.find(e=>e.key===key);
     if(!it){ toast("没找到这条内容"); return; }
@@ -1790,12 +1790,15 @@
   function biData(){
     // 资源页展示站内全部内容：内置条目（诗词/成语/单词/动画/教材）+ 已导入/后台添加的内容（如英语阅读、历史指南）
     // 按 学科 × 年级 × 类型 交叉归类；后台只是管理入口（增删改），内容主展示位就在这里。
+    const customSet = new Set((CUSTOM||[]).map(x=>x.key));
     const builtins = ALL.filter(x=>x.key!=="practice:maththought" && !/^mtq:/.test(x.key));
+    const srcOk = x => biView.src==="全部" || (biView.src==="我的素材" ? customSet.has(x.key) : !customSet.has(x.key));
     // 联动筛选：每个维度的候选与计数，都在「另外两个维度已选条件」的范围内计算
     const matchExcept = except => builtins.filter(x=>{
       if(except!=="subj"  && biView.subj !=="全部" && x.subject!==biView.subj)  return false;
       if(except!=="grade" && biView.grade!=="全部" && x.grade !==biView.grade) return false;
       if(except!=="type"  && biView.type !=="全部" && x.type  !==biView.type)  return false;
+      if(except!=="src"   && !srcOk(x)) return false;
       return true;
     });
     const cntBy=(arr,fn)=>{ const m=new Map(); arr.forEach(x=>{ const k=fn(x)||""; m.set(k,(m.get(k)||0)+1); }); return m; };
@@ -1815,15 +1818,21 @@
       if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
       if(biView.grade!=="全部" && x.grade!==biView.grade) return false;
       if(biView.type!=="全部" && x.type!==biView.type) return false;
+      if(!srcOk(x)) return false;
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
     });
+    // 导入/自添加的素材排在最前（刚进资源页就能看到自己加的内容），同组内保持原顺序
+    filtered.sort((a,b)=>(customSet.has(b.key)?1:0)-(customSet.has(a.key)?1:0));
+    const cntCustom = matchExcept("src").filter(x=>customSet.has(x.key)).length;
     return {
       builtins, filtered, show: filtered.slice(0, biView.limit),
+      customCnt: builtins.filter(x=>customSet.has(x.key)).length,
       subjChips: [["全部", matchExcept("subj").length], ...chipsFor(subjM, biView.subj, ["语文","数学","英语","科学","人文"])],
       gradeChips:[["全部", matchExcept("grade").length], ...chipsFor(gradeM, biView.grade, GRADES)],
       typeChips: [["全部", matchExcept("type").length], ...chipsFor(typeM, biView.type)],
-      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||!!biView.q
+      srcChips: [["全部", matchExcept("src").length],["我的素材", cntCustom],["内置", matchExcept("src").length - cntCustom]],
+      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||biView.src!=="全部"||!!biView.q
     };
   }
   function renderRes(){
@@ -1831,8 +1840,12 @@
     const D = biData();
     const ovCnt = Object.keys(state.overrides||{}).length;
     el.innerHTML = `
-      <div class="subj-head"><h2>📚 资源</h2><span class="cnt">站内全部内容 ${D.builtins.length} 条（内置 + 已导入/添加）· 按 学科 × 年级 × 类型 交叉筛选</span></div>
-      <p class="subj-desc">这里列出站内所有内容：内置的诗词 / 成语 / 单词 / 动画 / 数学教材，以及你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）。全部按 学科 × 年级 × 类型 归类展示，点「✏️ 修改」即可改内容，改过的会标「已改」，点「⤺」随时还原。后台只负责增删改的管理，内容的正常浏览就在这里。修改只存在本机浏览器，不会写回代码仓库。</p>
+      <div class="subj-head"><h2>📚 资源</h2><span class="cnt">站内全部内容 ${D.builtins.length} 条（内置 + 已导入/添加，其中我的素材 ${D.customCnt} 条排在最前）· 按 学科 × 年级 × 类型 交叉筛选</span></div>
+      <p class="subj-desc">这里列出站内所有内容：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在最前，其后是内置的诗词 / 成语 / 单词 / 动画 / 数学教材。可用「来源」筛出一批快速定位；点「✏️ 修改」即可改内容，改过的会标「已改」，点「⤺」随时还原。后台只负责增删改的管理，内容的正常浏览就在这里。修改只存在本机浏览器，不会写回代码仓库。</p>
+      <div class="chips">
+        <span class="lbl">来源：</span>
+        ${D.srcChips.map(([s,c])=>`<button class="chip ${biView.src===s?"on":""}" data-bi-src="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
+      </div>
       <div class="chips">
         <span class="lbl">学科：</span>
         ${D.subjChips.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
@@ -1877,6 +1890,7 @@
       });
     });
     el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{ biView.type=b.dataset.biType; renderRes(); }));
+    el.querySelectorAll("[data-bi-src]").forEach(b=>b.addEventListener("click", ()=>{ biView.src=b.dataset.biSrc; renderRes(); }));
     el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{ biView.subj=b.dataset.biSubj; renderRes(); }));
     el.querySelectorAll("[data-bi-grade]").forEach(b=>b.addEventListener("click", ()=>{ biView.grade=b.dataset.biGrade; renderRes(); }));
     el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
@@ -1886,7 +1900,7 @@
     }));
     const biReset=$("#biReset");
     if(biReset) biReset.addEventListener("click", ()=>{
-      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.q=""; biView.limit=RES_STEP;
+      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.src="全部"; biView.q=""; biView.limit=RES_STEP;
       renderRes();
     });
     const biMore=$("#biMore");
@@ -1932,7 +1946,7 @@
       <textarea id="afBulk" class="af-block" rows="4" placeholder='粘贴 JSON 数组，例如 [{"subject":"语文","type":"文言","grade":"四年级","title":"xx","body":"..."}]'></textarea>
       <div class="af-actions"><button class="btn primary" id="afBulkBtn">批量导入</button><span class="af-tip">也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。</span></div>
 
-      <div class="sec-title">🗂 已添加素材（${CUSTOM.length}）<small>本地保存，可删除</small></div>
+      <div class="sec-title">🗂 已添加素材（${CUSTOM.length}）<small>本地保存，可删除 · 内容已同步展示在「📚 资源」页最前（来源 → 我的素材 可快速查看）</small></div>
       <div class="admin-list">
         ${CUSTOM.length? CUSTOM.slice().reverse().map(it=>`
           <div class="admin-item">
