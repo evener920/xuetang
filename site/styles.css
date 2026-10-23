@@ -289,6 +289,9 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 60px;}
 .dc-name{font-weight:700;font-size:15px;margin-bottom:8px;}
 .dc-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);}
 .dc-row b{color:var(--accent);font-size:17px;}
+/* 积分规则卡：数值改灰色小字（避免夸张的大蓝字） */
+#view-reward .dc-row b{color:#64748b;font-size:13px;font-weight:600;}
+#view-reward .dc-row{align-items:baseline;}
 .week-bar{display:flex;align-items:flex-end;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px;height:130px;}
 .wk{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
 .wk-bar{width:62%;background:linear-gradient(180deg,#60a5fa,#2563eb);border-radius:6px 6px 0 0;min-height:4px;}
