@@ -182,8 +182,20 @@
     "数学":["公式","计算题","应用题","每日一练","思维母题"],
     "英语":["单词","听力","短语","句子","阅读","课文背诵"],
     "科学":["实验","知识"],
-    "人文":["史实","人物","阅读"]
+    "人文":["史实","人物","阅读"],
+    // 初中「小四门 + 理化」：切到七/八/九年级时，导航与打卡范围自动换成这些科目
+    "生物":["知识","练习"],
+    "地理":["知识","练习"],
+    "政治":["知识","练习"],
+    "历史":["史实","人物","练习"],
+    "物理":["知识","实验","练习"],
+    "化学":["知识","实验","练习"]
   };
+  // 按年级动态的扩展学科：小学（一~六年级）= 科学+人文；初中（七/八/九年级）= 生物·地理·政治·历史·物理·化学
+  const MIDDLE_GRADES = ["七年级","八年级","九年级"];
+  const MIDDLE_EXTRAS = ["生物","地理","政治","历史","物理","化学"];
+  function extraSubjects(){ return MIDDLE_GRADES.includes(state.grade) ? MIDDLE_EXTRAS : ["科学","人文"]; }
+  function allSubjects(){ return ["语文","数学","英语",...extraSubjects()]; }
   // 打卡范围的可勾选项：展平为「学科·类型」粒度（比整门学科更细）
   const CHECKIN_TYPES = [];
   Object.keys(SUBJECT_TYPES).forEach(s=>SUBJECT_TYPES[s].forEach(t=>CHECKIN_TYPES.push({subject:s, type:t})));
@@ -633,7 +645,13 @@
     "数学":["#fdf2f8","#db2777"],
     "英语":["#ecfdf5","#0d9488"],
     "科学":["#fff7ed","#ea580c"],
-    "人文":["#eef2ff","#4f46e5"]
+    "人文":["#eef2ff","#4f46e5"],
+    "生物":["#ecfdf5","#059669"],
+    "地理":["#f0fdfa","#0d9488"],
+    "政治":["#fef2f2","#dc2626"],
+    "历史":["#faf5ff","#9333ea"],
+    "物理":["#eff6ff","#2563eb"],
+    "化学":["#fdf4ff","#c026d3"]
   };
   function subjectStyle(subject, on){
     const c = SUBJECT_COLORS[subject] || ["#f1f5f9","#475569"];
@@ -723,7 +741,17 @@
   /* ---------- 视图路由 ---------- */
   let view = {name:"home", param:null};
   function go(name, param){ view={name, param:param||null}; render(); window.scrollTo({top:0}); }
+  // 导航按当前年级重建：小学显示 科学/人文，初中自动换成 生物·地理·政治·历史·物理·化学
+  function renderNav(){
+    const nav=$("#mainNav"); if(!nav) return;
+    const items=[["home","首页"],["week","本周"],["reward","奖励"],
+      ["语文","语文"],["数学","数学"],["英语","英语"],
+      ...extraSubjects().map(s=>[s,s]),
+      ["res","资源"],["admin","后台"]];
+    nav.innerHTML=items.map(([v,l])=>`<button class="nav-btn" data-view="${v}">${l}</button>`).join("");
+  }
   function setNav(name){
+    renderNav();
     document.querySelectorAll("#mainNav .nav-btn").forEach(b=>{
       b.classList.toggle("active", b.dataset.view===name || (name==="tag"&&b.dataset.view==="home") || (name==="search"&&b.dataset.view==="home") || (name==="admin"&&b.dataset.view==="admin"));
     });
@@ -939,7 +967,7 @@
     const todayList = learnedList.filter(it=>state.learned[it.key]===todayStr);
     const weekList = learnedList.filter(it=>dayDiff(state.learned[it.key])<7);
     const subjCount=(list,s)=>list.filter(it=>it.subject===s).length;
-    const SUBJ=["语文","数学","英语","科学","人文"];
+    const SUBJ=allSubjects();
     const weekDays=[];
     for(let i=6;i>=0;i--){ const dd=new Date(); dd.setDate(dd.getDate()-i); const ds=fmt(dd); weekDays.push({ds, c:learnedList.filter(it=>state.learned[it.key]===ds).length}); }
     const wkDates = weekDatesMondayStart();
@@ -1017,7 +1045,7 @@
 
       <div class="chips cn-scope">
         <span class="lbl">打卡范围：</span>
-        ${CHECKIN_TYPES.map(({subject,type})=>{
+        ${CHECKIN_TYPES.filter(ct=>allSubjects().includes(ct.subject)).map(({subject,type})=>{
           const k=checkinKey(subject,type);
           const on=checkinOn(subject,type);
           return `<button class="chip ${on?"on":""}" style="${subjectStyle(subject,on)}" data-checkin="${esc(k)}" title="${esc(subject)}·${esc(type)}">${esc(subject)}·${esc(type)}</button>`;
@@ -2202,7 +2230,7 @@
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
-      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered
+      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects
     };
   }
 })();
