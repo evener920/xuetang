@@ -407,8 +407,7 @@
     learn: 10,      // 学会 / 打卡一条学习内容
     review: 15,     // 完成一次艾宾浩斯到期复习
     habit: 8,       // 完成一个当日习惯
-    quizRight: 2,   // 小测答对一题
-    allDone: 30     // 当日学习任务 + 习惯全勤奖
+    quizRight: 2    // 小测答对一题
   };
   const QUIZ_CAP_DAY = 20;   // 小测积分每日上限，避免刷分
   // 连续学习天数里程碑（一次性发放；断签只重置连续天数，不清空积分）
@@ -427,7 +426,7 @@
   function rewardList(){ return (Array.isArray(state.rewards)&&state.rewards.length) ? state.rewards : DEFAULT_REWARDS; }
   /* ---------- 行为扣分（减分）----------
      设计原则（行为矫正里的「反应代价 response cost」，讲究轻、准、可挽回）：
-     ① 只扣行为，不扣学习 —— 学习积分只加不减，连续天数、全勤奖不受行为扣分影响，两条账各记各的
+     ① 只扣行为，不扣学习 —— 学习积分只加不减，连续天数不受行为扣分影响，两条账各记各的
      ② 轻罚为主 —— 单项 5~10 分（约等于半天到一天的积累），重罚只留给说谎等原则问题
      ③ 每日扣分有上限 —— 防止一天把孩子扣垮，也防止家长情绪化连点
      ④ 欠分有下限 —— 余额最多扣到 -PENALTY_FLOOR，之后仍需记录但不再扣分，欠的靠之后挣回来
@@ -502,18 +501,9 @@
     while(ds.has(fmt(d))){ n++; d.setDate(d.getDate()-1); }
     return n;
   }
-  // 今日是否全勤（学习任务 + 习惯都完成）
-  function allTodayDone(){
-    const tg=todayTasks(); const tasks=Object.keys(tg).reduce((a,k)=>a.concat(tg[k]||[]),[]);
-    if(!tasks.length) return false;
-    const tOk=tasks.every(t=>!!state.learned[t.key]);
-    const hs=state.habits||[];
-    const hOk=hs.length? hs.every(habitDone) : true;
-    return tOk && hOk;
-  }
-  // 每次打卡后统一结算：全勤奖 + 连续天数里程碑
+  // 每次打卡后统一结算：连续天数里程碑
+  // （不设「今日全勤」加奖：打卡各项已各自计分，全勤再奖一份属于重复计酬）
   function settleBonuses(){
-    if(allTodayDone()) awardQuiet(POINT_RULES.allDone, "今日全勤奖", "alldone:"+todayStrNow());
     const n=currentStreak();
     STREAK_MILESTONES.forEach(([d,p])=>{
       if(n>=d) awardQuiet(p, "连续学习 "+d+" 天达成奖励", "streak:"+d+":"+todayStrNow());
@@ -1522,7 +1512,7 @@
     const tg = todayTasks();
     const tasks = Object.keys(tg).reduce((a,k)=>a.concat(tg[k]||[]),[]);
     const hs = state.habits||[];
-    const taskMax = tasks.length*POINT_RULES.learn + hs.length*POINT_RULES.habit + POINT_RULES.allDone;
+    const taskMax = tasks.length*POINT_RULES.learn + hs.length*POINT_RULES.habit;
     // 最近 7 天日均（用于「预计还需多少天」）
     const last7=[]; for(let i=0;i<7;i++){ const d=new Date(); d.setDate(d.getDate()-i); last7.push(fmt(d)); }
     const got7=(state.pointLog||[]).filter(x=>x.n>0 && last7.indexOf(x.t)>=0).reduce((a,b)=>a+b.n,0);
@@ -1554,13 +1544,12 @@
         <div class="stat"><div class="num">${tasks.filter(t=>state.learned[t.key]).length}/${tasks.length}</div><div class="lbl">今日任务</div></div>
       </div>
 
-      <div class="sec-title">🏅 加分规则 <small>只加不减 · 复习比学新更值钱 · 全勤与连续性额外加权</small></div>
+      <div class="sec-title">🏅 加分规则 <small>只加不减 · 复习比学新更值钱 · 连续性额外加权</small></div>
       <div class="task-grid">
         <div class="rule-card"><div class="rl-name">学会 / 打卡内容</div><div class="rl-val">+${POINT_RULES.learn} 分</div><div class="rl-tip">每学会或打卡一条内容记一次；同一条内容重复标记，不重复计分。</div></div>
         <div class="rule-card"><div class="rl-name">完成到期复习</div><div class="rl-val">+${POINT_RULES.review} 分</div><div class="rl-tip">每完成一次艾宾浩斯到期复习；间隔重复最能形成长期记忆，所以比学新更值钱。</div></div>
         <div class="rule-card"><div class="rl-name">习惯打卡</div><div class="rl-val">+${POINT_RULES.habit} 分</div><div class="rl-tip">每完成一个当日习惯；今天共有 ${hs.length} 个习惯。</div></div>
         <div class="rule-card"><div class="rl-name">小测答对</div><div class="rl-val">+${POINT_RULES.quizRight} 分</div><div class="rl-tip">单词小测答对一题；每日上限 ${QUIZ_CAP_DAY} 分，防止刷分。</div></div>
-        <div class="rule-card"><div class="rl-name">今日全勤</div><div class="rl-val">+${POINT_RULES.allDone} 分</div><div class="rl-tip">当天的学习任务和习惯全部完成；今天状态：${allTodayDone()?"已达成 ✅":"进行中"}。</div></div>
         <div class="rule-card"><div class="rl-name">连续学习奖励</div><div class="rl-val">已连续 ${streak} 天</div><div class="rl-tip">里程碑一次性发放：${STREAK_MILESTONES.map(([d,p])=>d+" 天 +"+p).join(" / ")}。断签只重置连续天数，已得积分不清零。</div></div>
       </div>
 
@@ -1573,7 +1562,7 @@
           <div class="rl-tip">${esc(p.tip||"")}。当天改正后家长撤销即可返还，同一项一天只记一次。</div>
         </div>`).join("")}
       </div>
-      <p class="af-tip" style="margin:-4px 0 0">扣分只影响积分余额：<b>学习类积分只加不减</b>，连续天数与全勤奖都不受行为扣分影响 —— 忘打卡不会被追回，做得好才加分。</p>
+      <p class="af-tip" style="margin:-4px 0 0">扣分只影响积分余额：<b>学习类积分只加不减</b>，连续天数不受行为扣分影响 —— 忘打卡不会被追回，做得好才加分。</p>
 
       <div class="sec-title">🎁 奖励商城 <small>短中长期目标并存 · 按最近 7 天速度估算所需时间（仅供参考，实际要看每天完成情况）</small></div>
       <div class="task-grid">
