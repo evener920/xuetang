@@ -2037,7 +2037,7 @@
       pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
       archiveCreate, archiveRestore, loadArchives, renderWeek, refreshView,
       renderReward, award, awardQuiet, redeemReward, rewardList, currentStreak, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
-      todayTasks, poolFor, splitSections, weekDatesMondayStart
+      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan
     };
   }
 })();
