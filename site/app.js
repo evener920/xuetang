@@ -1161,6 +1161,13 @@
       </div>
       ${(grades.length && !isEngWord)?`<div class="chips"><span class="lbl">年级：</span><button class="chip ${v.grade==="全部"?"on":""}" data-gn-grade="全部">全部</button>${grades.map(g=>`<button class="chip ${v.grade===g?"on":""}" data-gn-grade="${esc(g)}">${esc(g)}</button>`).join("")}</div>`:""}
       ${isEngWord&&units.length?`<div class="chips"><span class="lbl">单元：</span><button class="chip ${v.unit==="全部"?"on":""}" data-gn-unit="全部">全部</button>${units.map(u=>`<button class="chip ${v.unit===u?"on":""}" data-gn-unit="${esc(u)}">${esc(u)}</button>`).join("")}</div>`:""}
+      ${isEngWord?`
+      <div class="sec-title">🎮 单词游戏 <small>用 ${esc(state.grade)}${esc(v.volume)} 的单词玩 · 完成一轮 +5 分（每天每项限一次）</small></div>
+      <div class="game-row">
+        <button class="game-card" data-word-game="match"><span class="gi">🃏</span><b>配对翻牌</b><span class="gd">单词 ↔ 释义 · 记忆配对</span></button>
+        <button class="game-card" data-word-game="spell"><span class="gi">🔤</span><b>拼写挑战</b><span class="gd">看释义 · 点字母拼单词</span></button>
+        <button class="game-card" data-word-game="quiz"><span class="gi">🎯</span><b>选义闯关</b><span class="gd">看单词 · 四选一挑释义</span></button>
+      </div>`:""}
       ${pool.length?`<div class="task-grid">${pool.map(x=>cardHTML(x)).join("")}</div>`
         :`<div class="placeholder"><div class="big">📥</div><h3>${esc(subject)} · ${esc(v.type)} 暂无内容</h3><p>在「🛠 后台」添加该类型素材，将自动归位于此。</p></div>`}
     `;
@@ -1169,6 +1176,177 @@
       renderGeneric(el, subject);
       if(keep){ const i=$("#gnSearch"); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
     };
+  }
+
+  /* ---------- 单词游戏（英语·单词板块：配对翻牌 / 拼写挑战 / 选义闯关；完成一轮 +5 分，每天每项一次） ---------- */
+  function wordGamePool(){
+    const vol=(gnView["英语"]||{}).volume||"上册";
+    const seen=new Set(), out=[];
+    [...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词")]
+      .filter(w=>w.grade===state.grade && w.volume===vol && w.title && w.body)
+      .forEach(w=>{
+        const k=String(w.title).toLowerCase();
+        if(seen.has(k)) return;
+        seen.add(k);
+        const cn=String(w.body).split(/[;；\n]/)[0].trim();
+        if(cn && cn.length<=14) out.push({text:String(w.title), cn, phonetic:String(w.sub||"")});
+      });
+    return out;
+  }
+  function wgShuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  let wgBound=null;
+  function wgBind(fn){ const mb=$("#modal-body"); if(wgBound) mb.removeEventListener("click", wgBound); wgBound=fn; mb.addEventListener("click", wgBound); }
+  function wgShell(title, sub, html){
+    $("#modal-body").innerHTML = `
+      <div class="m-type"><span class="badge" style="background:#ecfdf5;color:#047857">🎮 单词游戏</span> <span class="badge" style="background:#eef2ff;color:#4f46e5">${esc(title)}</span></div>
+      <h3 class="m-title">${esc(sub)}</h3>
+      <div class="wg">${html}</div>`;
+  }
+  function wgGameAward(kind, name){
+    const okd = awardQuiet(5, "单词游戏 · "+name, "game:"+kind+":"+fmt(new Date()));
+    return okd;
+  }
+  function wgEnd(kind, name, title, scoreHTML){
+    const got = wgGameAward(kind, name);
+    wgShell(title, "本轮完成！", `
+      <div class="wg-win">🎉 ${scoreHTML}</div>
+      <p class="af-tip">${got?"+5 分已入账（每天每项限一次）":"今天这一项的 +5 已经拿过啦，明天再来～"}</p>
+      <div class="wg-ops" style="justify-content:center">
+        <button class="btn primary" data-op="again">🔄 再来一轮</button>
+        <button class="btn" data-op="close">完成</button>
+      </div>`);
+    wgBind(e=>{
+      const op=e.target.closest("[data-op]"); if(!op) return;
+      if(op.dataset.op==="again") openWordGame(kind);
+      else if(op.dataset.op==="close") closeModal();
+    });
+  }
+  function openWordGame(kind){
+    const P = wordGamePool();
+    if(P.length<8){ toast("这个范围的单词还不够玩，换一本册子或年级试试"); return; }
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+    if(kind==="match") wgMatch(P);
+    else if(kind==="spell") wgSpell(P);
+    else wgQuiz(P);
+  }
+  // 配对翻牌：6 组 单词↔释义 记忆配对
+  function wgMatch(P){
+    const n=6;
+    const picks=wgShuffle(P.slice()).slice(0,n);
+    const tiles=wgShuffle([
+      ...picks.map((w,i)=>({id:i, txt:w.text, kind:"en"})),
+      ...picks.map((w,i)=>({id:i, txt:w.cn,   kind:"cn"}))
+    ]);
+    let open=[], matched=0, moves=0, lock=false;
+    const draw=()=>wgShell("配对翻牌", "点开两张牌，把单词和它的释义配对", `
+      <div class="wg-stats">已配对 <b>${matched}/${n}</b> · 步数 <b>${moves}</b></div>
+      <div class="wg-grid">
+        ${tiles.map((t,i)=>`<button class="wg-tile ${t.done?"done":""}${open.includes(i)?" open":""}" data-i="${i}" ${t.done?"disabled":""}>${(open.includes(i)||t.done)?esc(t.txt):"？"}</button>`).join("")}
+      </div>`);
+    draw();
+    wgBind(e=>{
+      const b=e.target.closest("[data-i]"); if(!b||lock) return;
+      const i=+b.dataset.i;
+      if(tiles[i].done||open.includes(i)) return;
+      open.push(i);
+      if(open.length>2){ open=[i]; draw(); return; }
+      draw();
+      if(open.length===2){
+        moves++; lock=true;
+        const [a,c]=open;
+        setTimeout(()=>{
+          if(tiles[a].id===tiles[c].id && tiles[a].kind!==tiles[c].kind){
+            tiles[a].done=tiles[c].done=true; matched++;
+          }
+          open=[];
+          if(matched===n){
+            wgEnd("match","配对翻牌","配对翻牌",`全部配对成功！共 ${moves} 步`);
+            return;
+          }
+          draw(); lock=false;
+        }, 620);
+      }
+    });
+  }
+  // 拼写挑战：看释义，点打乱的字母拼出单词（10 题一轮）
+  function wgSpell(P){
+    const total=10;
+    const list=wgShuffle(P.slice()).slice(0,total);
+    let idx=0, score=0, wrongFlash=false, built=[], builtKeys=[], usedKeys=new Set();
+    const draw=()=>{
+      const w=list[idx];
+      const letters=wgShuffle(w.text.toLowerCase().split("").map((ch,i)=>({ch,i})));
+      wgShell("拼写挑战", `看释义，点字母拼出单词（第 ${idx+1}/${total} 题）`, `
+        <div class="wg-stats">得分 <b>${score}</b> · 剩余 <b>${total-idx}</b> 题</div>
+        <div class="wg-clue"><div class="wg-cn">${esc(w.cn)}</div>${w.phonetic?`<div class="wg-phon">${esc(w.phonetic)}</div>`:""}</div>
+        <div class="wg-slots${wrongFlash?" shake":""}">${w.text.split("").map((ch,i)=>`<span class="wg-slot">${built[i]?esc(built[i]):""}</span>`).join("")}</div>
+        <div class="wg-keys">${letters.map(L=>`<button class="wg-key${usedKeys.has(L.i)?" used":""}" data-k="${L.i}" ${usedKeys.has(L.i)?"disabled":""}>${esc(L.ch)}</button>`).join("")}</div>
+        <div class="wg-ops"><button class="btn" data-op="del">⌫ 删一个</button><button class="btn" data-op="skip">跳过 →</button></div>`);
+    };
+    const nextWord=()=>{
+      idx++; built=[]; builtKeys=[]; usedKeys=new Set(); wrongFlash=false;
+      if(idx>=total){ wgEnd("spell","拼写挑战","拼写挑战",`10 题拼对 ${score} 个`); return; }
+      draw();
+    };
+    draw();
+    wgBind(e=>{
+      const w=list[idx]; if(!w) return;
+      const key=e.target.closest("[data-k]");
+      if(key){
+        const ki=+key.dataset.k;
+        if(usedKeys.has(ki)||built.length>=w.text.length) return;
+        usedKeys.add(ki); builtKeys.push(ki); built.push(w.text[ki].toLowerCase());
+        if(built.length===w.text.length){
+          if(built.join("")===w.text.toLowerCase()){
+            score++;
+            wgShell("拼写挑战", `看释义，点字母拼出单词（第 ${idx+1}/${total} 题）`, `
+              <div class="wg-stats">得分 <b>${score}</b></div>
+              <div class="wg-clue"><div class="wg-cn">${esc(w.cn)}</div></div>
+              <div class="wg-win">✅ ${esc(w.text)} 拼对了！</div>`);
+            setTimeout(nextWord, 900);
+          }else{
+            wrongFlash=true; draw();
+            setTimeout(()=>{ built=[]; builtKeys=[]; usedKeys=new Set(); wrongFlash=false; if(list[idx]) draw(); }, 850);
+          }
+          return;
+        }
+        draw(); return;
+      }
+      const op=e.target.closest("[data-op]"); if(!op) return;
+      if(op.dataset.op==="del"){ if(built.length){ built.pop(); usedKeys.delete(builtKeys.pop()); } draw(); }
+      else if(op.dataset.op==="skip"){ nextWord(); }
+    });
+  }
+  // 选义闯关：看单词，四选一挑正确释义（10 题一轮）
+  function wgQuiz(P){
+    const total=10;
+    const qs=wgShuffle(P.slice()).slice(0,total).map(w=>{
+      const seen=new Set([w.cn]);
+      const opts=[w.cn];
+      wgShuffle(P.slice()).forEach(x=>{ if(opts.length<4 && !seen.has(x.cn)){ seen.add(x.cn); opts.push(x.cn); } });
+      return {w, opts:wgShuffle(opts), answer:w.cn};
+    });
+    let idx=0, score=0, picked=-1;
+    const draw=()=>{
+      const q=qs[idx];
+      wgShell("选义闯关", `选出单词的正确释义（第 ${idx+1}/${total} 题）`, `
+        <div class="wg-stats">得分 <b>${score}</b> · 剩余 <b>${total-idx}</b> 题</div>
+        <div class="wg-word">${esc(q.w.text)}${q.w.phonetic?`<span class="wg-phon">${esc(q.w.phonetic)}</span>`:""}</div>
+        <div class="wg-opts">${q.opts.map((o,i)=>`<button class="wg-opt ${picked<0?"":i===q.opts.indexOf(q.answer)?"right":i===picked?"wrong":""}" data-o="${i}" ${picked<0?"":"disabled"}>${esc(o)}</button>`).join("")}</div>`);
+    };
+    draw();
+    wgBind(e=>{
+      const b=e.target.closest("[data-o]"); if(!b||picked>=0) return;
+      picked=+b.dataset.o;
+      const q=qs[idx];
+      if(q.opts[picked]===q.answer) score++;
+      draw();
+      setTimeout(()=>{
+        idx++; picked=-1;
+        if(idx>=total){ wgEnd("quiz","选义闯关","选义闯关",`10 题答对 ${score} 个`); return; }
+        draw();
+      }, 850);
+    });
   }
 
   // —— 语文：诗词 / 成语 / 文言 / 成语动画廊 / 作文 / 故事 / 阅读 / 课文 ——
@@ -2267,6 +2445,8 @@
     if(hdel){ const h=hdel.dataset.habitDel; state.habits=state.habits.filter(x=>x!==h); save(); toast("已删除习惯："+h); refreshView(); return; }
     const hadd=e.target.closest("[data-habit-add]");
     if(hadd){ const inp=$("#habitNew"); const v=((inp&&inp.value)||"").trim(); if(v&&!state.habits.includes(v)){ state.habits.push(v); save(); toast("已添加习惯："+v); } refreshView(); return; }
+    const wgb=e.target.closest("[data-word-game]");
+    if(wgb){ openWordGame(wgb.dataset.wordGame); return; }
     const hb=e.target.closest("[data-habit]");
     if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else { state.habitLog[t][h]=true; awardQuiet(POINT_RULES.habit, "习惯打卡 · "+h, "habit:"+t+":"+h, true); settleBonuses(); } save(); refreshView(); return; }
   });
@@ -2305,7 +2485,8 @@
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
-      cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, get biView(){ return biView; }
+      cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, get biView(){ return biView; },
+      openWordGame, wordGamePool, get wgBound(){ return wgBound; }
     };
   }
 })();
