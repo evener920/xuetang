@@ -963,12 +963,13 @@
       ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
         :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
+      <div class="sec-title">📚 内容库 <small>按当前年级（${esc(state.grade)}）统计 · 无本年级内容的类型为 0</small></div>
       <div class="stat-strip">
-        <div class="stat"><div class="num">${POEMS.length + CUSTOM.filter(c=>c.type==="诗词").length}</div><div class="lbl">诗词</div></div>
-        <div class="stat"><div class="num">${IDIOMS.length + CUSTOM.filter(c=>c.type==="成语").length}</div><div class="lbl">成语</div></div>
-        <div class="stat"><div class="num">${WORDS.length + CUSTOM.filter(c=>c.type==="单词").length}</div><div class="lbl">单词</div></div>
-        <div class="stat"><div class="num">${GALLERY.length + CUSTOM.filter(c=>c.type==="成语动画廊").length}</div><div class="lbl">动画</div></div>
-        <div class="stat"><div class="num">${CUSTOM.length}</div><div class="lbl">后台素材</div></div>
+        <div class="stat"><div class="num">${poolFor("语文","诗词").length}</div><div class="lbl">诗词</div></div>
+        <div class="stat"><div class="num">${poolFor("语文","成语").length}</div><div class="lbl">成语</div></div>
+        <div class="stat"><div class="num">${poolFor("英语","单词").length}</div><div class="lbl">单词</div></div>
+        <div class="stat"><div class="num">${poolFor("语文","成语动画廊").length}</div><div class="lbl">动画</div></div>
+        <div class="stat"><div class="num">${CUSTOM.filter(gradeOk).length}</div><div class="lbl">后台素材</div></div>
         <div class="stat"><div class="num">${learnedCount}</div><div class="lbl">已学会</div></div>
         <div class="stat"><div class="num">${favCount}</div><div class="lbl">收藏</div></div>
       </div>

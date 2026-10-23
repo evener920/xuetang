@@ -87,9 +87,10 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 60px;}
 .hero h2{margin:0;font-size:22px;}
 .hero p{margin:4px 0 0;font-size:13px;opacity:.88;}
 .hero .done{
-  background:rgba(255,255,255,.18);border-radius:999px;padding:8px 18px;font-size:14px;white-space:nowrap;
+  background:#fff;border-radius:999px;padding:8px 18px;font-size:14px;white-space:nowrap;
+  color:#4c1d95;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.15);
 }
-.hero .pbar{background:rgba(255,255,255,.25);}
+.hero .pbar{background:#ede9fe;}
 .sec-title{
   display:flex;justify-content:space-between;align-items:baseline;
   font-size:15px;font-weight:700;margin:22px 0 12px;
