@@ -1508,13 +1508,13 @@
       </div>
 
       <div class="sec-title">🏅 积分规则 <small>只加不减 · 复习比学新更值钱 · 全勤与连续性额外加权</small></div>
-      <div class="dash-grid">
-        <div class="dash-card"><div class="dc-name">学会 / 打卡内容</div><div class="dc-row"><span>每条</span><b>+${POINT_RULES.learn}</b></div><div class="dc-row"><span>同一条重复标记</span><b>不重复计分</b></div></div>
-        <div class="dash-card"><div class="dc-name">完成到期复习</div><div class="dc-row"><span>每次</span><b>+${POINT_RULES.review}</b></div><div class="dc-row"><span>理由</span><b>间隔重复最能形成长期记忆</b></div></div>
-        <div class="dash-card"><div class="dc-name">习惯打卡</div><div class="dc-row"><span>每个</span><b>+${POINT_RULES.habit}</b></div><div class="dc-row"><span>每天</span><b>${hs.length} 个习惯</b></div></div>
-        <div class="dash-card"><div class="dc-name">小测答对</div><div class="dc-row"><span>每题</span><b>+${POINT_RULES.quizRight}</b></div><div class="dc-row"><span>每日上限</span><b>${QUIZ_CAP_DAY} 分</b></div></div>
-        <div class="dash-card"><div class="dc-name">今日全勤</div><div class="dc-row"><span>学习 + 习惯全做</span><b>+${POINT_RULES.allDone}</b></div><div class="dc-row"><span>今天状态</span><b>${allTodayDone()?"已达成 ✅":"进行中"}</b></div></div>
-        <div class="dash-card"><div class="dc-name">连续学习奖励</div><div class="dc-row"><span>已连续</span><b>${streak} 天</b></div><div class="dc-row"><span>里程碑</span><b>${STREAK_MILESTONES.map(([d,p])=>d+"天+"+p).slice(0,4).join(" · ")} …</b></div></div>
+      <div class="task-grid">
+        <div class="rule-card"><div class="rl-name">学会 / 打卡内容</div><div class="rl-val">+${POINT_RULES.learn} 分</div><div class="rl-tip">每学会或打卡一条内容记一次；同一条内容重复标记，不重复计分。</div></div>
+        <div class="rule-card"><div class="rl-name">完成到期复习</div><div class="rl-val">+${POINT_RULES.review} 分</div><div class="rl-tip">每完成一次艾宾浩斯到期复习；间隔重复最能形成长期记忆，所以比学新更值钱。</div></div>
+        <div class="rule-card"><div class="rl-name">习惯打卡</div><div class="rl-val">+${POINT_RULES.habit} 分</div><div class="rl-tip">每完成一个当日习惯；今天共有 ${hs.length} 个习惯。</div></div>
+        <div class="rule-card"><div class="rl-name">小测答对</div><div class="rl-val">+${POINT_RULES.quizRight} 分</div><div class="rl-tip">单词小测答对一题；每日上限 ${QUIZ_CAP_DAY} 分，防止刷分。</div></div>
+        <div class="rule-card"><div class="rl-name">今日全勤</div><div class="rl-val">+${POINT_RULES.allDone} 分</div><div class="rl-tip">当天的学习任务和习惯全部完成；今天状态：${allTodayDone()?"已达成 ✅":"进行中"}。</div></div>
+        <div class="rule-card"><div class="rl-name">连续学习奖励</div><div class="rl-val">已连续 ${streak} 天</div><div class="rl-tip">里程碑一次性发放：${STREAK_MILESTONES.map(([d,p])=>d+" 天 +"+p).join(" / ")}。断签只重置连续天数，已得积分不清零。</div></div>
       </div>
 
       <div class="sec-title">🎁 奖励商城 <small>短中长期目标并存 · 按最近 7 天速度估算所需时间（仅供参考，实际要看每天完成情况）</small></div>
