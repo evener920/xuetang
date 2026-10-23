@@ -171,6 +171,28 @@
     };
   }
 
+  // 批量导入：解析 JSON（数组 或 含 poems/idioms/words 的原始 data.json），追加到 state.custom
+  // 返回成功导入的条数；资源页与后台共用此逻辑（资源页为入口）。
+  function runBulkImport(raw){
+    if(!raw || !raw.trim()){ toast("请粘贴 JSON"); return 0; }
+    let data;
+    try{ data=JSON.parse(raw.trim()); }
+    catch(e){ toast("JSON 解析失败，请检查格式"); return 0; }
+    let added=0;
+    if(Array.isArray(data)){
+      data.forEach(o=>{ if(o && (o.title||o.text||o.word)){ state.custom.push(makeCustomItem(o)); added++; } });
+    }else if(data.poems||data.idioms||data.words){
+      (data.poems||[]).forEach(p=>state.custom.push(makeCustomItem({subject:"语文",type:"诗词",title:p.title,sub:((p.dynasty?p.dynasty+" · ":"")+(p.author||"")),body:p.content,grade:matchPoemGrade(p.title),tags:(p.tags||[]).join(",")})));
+      (data.idioms||[]).forEach(g=>state.custom.push(makeCustomItem({subject:"语文",type:"成语",title:g.word,body:g.explanation,grade:g.grade})));
+      (data.words||[]).forEach(w=>{ const m=(w.grade||"").match(/^(.+?)(上册|下册)$/); state.custom.push(makeCustomItem({subject:"英语",type:"单词",title:w.text,sub:w.phonetic,body:w.cn,grade:m?m[1]:"",volume:m?m[2]:"",unit:w.unit})); });
+      added=(data.poems?.length||0)+(data.idioms?.length||0)+(data.words?.length||0);
+    }else{ toast("不支持的 JSON 结构"); return 0; }
+    if(!added){ toast("没有可导入的条目"); return 0; }
+    save(); rebuildAll(); cnView=null;
+    toast(`已批量导入 ${added} 条 🎉`);
+    return added;
+  }
+
   const GRADES = ["一年级","二年级","三年级","四年级","五年级","六年级","七年级","八年级","九年级","高一","高二","高三"];
   const IDIOM_GRADES = [...new Set(IDIOMS.map(x=>x.grade))];
   const WORD_GRADES  = [...new Set(WORDS.map(x=>x.grade))];
@@ -1969,8 +1991,13 @@
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
     });
-    // 导入/自添加的素材排在最前（刚进资源页就能看到自己加的内容），同组内保持原顺序
-    filtered.sort((a,b)=>(customSet.has(b.key)?1:0)-(customSet.has(a.key)?1:0));
+    // 导入/自添加的素材排在最前；同组内按添加顺序倒序，最近导入的排最前（刚导入即刻可见，无需展开「显示更多」）
+    const custIdx = new Map(state.custom.map((x,i)=>[x.key, i]));
+    filtered.sort((a,b)=>{
+      const ca=custIdx.has(a.key), cb=custIdx.has(b.key);
+      if(ca && cb) return custIdx.get(b.key) - custIdx.get(a.key); // 最近添加在前
+      return (cb?1:0) - (ca?1:0);
+    });
     const cntCustom = matchExcept("src").filter(x=>customSet.has(x.key)).length;
     return {
       builtins, filtered, show: filtered.slice(0, biView.limit),
@@ -1986,16 +2013,38 @@
     const el = $("#view-res");
     const D = biData();
     const ovCnt = Object.keys(state.overrides||{}).length;
+    const builtinCnt = D.builtins.length - D.customCnt;
+    const subjects = D.subjChips.slice(1); // 学科概览（去掉「全部」）
     el.innerHTML = `
-      <div class="subj-head"><h2>📚 资源</h2><span class="cnt">站内全部内容 ${D.builtins.length} 条（内置 + 已导入/添加，其中我的素材 ${D.customCnt} 条排在最前）· 按 学科 × 年级 × 类型 交叉筛选</span></div>
-      <p class="subj-desc">这里列出站内所有内容：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在最前，其后是内置的诗词 / 成语 / 单词 / 动画 / 数学教材。可用「来源」筛出一批快速定位；点「✏️ 修改」即可改内容，改过的会标「已改」，点「⤺」随时还原。后台只负责增删改的管理，内容的正常浏览就在这里。修改只存在本机浏览器，不会写回代码仓库。</p>
+      <div class="subj-head"><h2>📚 资源中心</h2><span class="cnt">站内全部内容 · 按 学科 × 年级 × 类型 归类的资源库</span></div>
+
+      <div class="res-overview">
+        <div class="ov-card"><div class="ov-num">${D.builtins.length}</div><div class="ov-lbl">全部内容</div></div>
+        <div class="ov-card"><div class="ov-num">${builtinCnt}</div><div class="ov-lbl">内置资源</div></div>
+        <div class="ov-card hl"><div class="ov-num">${D.customCnt}</div><div class="ov-lbl">我的素材</div></div>
+        <div class="ov-card"><div class="ov-num">${ovCnt}</div><div class="ov-lbl">已修改</div></div>
+      </div>
+
+      <p class="subj-desc">这里汇总站内所有内容：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在最前，其后是内置的诗词 / 成语 / 单词 / 动画 / 数学教材。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库。</p>
+
+      <details class="res-import" ${D.customCnt?"":"open"}>
+        <summary>📥 批量导入素材（粘贴 JSON）<small>从「后台」移来 · 整批添加内容</small></summary>
+        <div class="res-import-body">
+          <textarea id="biBulk" class="af-block" rows="4" placeholder='粘贴 JSON 数组，例如 [{"subject":"语文","type":"文言","grade":"四年级","title":"xx","body":"..."}]'></textarea>
+          <div class="af-actions">
+            <button class="btn primary" id="biBulkBtn">批量导入</button>
+            <span class="af-tip">支持整年级内容的数组（自动归类到 学科 / 类型 / 年级）；也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。导入的内容会出现在「我的素材」并排在资源最前。单条逐条添加请到「🛠 后台」。</span>
+          </div>
+        </div>
+      </details>
+
+      <div class="res-tiles">
+        ${subjects.map(([s,c])=>`<button class="res-tile ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}"><span class="rt-num">${c}</span><span class="rt-lbl">${esc(s)}</span></button>`).join("")}
+      </div>
+
       <div class="chips">
         <span class="lbl">来源：</span>
         ${D.srcChips.map(([s,c])=>`<button class="chip ${biView.src===s?"on":""}" data-bi-src="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
-      </div>
-      <div class="chips">
-        <span class="lbl">学科：</span>
-        ${D.subjChips.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
       </div>
       <div class="chips">
         <span class="lbl">年级：</span>
@@ -2004,26 +2053,43 @@
       <div class="chips">
         <span class="lbl">类型：</span>
         ${D.typeChips.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
-        <span style="flex:1"></span>
-        <input id="biSearch" class="search-input" style="width:200px" placeholder="搜标题…（如 一、口算）" value="${esc(biView.q)}" />
-        ${D.active?`<button class="btn" id="biReset" title="清空全部筛选条件">✕ 清空筛选</button>`:""}
       </div>
-      <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}</span></div>
-      <div class="admin-list" id="biList">
+      <div class="chips">
+        ${D.active?`<button class="btn" id="biReset" title="清空全部筛选条件">✕ 清空筛选</button>`:""}
+        <span style="flex:1"></span>
+        <input id="biSearch" class="search-input" style="width:220px" placeholder="搜标题 / 拼音 / 类型…" value="${esc(biView.q)}" />
+      </div>
+
+      <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}${D.customCnt?` · 我的素材 ${D.customCnt} 条排在最前`:""}</span></div>
+
+      <div class="res-grid" id="biGrid">
         ${D.show.length?D.show.map(x=>{
           const ov=(state.overrides||{})[x.key];
-          return `<div class="admin-item" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
-            <div class="ai-main"><b>${esc(x.title)}</b> ${badge(x.type)} ${ov?`<span class="badge" style="background:#fef3c7;color:#b45309">已改</span>`:""}${x.grade?`<span class="tag" style="cursor:default">#${esc(x.grade)}</span>`:""}${x.sub?`<span class="muted" style="font-size:12px;color:var(--muted)">${esc(x.sub.slice(0,28))}</span>`:""}</div>
-            <div style="display:flex;gap:6px;flex:0 0 auto">
-              ${ov?`<button class="btn" data-bi-revert="${esc(x.key)}" title="还原原文">⤺</button>`:""}
+          const isCustom = x.key.indexOf("custom:")===0;
+          return `<div class="res-card" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
+            <div class="rc-top">
+              ${badge(x.type)}
+              <span class="tag ${isCustom?"tag-custom":"tag-built"}">${isCustom?"我的素材":"内置"}</span>
+            </div>
+            <div class="rc-title">${esc(x.title)}</div>
+            ${x.sub?`<div class="rc-sub">${esc(x.sub.slice(0,40))}</div>`:""}
+            <div class="rc-tags">
+              ${x.grade?`<span class="tag" style="cursor:default">#${esc(x.grade)}</span>`:""}
+              ${x.volume?`<span class="tag" style="cursor:default">#${esc(x.volume)}</span>`:""}
+              ${x.unit?`<span class="tag" style="cursor:default">#${esc(x.unit)}</span>`:""}
+              ${ov?`<span class="badge" style="background:#fef3c7;color:#b45309">已改</span>`:""}
+            </div>
+            <div class="rc-actions">
+              <button class="btn" data-res-open="${esc(x.key)}">查看</button>
               <button class="btn" data-bi-edit="${esc(x.key)}">✏️ 修改</button>
+              ${ov?`<button class="btn" data-bi-revert="${esc(x.key)}" title="还原原文">⤺</button>`:""}
             </div>
           </div>`;
         }).join("")
         : '<div class="placeholder"><div class="big">🔍</div>没有匹配的资源，换个筛选条件试试</div>'}
-        ${D.filtered.length>biView.limit?`<div style="margin-top:10px"><button class="btn" id="biMore">显示更多（当前 ${D.show.length} / ${D.filtered.length}）</button></div>`:""}
-        <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 自己的素材请到「后台」添加，会与这里的内容合并显示。</p>
       </div>
+      ${D.filtered.length>biView.limit?`<div style="margin-top:12px"><button class="btn" id="biMore">显示更多（当前 ${D.show.length} / ${D.filtered.length}）</button></div>`:""}
+      <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 想新增素材可展开上方「📥 批量导入」，单条添加请到「🛠 后台」。</p>
     `;
     bindResEvents(el);
   }
@@ -2032,10 +2098,22 @@
     if(biSearch) biSearch.addEventListener("input", ()=>{
       biView.q=biSearch.value.trim();
       const q=biView.q.toLowerCase();
-      document.querySelectorAll("#biList [data-bi-row]").forEach(r=>{
+      document.querySelectorAll("#biGrid [data-bi-row]").forEach(r=>{
         r.hidden = !!(q && !(r.getAttribute("data-bi-text")||"").includes(q));
       });
     });
+    // 批量导入（从后台移来）
+    const biBulkBtn=$("#biBulkBtn");
+    if(biBulkBtn) biBulkBtn.addEventListener("click", ()=>{
+      const added=runBulkImport($("#biBulk").value);
+      if(added>0){ renderRes(); refreshView(); }
+    });
+    // 查看：打开内容弹窗
+    el.querySelectorAll("[data-res-open]").forEach(b=>b.addEventListener("click", ()=>{
+      const k=b.dataset.resOpen;
+      const it = ALL.find(x=>x.key===k) || INDEX[k];
+      if(it) openModal(it);
+    }));
     el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{ biView.type=b.dataset.biType; renderRes(); }));
     el.querySelectorAll("[data-bi-src]").forEach(b=>b.addEventListener("click", ()=>{ biView.src=b.dataset.biSrc; renderRes(); }));
     el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{ biView.subj=b.dataset.biSubj; renderRes(); }));
@@ -2088,10 +2166,6 @@
           <span class="af-tip">提示：年级留「—」且类型为诗词时，系统会按诗题自动匹配部编版年级。</span>
         </div>
       </div>
-
-      <div class="sec-title">📥 批量导入（粘贴 JSON）<small>支持整年级内容的数组，自动归类</small></div>
-      <textarea id="afBulk" class="af-block" rows="4" placeholder='粘贴 JSON 数组，例如 [{"subject":"语文","type":"文言","grade":"四年级","title":"xx","body":"..."}]'></textarea>
-      <div class="af-actions"><button class="btn primary" id="afBulkBtn">批量导入</button><span class="af-tip">也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。</span></div>
 
       <div class="sec-title">🗂 已添加素材（${CUSTOM.length}）<small>本地保存，可删除 · 内容已同步展示在「📚 资源」页最前（来源 → 我的素材 可快速查看）</small></div>
       <div class="admin-list">
@@ -2274,24 +2348,6 @@
       refreshView();
     };
     $("#afClear").onclick=()=>{ ["afTitle","afSub","afBody","afTags","afVideos","afUnit"].forEach(i=>$("#"+i).value=""); };
-    // 批量导入
-    $("#afBulkBtn").onclick=()=>{
-      const raw=$("#afBulk").value.trim(); if(!raw){ toast("请粘贴 JSON"); return; }
-      let data; try{ data=JSON.parse(raw); }catch(e){ toast("JSON 解析失败，请检查格式"); return; }
-      let added=0;
-      if(Array.isArray(data)){
-        data.forEach(o=>{ if(o && (o.title||o.text||o.word)){ state.custom.push(makeCustomItem(o)); added++; } });
-      }else if(data.poems||data.idioms||data.words){
-        (data.poems||[]).forEach(p=>state.custom.push(makeCustomItem({subject:"语文",type:"诗词",title:p.title,sub:((p.dynasty?p.dynasty+" · ":"")+(p.author||"")),body:p.content,grade:matchPoemGrade(p.title),tags:(p.tags||[]).join(",")})));
-        (data.idioms||[]).forEach(g=>state.custom.push(makeCustomItem({subject:"语文",type:"成语",title:g.word,body:g.explanation,grade:g.grade})));
-        (data.words||[]).forEach(w=>{ const m=(w.grade||"").match(/^(.+?)(上册|下册)$/); state.custom.push(makeCustomItem({subject:"英语",type:"单词",title:w.text,sub:w.phonetic,body:w.cn,grade:m?m[1]:"",volume:m?m[2]:"",unit:w.unit})); });
-        added=(data.poems?.length||0)+(data.idioms?.length||0)+(data.words?.length||0);
-      }else{ toast("不支持的 JSON 结构"); return; }
-      if(!added){ toast("没有可导入的条目"); return; }
-      save(); rebuildAll(); cnView=null;
-      toast(`已批量导入 ${added} 条 🎉`); renderAdmin();
-      refreshView();
-    };
     // 删除
     el.querySelectorAll("[data-del-custom]").forEach(b=>b.onclick=()=>{
       state.custom=state.custom.filter(x=>x.key!==b.dataset.delCustom); save(); rebuildAll(); cnView=null;
@@ -2486,7 +2542,7 @@
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, get biView(){ return biView; },
-      openWordGame, wordGamePool, get wgBound(){ return wgBound; }
+      openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport
     };
   }
 })();
