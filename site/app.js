@@ -1609,23 +1609,89 @@
     };
   }
 
-  function renderAdmin(){
-    const el = $("#view-admin");
-    const subjects = Object.keys(SUBJECT_TYPES);
-    // 资源库（全部内置内容，含已拆散的小节条目）：按 学科 × 年级 × 类型 交叉筛选
+  /* ---------- 资源页（与后台平级）：站内全部内置内容，按 学科×年级×类型 交叉分类 ---------- */
+  function biData(){
     const builtins = ALL.filter(x=>/^(extra|fmq|dlq|poem|idiom|word|gal):/.test(x.key));
     const cntBy = (fn)=>{ const m={}; builtins.forEach(x=>{ const k=fn(x)||""; m[k]=(m[k]||0)+1; }); return m; };
-    const biCounts = [["全部",builtins.length], ...Object.entries(cntBy(x=>x.type)).sort()];
-    const biSubjCounts = [["全部",builtins.length], ...["语文","数学","英语","科学","人文"].filter(s=>cntBy(x=>x.subject)[s]).map(s=>[s,cntBy(x=>x.subject)[s]])];
-    const biGradeCounts = [["全部",builtins.length], ...Object.entries(cntBy(x=>x.grade)).sort((a,b)=>GRADES.indexOf(a[0])-GRADES.indexOf(b[0]))];
-    const biFiltered = builtins.filter(x=>{
+    const subjCnt = cntBy(x=>x.subject);
+    const filtered = builtins.filter(x=>{
       if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
       if(biView.grade!=="全部" && x.grade!==biView.grade) return false;
       if(biView.type!=="全部" && x.type!==biView.type) return false;
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
     });
-    const biShow = biFiltered.slice(0, biView.limit);
+    return {
+      builtins, filtered, show: filtered.slice(0, biView.limit),
+      typeCounts: [["全部",builtins.length], ...Object.entries(cntBy(x=>x.type)).sort()],
+      subjCounts: [["全部",builtins.length], ...["语文","数学","英语","科学","人文"].filter(s=>subjCnt[s]).map(s=>[s,subjCnt[s]])],
+      gradeCounts:[["全部",builtins.length], ...Object.entries(cntBy(x=>x.grade)).sort((a,b)=>GRADES.indexOf(a[0])-GRADES.indexOf(b[0]))]
+    };
+  }
+  function renderRes(){
+    const el = $("#view-res");
+    const D = biData();
+    const ovCnt = Object.keys(state.overrides||{}).length;
+    el.innerHTML = `
+      <div class="subj-head"><h2>📚 资源</h2><span class="cnt">站内全部内置内容 ${D.builtins.length} 条 · 按 学科 × 年级 × 类型 交叉筛选</span></div>
+      <p class="subj-desc">这里列出站内所有现成内容（诗词 / 成语 / 单词 / 动画 / 数学教材 / 科学人文启蒙）。点「✏️ 修改」即可改内容，改过的会标「已改」，点「⤺」随时还原原文；修改只存在本机浏览器，不会写回代码仓库。</p>
+      <div class="chips">
+        <span class="lbl">学科：</span>
+        ${D.subjCounts.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
+      </div>
+      <div class="chips">
+        <span class="lbl">年级：</span>
+        ${D.gradeCounts.map(([g,c])=>`<button class="chip ${biView.grade===g?"on":""}" data-bi-grade="${esc(g)}">${esc(g)} ${c}</button>`).join("")}
+      </div>
+      <div class="chips">
+        <span class="lbl">类型：</span>
+        ${D.typeCounts.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
+        <span style="flex:1"></span>
+        <input id="biSearch" class="search-input" style="width:200px" placeholder="搜标题…（如 一、口算）" value="${esc(biView.q)}" />
+      </div>
+      <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}</span></div>
+      <div class="admin-list" id="biList">
+        ${D.show.length?D.show.map(x=>{
+          const ov=(state.overrides||{})[x.key];
+          return `<div class="admin-item" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
+            <div class="ai-main"><b>${esc(x.title)}</b> ${badge(x.type)} ${ov?`<span class="badge" style="background:#fef3c7;color:#b45309">已改</span>`:""}${x.grade?`<span class="tag" style="cursor:default">#${esc(x.grade)}</span>`:""}${x.sub?`<span class="muted" style="font-size:12px;color:var(--muted)">${esc(x.sub.slice(0,28))}</span>`:""}</div>
+            <div style="display:flex;gap:6px;flex:0 0 auto">
+              ${ov?`<button class="btn" data-bi-revert="${esc(x.key)}" title="还原原文">⤺</button>`:""}
+              <button class="btn" data-bi-edit="${esc(x.key)}">✏️ 修改</button>
+            </div>
+          </div>`;
+        }).join("")
+        : '<div class="placeholder"><div class="big">🔍</div>没有匹配的资源，换个筛选条件试试</div>'}
+        ${D.filtered.length>biView.limit?`<div style="margin-top:10px"><button class="btn" id="biMore">显示更多（当前 ${D.show.length} / ${D.filtered.length}）</button></div>`:""}
+        <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 自己的素材请到「后台」添加，会与这里的内容合并显示。</p>
+      </div>
+    `;
+    bindResEvents(el);
+  }
+  function bindResEvents(el){
+    const biSearch=$("#biSearch");
+    if(biSearch) biSearch.addEventListener("input", ()=>{
+      biView.q=biSearch.value.trim();
+      const q=biView.q.toLowerCase();
+      document.querySelectorAll("#biList [data-bi-row]").forEach(r=>{
+        r.hidden = !!(q && !(r.getAttribute("data-bi-text")||"").includes(q));
+      });
+    });
+    el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{ biView.type=b.dataset.biType; renderRes(); }));
+    el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{ biView.subj=b.dataset.biSubj; renderRes(); }));
+    el.querySelectorAll("[data-bi-grade]").forEach(b=>b.addEventListener("click", ()=>{ biView.grade=b.dataset.biGrade; renderRes(); }));
+    el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
+    el.querySelectorAll("[data-bi-revert]").forEach(b=>b.addEventListener("click", ()=>{
+      const k=b.dataset.biRevert;
+      if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原原文 ⤺"); renderRes(); }
+    }));
+    const biMore=$("#biMore");
+    if(biMore) biMore.addEventListener("click", ()=>{ biView.limit+=30; renderRes(); });
+  }
+
+  function renderAdmin(){
+    const el = $("#view-admin");
+    const subjects = Object.keys(SUBJECT_TYPES);
     el.innerHTML = `
       <div class="subj-head"><h2>🛠 内容后台</h2><span class="cnt">添加素材，系统自动归类到 学科 / 类型 / 年级</span></div>
       <div class="chips">
@@ -1698,36 +1764,6 @@
         <p class="af-tip">当前生效目录：${rewardList().map(r=>esc(r.icon||"🎁")+r.name+"("+r.cost+")").join(" · ")}</p>
       </div>
 
-      <div class="sec-title">📚 资源库（${builtins.length}）<small>站内全部内置内容 · 按 学科 × 年级 × 类型 交叉筛选 · 可直接修改，改错点「⤺」还原原文</small></div>
-      <div class="chips">
-        <span class="lbl">学科：</span>
-        ${biSubjCounts.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
-      </div>
-      <div class="chips">
-        <span class="lbl">年级：</span>
-        ${biGradeCounts.map(([g,c])=>`<button class="chip ${biView.grade===g?"on":""}" data-bi-grade="${esc(g)}">${esc(g)} ${c}</button>`).join("")}
-      </div>
-      <div class="chips">
-        <span class="lbl">类型：</span>
-        ${biCounts.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
-        <span style="flex:1"></span>
-        <input id="biSearch" class="search-input" style="width:200px" placeholder="搜标题…（如 一、口算）" value="${esc(biView.q)}" />
-      </div>
-      <div class="admin-list" id="biList">
-        ${biShow.length?biShow.map(x=>{
-          const ov=(state.overrides||{})[x.key];
-          return `<div class="admin-item" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
-            <div class="ai-main"><b>${esc(x.title)}</b> ${badge(x.type)} ${ov?`<span class="badge" style="background:#fef3c7;color:#b45309">已改</span>`:""}${x.grade?`<span class="tag" style="cursor:default">#${esc(x.grade)}</span>`:""}${x.sub?`<span class="muted" style="font-size:12px;color:var(--muted)">${esc(x.sub.slice(0,28))}</span>`:""}</div>
-            <div style="display:flex;gap:6px;flex:0 0 auto">
-              ${ov?`<button class="btn" data-bi-revert="${esc(x.key)}" title="还原原文">⤺</button>`:""}
-              <button class="btn" data-bi-edit="${esc(x.key)}">✏️ 修改</button>
-            </div>
-          </div>`;
-        }).join("")
-        : '<div class="placeholder"><div class="big">🔍</div>没有匹配的资源，换个筛选条件试试</div>'}
-        ${biFiltered.length>biView.limit?`<div style="margin-top:10px"><button class="btn" id="biMore">显示更多（当前 ${biShow.length} / ${biFiltered.length}）</button></div>`:""}
-        <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 修改只存在本机浏览器，不会写回代码仓库。</p>
-      </div>
 
       <div class="sec-title">✏️ 已修改的内置内容（${Object.keys(state.overrides||{}).length}）<small>覆盖内置教材，可一键还原</small></div>
       <div class="admin-list">
@@ -1756,30 +1792,6 @@
       <p class="af-tip">存档内容：学习进度、打卡、习惯、复习记录、后台素材与所有内容修改。最多保留 ${ARCHIVE_MAX} 份，超出时自动淘汰最早的「自动」存档；手动存档优先保留。每天首次打开网站会自动存一份。</p>
     `;
     // 内置教材：搜索过滤 / 修改 / 还原 / 显示更多
-    const biSearch=$("#biSearch");
-    if(biSearch) biSearch.addEventListener("input", ()=>{
-      biView.q=biSearch.value.trim();
-      const q=biView.q.toLowerCase();
-      document.querySelectorAll("#biList [data-bi-row]").forEach(r=>{
-        r.hidden = !!(q && !(r.getAttribute("data-bi-text")||"").includes(q));
-      });
-    });
-    el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{
-      biView.type=b.dataset.biType; renderAdmin();
-    }));
-    el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{
-      biView.subj=b.dataset.biSubj; renderAdmin();
-    }));
-    el.querySelectorAll("[data-bi-grade]").forEach(b=>b.addEventListener("click", ()=>{
-      biView.grade=b.dataset.biGrade; renderAdmin();
-    }));
-    el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
-    el.querySelectorAll("[data-bi-revert]").forEach(b=>b.addEventListener("click", ()=>{
-      const k=b.dataset.biRevert;
-      if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原原文 ⤺"); renderAdmin(); }
-    }));
-    const biMore=$("#biMore");
-    if(biMore) biMore.addEventListener("click", ()=>{ biView.limit+=30; renderAdmin(); });
     // 兑换审核 · 自定义奖励
     el.querySelectorAll("[data-rd-ok]").forEach(b=>b.addEventListener("click", ()=>{
       const r=(state.redeems||[])[parseInt(b.dataset.rdOk,10)]; if(!r) return;
@@ -1877,14 +1889,15 @@
   function refreshView(){
     if(view.name==="home") renderHome();
     else if(view.name==="week") renderWeek();
-    else if(view.name==="reward") renderReward();
+    else     if(view.name==="reward") renderReward();
+    else if(view.name==="res") renderRes();
     else if(view.name==="subject") renderSubject(view.param);
     else if(view.name==="tag") renderTag(view.param);
     else if(view.name==="search") renderSearch(view.param);
     else if(view.name==="admin"){ if(state.adminAuthed) renderAdmin(); else renderAdminLogin(); }
   }
   function render(){
-    ["home","week","reward","subject","tag","search","admin"].forEach(n=>{ $("#view-"+n).hidden = (n!==view.name); });
+    ["home","week","reward","res","subject","tag","search","admin"].forEach(n=>{ $("#view-"+n).hidden = (n!==view.name); });
     setNav(view.name);
     refreshView();
   }
@@ -1896,7 +1909,7 @@
     if(b.classList.contains("future")){ toast("该栏目规划中，内容导入后自动上线"); return; }
     const v=b.dataset.view;
     if(v==="admin"){ go("admin"); return; }
-    if(v==="home"||v==="week"||v==="reward"){ go(v); return; } // 首页 / 本周 / 奖励（非学科页）
+    if(v==="home"||v==="week"||v==="reward"||v==="res"){ go(v); return; } // 首页 / 本周 / 奖励 / 资源（非学科页）
     go(v==="home"?"home":"subject", v==="home"?null:v);
   });
   // 年级语境
@@ -2036,7 +2049,7 @@
       openModal, mathBodyHTML, effBody, renderAdmin, renderAdminLogin, renderAdminPwdForm,
       pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
       archiveCreate, archiveRestore, loadArchives, renderWeek, refreshView,
-      renderReward, award, awardQuiet, redeemReward, rewardList, currentStreak, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
+      renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan
     };
   }
