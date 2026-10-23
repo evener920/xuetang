@@ -242,8 +242,10 @@
   };
   function weekFreqOf(subject,type){
     const k = checkinKey(subject,type);
+    const p = sectionPlanOf(k);
+    if(p.freq && p.freq>=1 && p.freq<=7) return p.freq; // 后台排程优先
     if(WEEK_FREQ_OVER[k]!==undefined) return WEEK_FREQ_OVER[k];
-    return MAIN_SUBJECTS.includes(subject) ? 1 : 1;
+    return 1;
   }
   // 稳定字符串哈希（保证每周计划确定性、刷新不变）
   function strHash(s){ let h=7; for(let i=0;i<s.length;i++) h=(h*131+s.charCodeAt(i))>>>0; return h; }
@@ -253,6 +255,7 @@
     const slots=[];
     CHECKIN_TYPES.forEach(({subject,type})=>{
       if(!checkinOn(subject,type)) return;
+      if(!sectionActive(subject,type)) return; // 未开始 / 已结课 的板块不进周计划
       let pool=[]; try{ pool=poolFor(subject,type); }catch(e){ pool=[]; }
       if(!pool.length) return;
       for(let i=0;i<weekFreqOf(subject,type);i++) slots.push({subject,type});
@@ -283,12 +286,87 @@
   function dueReview(key){
     const d=state.learned[key];
     if(!d) return false;
-    if(!EB_INTERVALS.includes(dayDiff(d))) return false;
+    if(!ebIntervalsFor(key).includes(dayDiff(d))) return false;
     const t=fmt(new Date());
     return !(state.reviewed[t] && state.reviewed[t][key]);
   }
   function dueReviews(){
     return Object.keys(state.learned).filter(dueReview).map(k=>INDEX[k]).filter(Boolean).slice(0,6);
+  }
+
+  /* ---------- 掌握度星级（0~5）与学习调度增强 ---------- */
+  // getMastery：返回 0~5；旧数据「已学会但无星级」视为 5（全会）；从未学过返回 null（未学）
+  function getMastery(key){
+    if(state.mastery && state.mastery[key]!==undefined) return state.mastery[key];
+    if(state.learned[key]) return 5; // 旧数据兼容：已会即全会
+    return null;
+  }
+  function setMastery(key, n){
+    state.mastery = state.mastery || {};
+    n = Math.max(0, Math.min(5, parseInt(n,10)||0));
+    state.mastery[key] = n; // 显式评星即记录（含 0★ 不会/零星）
+    save();
+  }
+  // practicePriority：越高越优先排入今日练习（不会的加强、已会的降频）
+  function practicePriority(key){
+    const m = getMastery(key);
+    if(m===null) return 2.5;   // 未学：需要学习
+    if(m>=5)    return 0.15;   // 全会：降频
+    if(m<=2)    return 3;      // 不会/弱：加强
+    return 1;                  // 中等：正常
+  }
+  function addDays(dateStr, n){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return fmt(d);
+  }
+  // 每个「学科·类型」板块的排程（起止日 / 每周频次），按学生独立
+  function sectionPlanOf(k){ return (state.sectionPlan && state.sectionPlan[k]) || {}; }
+  function sectionActive(subject, type){
+    const p = sectionPlanOf(checkinKey(subject, type));
+    const t = fmt(new Date());
+    if(p.start && t < p.start) return false; // 尚未开始
+    if(p.end   && t > p.end)   return false; // 已结课
+    return true;
+  }
+  // 艾宾浩斯间隔按掌握度调整：不会的更密、全会的更稀
+  function ebIntervalsFor(key){
+    const m = getMastery(key);
+    if(m===null) return EB_INTERVALS;
+    if(m<=2) return [1,2,3,5,8,15]; // 弱：更密集跟进
+    if(m>=5) return [2,7,15];        // 全会：减少打扰
+    return EB_INTERVALS;
+  }
+  // 从序列中取 quota 条，跳过「全会(5★)」条目（已会降频），不足再回退补足
+  function seqSkipMastered(pool, off, q){
+    const out=[], seen=new Set(); let i=off, guard=0;
+    while(out.length<q && guard<pool.length){
+      const it=pool[i%pool.length]; i++; guard++;
+      if(getMastery(it.key)>=5) continue;        // 全会跳过
+      if(seen.has(it.key)) continue;
+      seen.add(it.key); out.push(it);
+    }
+    i=off; guard=0;
+    while(out.length<q && guard<pool.length){
+      const it=pool[i%pool.length]; i++; guard++;
+      if(seen.has(it.key)) continue;
+      seen.add(it.key); out.push(it);
+    }
+    return out;
+  }
+  // 普通板块：按固定顺序（循序渐进）推进 + 掌握度加权选条
+  function sectionItems(subject, type, quota){
+    const pool = poolFor(subject, type);
+    if(!pool.length) return [];
+    const semDay = Math.max(0, dayDiff(state.semesterStart));
+    const frontier = (semDay * quota) % pool.length; // 顺序前沿，按天稳定推进
+    const WIN = Math.max(quota*3, quota+6);          // 候选窗口
+    const win=[];
+    for(let i=0;i<WIN && i<pool.length;i++) win.push(pool[(frontier+i)%pool.length]);
+    const scored = win.map((it,idx)=>({it, idx, p:practicePriority(it.key)}));
+    scored.sort((a,b)=> b.p - a.p || a.idx - b.idx); // 弱项优先，稳定保序
+    const n = Math.min(quota, win.length);
+    return scored.slice(0,n).sort((a,b)=>a.idx-b.idx).map(x=>x.it); // 显示保持顺序
   }
   function habitDone(h){
     const t=fmt(new Date());
@@ -411,6 +489,8 @@
   state.custom = state.custom || [];  // 后台添加的素材（已归一化为标准条目）
   state.overrides = state.overrides || {}; // 对「内置教材」条目的覆盖版本（key = 内置条目 key，仅本机保存，可还原）
   state.checkin = state.checkin || {}; // 首页每日打卡范围（学科→true/false，缺省=开启）
+  state.mastery = state.mastery || {}; // 每张内容卡的掌握度星级 0~5（按学生独立）
+  state.sectionPlan = state.sectionPlan || {}; // 每个「学科·类型」板块的起止日/每周频次（按学生独立）
   state.lastKey = state.lastKey || null;
   state.habits = Array.isArray(state.habits) ? state.habits : ["房间卫生","早睡早起","学校作业"]; // 每日习惯打卡
   state.habitLog = state.habitLog || {};   // 日期 → {习惯名: true}
@@ -627,6 +707,8 @@
         state.habits = Array.isArray(state.habits)?state.habits:["房间卫生","早睡早起","学校作业"];
         state.habitLog = state.habitLog || {};
         state.reviewed = state.reviewed || {};
+        state.mastery = state.mastery || {};
+        state.sectionPlan = state.sectionPlan || {};
         state.semesterStart = state.semesterStart || fmt(new Date());
         state.points = typeof state.points==="number"?state.points:0;
         state.pointLog = Array.isArray(state.pointLog)?state.pointLog:[];
@@ -645,11 +727,11 @@
   }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan"];
   function defaultPerStudent(){
     return { grade:"四年级", learned:{}, fav:{}, checkin:{},
       habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{},
-      points:0, pointLog:[], redeems:[] };
+      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{} };
   }
   function capturePerStudent(){
     const d={}; PER_STUDENT_FIELDS.forEach(f=>{ const v=state[f]; d[f]=(v===undefined?null:JSON.parse(JSON.stringify(v))); });
@@ -886,6 +968,10 @@
   function cardHTML(it, extraMeta){
     const learned = state.learned[it.key];
     const vids = itemVideos(it);
+    const m = getMastery(it.key);
+    const starHTML = m===null
+      ? `<span class="mstar new">🔰 未学</span>`
+      : `<span class="mstar ${m>=5?"full":(m<=2?"weak":"mid")}">${"★".repeat(m)}${"☆".repeat(5-m)}</span>`;
     return `<button class="card" data-key="${esc(it.key)}">
       ${learned?`<span class="learned-flag">✓ 已会</span>`:""}
       <div class="c-meta">${badge(it.type)}
@@ -896,6 +982,7 @@
         ${it.html?`<span class="play">📖 图文</span>`:""}
         ${vids.length?`<span class="play">▶ ${it.type==="成语动画廊"?"动画":"视频"}</span>`:""}
       </div>
+      <div class="c-stars">${starHTML}</div>
       <h4>${esc(it.title)}</h4>
       ${it.sub?`<div class="c-sub">${esc(it.sub)}</div>`:""}
       ${it.html
@@ -943,47 +1030,32 @@
   /* ---------- 首页：今日学习 ---------- */
   // 今日任务：只包含今天（按周计划）排到的「学科·类型」，每类型按配额取条目（控制每日总量）
   function todayTasks(){
-    const seed = todaySeed();
     const day = new Date().getDay();
     const plan = weekPlan();
     const tasks = {}; // key=学科·类型 → 今日条目数组
     (plan[day]||[]).forEach(({subject,type})=>{
       const key = checkinKey(subject,type);
-      // 数学·每日一练：按天顺序轮转取 N 小节（Day01 一→二→三→四 → Day02 …），一学期练完 45 天
+      if(!sectionActive(subject,type)){ tasks[key]=[]; return; }
+      const q = typeQuota(type);
+      // 数学·每日一练：按天顺序轮转取 N 小节（循序渐进），跳过全会(5★)条目
       if(type==="每日一练"){
-        const q = typeQuota(type);
         const dp = poolFor(subject,type);
         if(!dp.length){ tasks[key]=[]; return; }
         const off = (Math.max(0, dayDiff(state.semesterStart)) * q) % dp.length;
-        const arr2=[]; for(let i=0;i<q && i<dp.length;i++) arr2.push(dp[(off+i)%dp.length]);
-        tasks[key]=arr2;
+        tasks[key] = seqSkipMastered(dp, off, q);
         return;
       }
-      // 数学思维母题：一题一卡，按天从「均匀打散序列」轮转取 5 题（一次打卡=5 道题）
+      // 数学思维母题：一题一卡，按天从「均匀打散序列」轮转取 5 题，跳过全会(5★)
       if(type==="思维母题"){
         const mq = motherOrdered();
+        if(!mq.length){ tasks[key]=[]; return; }
         const off = (Math.max(0, dayDiff(state.semesterStart)) * 5) % Math.max(1, mq.length);
-        const arr=[]; for(let i=0;i<5 && i<mq.length;i++) arr.push(mq[(off+i)%mq.length]);
-        tasks[key]=arr;
+        tasks[key] = seqSkipMastered(mq, off, 5);
         return;
       }
-      let pool = poolFor(subject,type);
-      // 英语单词：按当前年级（上+下册）顺序轮转，每天 5 个新词 → 90 天学期内可整本过完再滚第二轮
-      if(subject==="英语" && type==="单词"){
-        const wp = poolFor(subject, type); // 已按当前年级严格过滤；某年级词不够也不回退其他年级
-        if(wp.length){
-          const qw=typeQuota(type);
-          const off=(Math.max(0, dayDiff(state.semesterStart)) * qw) % wp.length;
-          const wa=[]; for(let i=0;i<qw && i<wp.length;i++) wa.push(wp[(off+i)%wp.length]);
-          tasks[key]=wa; return;
-        }
-      }
-      let arr;
-      if(type==="诗词")      arr = pool.length ? [pool[seed % pool.length]] : [];
-      else if(type==="成语") arr = pick(pool, 2, seed+7);
-      else if(type==="单词") arr = pick(pool, 5, seed+13);
-      else                   arr = pick(pool, typeQuota(type), seed + type.length*3 + subject.length);
-      tasks[key] = arr;
+      // 其余类型（诗词/成语/单词/听力/阅读/文言/动画廊/小四门…）：
+      // 按固定顺序（循序渐进）推进 + 掌握度加权（不会的加强、已会的降频）
+      tasks[key] = sectionItems(subject, type, q);
     });
     return tasks;
   }
@@ -1018,13 +1090,27 @@
     const dayPlan = weekPlan()[todayDow] || [];
     const bySub = {};
     dayPlan.forEach(s=>{ (bySub[s.subject]=bySub[s.subject]||[]).push(s.type); });
-    const order=["语文","数学","英语","科学","人文"];
+    const order = allSubjects();
     const taskBlocks = order.map(sub=>{
       const types = bySub[sub] || [];
       const blocks = types.map(t=>{
         const list = tg[checkinKey(sub,t)]||[];
         if(!list.length) return "";
-        return `<div class="sec-title">${sub} · ${t} <small>${list.length} 项</small></div>
+        const ck = checkinKey(sub,t);
+        const sp = sectionPlanOf(ck);
+        const pool = poolFor(sub,t);
+        const total = pool.length;
+        const lc = pool.filter(x=>state.learned[x.key]).length;
+        const pctSec = total? Math.round(lc/total*100):0;
+        const todayStr = fmt(new Date());
+        const startTxt = sp.start || state.semesterStart;
+        const freq = sp.freq || weekFreqOf(sub,t);
+        const proj = total? addDays(startTxt, Math.ceil(total/(typeQuota(t)*Math.max(1,freq)))*7) : startTxt;
+        const statusTxt = (!sp.start||todayStr>=sp.start) && (!sp.end||todayStr<=sp.end)
+          ? (total && lc>=total ? "已通关 🎉" : `已学 ${lc}/${total}`)
+          : (sp.start && todayStr<sp.start ? `未开始（${sp.start} 起）` : `已结课（${sp.end} 止）`);
+        return `<div class="sec-title">${sub} · ${t} <small>${statusTxt} · 开始 ${startTxt} · 预计 ${proj}</small></div>
+          <div class="sec-prog"><div class="sec-prog-fill" style="width:${pctSec}%"></div></div>
           <div class="task-grid">${list.map(x=>cardHTML(x)).join("")}</div>`;
       }).join("");
       return blocks;
@@ -1078,7 +1164,7 @@
         :`<div class="placeholder" style="padding:20px 16px">今天还没有打卡，从上方「今日任务」开始第一项吧 🚀</div>`}
 
       ${reviews.length?`
-      <div class="sec-title">🔁 艾宾浩斯复习 <small>到期 ${reviews.length} 项 · 按遗忘曲线 1/2/4/7/15 天安排 · 全部记录在「📊 本周」页</small></div>
+      <div class="sec-title">🔁 艾宾浩斯复习 <small>到期 ${reviews.length} 项 · 按遗忘曲线安排（不会的更密、全会的更稀）· 全部记录在「📊 本周」页</small></div>
       <div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`:""}
 
       ${last?`
@@ -1642,6 +1728,7 @@
     const learned = !!state.learned[it.key];
     const fav = !!state.fav[it.key];
     const isWord = it.subject==="英语";
+    const m = getMastery(it.key);
     const vids = itemVideos(it);
     const userVids = (state.videos[it.key]||[]);
     const cur = parseVideoUrl(vids[modalVid]||vids[0]);
@@ -1677,6 +1764,14 @@
       ${bodyHTML}
       ${it.tags&&it.tags.length?`<div class="m-tags">${it.tags.map(t=>`<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>`:""}
       ${it.key.indexOf("mtq:")===0?`<div class="pq-a" id="mtHint" hidden>${esc(it.a&&it.a.length?it.a:motherHint(it.sub))}</div>`:""}
+      <div class="m-stars">
+        <span class="ms-label">掌握度（星级）</span>
+        <span class="ms-stars">
+          ${[1,2,3,4,5].map(n=>`<button class="star ${m>=n?"on":""}" data-act="star" data-n="${n}" title="${n} 星">★</button>`).join("")}
+          ${m!==null?`<button class="star clr" data-act="starclear" title="清除星级（恢复未学）">✕</button>`:""}
+        </span>
+        <span class="ms-hint">${m===null?"点星标记掌握度":(m>=5?"全会 · 减少练习":(m<=2?"不会 · 加强练习":"中等 · 正常练习"))}</span>
+      </div>
       <div class="m-actions">
         ${it.key.indexOf("mtq:")===0?`<button class="btn pa" data-act="hint">💡 答案提示</button>`:""}
         ${dueReview(it.key)?`<button class="btn primary" data-act="review">🔁 完成复习（艾宾浩斯）</button>`:""}
@@ -1730,10 +1825,19 @@
           }
           else {
             state.learned[it.key]=fmt(new Date());
+            if(getMastery(it.key)===null) setMastery(it.key, 5); // 新学会默认 5 星（全会），可手动下调
             toast("已标记为学会，明天将按遗忘曲线安排复习 🔁");
             awardQuiet(POINT_RULES.learn, "学会《"+it.title+"》", "learn:"+it.key, true);
             settleBonuses();
           }
+        }else if(act==="star"){
+          setMastery(it.key, parseInt(btn.dataset.n,10)||5);
+          toast("掌握度已设为 "+ (getMastery(it.key)) +" 星");
+          openModal(it); refreshIfVisible(); return;
+        }else if(act==="starclear"){
+          delete state.mastery[it.key]; save();
+          toast("已清除星级（恢复未学）");
+          openModal(it); refreshIfVisible(); return;
         }else if(act==="fav"){
           if(state.fav[it.key]){ delete state.fav[it.key]; toast("已取消收藏"); }
           else { state.fav[it.key]=true; toast("已收藏 ⭐"); }
@@ -2332,6 +2436,25 @@
       </div>
       <p class="af-tip">存档内容：学习进度、打卡、习惯、复习记录、后台素材与所有内容修改。最多保留 ${ARCHIVE_MAX} 份，超出时自动淘汰最早的「自动」存档；手动存档优先保留。每天首次打开网站会自动存一份。</p>
 
+      <div class="sec-title">📅 学习板块排程（学习的始终）<small>为每个「学科·类型」设定开启、开始日、结束日与每周频次；首页将显示进度与起止，系统按设定循序渐进排课</small></div>
+      <div class="sched-list">
+        ${CHECKIN_TYPES.filter(ct=>allSubjects().includes(ct.subject)).map(({subject,type})=>{
+          const k=checkinKey(subject,type);
+          const sp=sectionPlanOf(k);
+          const on=checkinOn(subject,type);
+          const cnt=poolFor(subject,type).length;
+          if(!cnt) return "";
+          return `<div class="sched-item">
+            <label class="sched-on"><input type="checkbox" data-sched-on="${esc(k)}" ${on?"checked":""}/> <b>${esc(subject)}·${esc(type)}</b></label>
+            <label>开始<input type="date" data-sched-start="${esc(k)}" value="${esc(sp.start||"")}"/></label>
+            <label>结束<input type="date" data-sched-end="${esc(k)}" value="${esc(sp.end||"")}"/></label>
+            <label>每周频次<input type="number" min="1" max="7" data-sched-freq="${esc(k)}" value="${sp.freq||weekFreqOf(subject,type)}"/></label>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="chips"><button class="btn primary" id="schedSave">💾 保存排程</button></div>
+      <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>
+
       <div class="sec-title">💾 数据备份（导出 / 导入文件）<small>把全部数据（含后台素材、七年级英语词库等）存成文件，换设备 / 清缓存前请先备份</small></div>
       <div class="chips">
         <button class="btn primary" id="btnExport">⬇️ 导出备份文件</button>
@@ -2416,6 +2539,26 @@
     const btnImport=$("#btnImport"), impFile=$("#impFile");
     if(btnImport) btnImport.onclick=()=>{ if(impFile) impFile.click(); };
     if(impFile) impFile.onchange=()=>{ const f=impFile.files&&impFile.files[0]; if(f) importBackupFile(f); if(impFile) impFile.value=""; };
+    // 学习板块排程：保存每个板块的开启 / 起止日 / 每周频次
+    const schedSave=$("#schedSave");
+    if(schedSave) schedSave.onclick=()=>{
+      state.sectionPlan = state.sectionPlan || {};
+      state.checkin = state.checkin || {};
+      document.querySelectorAll("[data-sched-on]").forEach(cb=>{
+        const k=cb.dataset.schedOn;
+        const start=(document.querySelector('[data-sched-start="'+CSS.escape(k)+'"]')||{}).value||"";
+        const end=(document.querySelector('[data-sched-end="'+CSS.escape(k)+'"]')||{}).value||"";
+        const freqRaw=(document.querySelector('[data-sched-freq="'+CSS.escape(k)+'"]')||{}).value||"";
+        const freq=parseInt(freqRaw,10);
+        state.checkin[k] = !!cb.checked;                 // 开启/关闭
+        if(!start && !end && (!freq||isNaN(freq))){ delete state.sectionPlan[k]; }
+        else { state.sectionPlan[k] = {
+          start: start||"", end: end||"",
+          freq: (freq>=1&&freq<=7)?freq:undefined
+        }; }
+      });
+      save(); toast("已保存学习板块排程 📅"); renderAdmin(); renderHome(); if(view.name==="week") renderWeek();
+    };
     // 后台口令：修改 / 退出登录
     const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
     if(bLogout) bLogout.onclick=()=>{ state.adminAuthed=false; save(); toast("已退出登录"); go("home"); };
@@ -2635,7 +2778,8 @@
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
-      openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport
+      openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
+      getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt, get state(){ return state; }
     };
   }
 })();
