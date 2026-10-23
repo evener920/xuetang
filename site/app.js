@@ -1742,7 +1742,9 @@
 
   /* ---------- 资源页（与后台平级）：站内全部内置内容，按 学科×年级×类型 交叉分类 ---------- */
   function biData(){
-    const builtins = ALL.filter(x=>/^(extra|fmq|dlq|poem|idiom|word|gal):/.test(x.key));
+    // 资源页展示站内全部内容：内置条目（诗词/成语/单词/动画/教材）+ 已导入/后台添加的内容（如英语阅读、历史指南）
+    // 按 学科 × 年级 × 类型 交叉归类；后台只是管理入口（增删改），内容主展示位就在这里。
+    const builtins = ALL.filter(x=>x.key!=="practice:maththought" && !/^mtq:/.test(x.key));
     // 联动筛选：每个维度的候选与计数，都在「另外两个维度已选条件」的范围内计算
     const matchExcept = except => builtins.filter(x=>{
       if(except!=="subj"  && biView.subj !=="全部" && x.subject!==biView.subj)  return false;
@@ -1783,8 +1785,8 @@
     const D = biData();
     const ovCnt = Object.keys(state.overrides||{}).length;
     el.innerHTML = `
-      <div class="subj-head"><h2>📚 资源</h2><span class="cnt">站内全部内置内容 ${D.builtins.length} 条 · 按 学科 × 年级 × 类型 交叉筛选</span></div>
-      <p class="subj-desc">这里列出站内所有现成内容（诗词 / 成语 / 单词 / 动画 / 数学教材 / 科学人文启蒙）。点「✏️ 修改」即可改内容，改过的会标「已改」，点「⤺」随时还原原文；修改只存在本机浏览器，不会写回代码仓库。</p>
+      <div class="subj-head"><h2>📚 资源</h2><span class="cnt">站内全部内容 ${D.builtins.length} 条（内置 + 已导入/添加）· 按 学科 × 年级 × 类型 交叉筛选</span></div>
+      <p class="subj-desc">这里列出站内所有内容：内置的诗词 / 成语 / 单词 / 动画 / 数学教材，以及你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）。全部按 学科 × 年级 × 类型 归类展示，点「✏️ 修改」即可改内容，改过的会标「已改」，点「⤺」随时还原。后台只负责增删改的管理，内容的正常浏览就在这里。修改只存在本机浏览器，不会写回代码仓库。</p>
       <div class="chips">
         <span class="lbl">学科：</span>
         ${D.subjChips.map(([s,c])=>`<button class="chip ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
@@ -2274,7 +2276,7 @@
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
-      cardHTML, sanitizeRich, stripTags, seedDefaultContent
+      cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, get biView(){ return biView; }
     };
   }
 })();
