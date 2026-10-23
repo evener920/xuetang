@@ -393,6 +393,45 @@
   }
   if(!state.admin || !state.admin.hash) setAdminPassword("123456"); // 默认口令 admin / 123456
   state.adminAuthed = !!state.adminAuthed; // 登录状态（本机保持，可退出）
+  /* ---------- 存档与版本（本机快照 · 可回退/撤回） ---------- */
+  const ARCHIVE_KEY = "xuetang_archives_v1"; // 与主数据分开存，避免互相挤占
+  const ARCHIVE_MAX = 12;
+  function loadArchives(){ try{ return JSON.parse(localStorage.getItem(ARCHIVE_KEY)) || []; }catch(e){ return []; } }
+  function saveArchives(a){
+    try{ localStorage.setItem(ARCHIVE_KEY, JSON.stringify(a)); }
+    catch(e){ toast("存档失败：浏览器本地空间不足，请先删除一些旧存档"); }
+  }
+  function archiveCreate(note, auto){
+    const list = loadArchives();
+    const snap = JSON.parse(JSON.stringify(state));
+    const now = new Date();
+    list.unshift({
+      t: fmt(now)+" "+now.toTimeString().slice(0,5),
+      note: note||"", auto: !!auto,
+      size: JSON.stringify(snap).length, state: snap
+    });
+    while(list.length > ARCHIVE_MAX){ // 超量：优先淘汰最早的「自动」存档，手动存档尽量保留
+      const autos = list.map(x=>x.auto);
+      let i = autos.lastIndexOf(true);
+      if(i<=0) i = list.length-1;
+      if(i<0) break;
+      list.splice(i,1);
+    }
+    saveArchives(list);
+    return list;
+  }
+  function archiveRestore(i){
+    const list = loadArchives();
+    const a = list[i]; if(!a) return;
+    archiveCreate("还原「"+a.t+" "+(a.note||"")+"」前的自动备份", true); // 先备份当前 → 还原可随时撤销
+    const keepAdmin = state.admin, keepAuthed = state.adminAuthed; // 登录口令不随存档回退
+    const snap = JSON.parse(JSON.stringify(a.state));
+    Object.keys(state).forEach(k=>{ delete state[k]; });
+    Object.assign(state, snap);
+    state.admin = keepAdmin; state.adminAuthed = keepAuthed;
+    save(); rebuildAll(); render();
+    toast("已还原到 "+a.t+"（还原前已自动备份，可再次回退）");
+  }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
   const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz"];
@@ -664,26 +703,18 @@
     const reviews = dueReviews();
     const habits = state.habits || [];
     const habitDoneCnt = habits.filter(habitDone).length;
-    const reviewDoneCnt = reviews.filter(r=>{ const t=fmt(new Date()); return !!(state.reviewed[t]&&state.reviewed[t][r.key]); }).length;
     const allTasks = Object.keys(tg).reduce((acc,k)=>acc.concat(tg[k]||[]), []);
     const studyDone = allTasks.filter(t=>state.learned[t.key]).length;
-    const done = studyDone + habitDoneCnt + reviewDoneCnt;
-    const total = allTasks.length + habits.length + reviews.length;
+    const done = studyDone + habitDoneCnt;
+    const total = allTasks.length + habits.length;
     const pct = total ? Math.round(done/total*100) : 0;
     // 学期进度（90 天）
     const semDay = Math.max(1, dayDiff(state.semesterStart)+1);
     const semWeek = Math.ceil(semDay/7);
     const todayDow = d.getDay();
 
-    // 看板数据
     const learnedList = Object.keys(state.learned).map(k=>INDEX[k]).filter(Boolean);
     const todayList = learnedList.filter(it=>state.learned[it.key]===todayStr);
-    const weekList = learnedList.filter(it=>dayDiff(state.learned[it.key])<7);
-    const subjCount=(list,s)=>list.filter(it=>it.subject===s).length;
-    const SUBJ=["语文","数学","英语","科学","人文"];
-    const weekDays=[];
-    for(let i=6;i>=0;i--){ const dd=new Date(); dd.setDate(dd.getDate()-i); const ds=fmt(dd); weekDays.push({ds, c:learnedList.filter(it=>state.learned[it.key]===ds).length}); }
-    const wkDates = weekDatesMondayStart();
 
     // 热门标签（诗词标签词频 Top）
     const freq = {};
@@ -705,11 +736,9 @@
       }).join("");
       return blocks;
     }).join("");
-    if(!taskBlocks) taskBlocks = `<div class="placeholder" style="padding:20px 16px">当前未勾选任何打卡内容，点击下方「打卡范围」选择。</div>`;
+    if(!taskBlocks) taskBlocks = `<div class="placeholder" style="padding:20px 16px">当前未勾选任何打卡内容，去「📊 本周」页的「打卡范围」勾选。</div>`;
 
     const last = state.lastKey ? INDEX[state.lastKey] : null;
-    const learnedCount = Object.keys(state.learned).length;
-    const favCount = Object.keys(state.fav).length;
 
     el.innerHTML = `
       <div class="hero">
@@ -723,7 +752,7 @@
         </div>
       </div>
 
-      <div class="sec-title">⏰ 今日习惯 <small>${habitDoneCnt}/${habits.length} · 点击勾选，每天养成一点点</small></div>
+      <div class="sec-title">⏰ 今日习惯 <small>${habitDoneCnt}/${habits.length} · 点击勾选，每天养成一点点 · 周跟踪在「📊 本周」页</small></div>
       <div class="habit-list">
         ${habits.map(h=>`<div class="habit ${habitDone(h)?"on":""}" data-habit="${esc(h)}"><span class="hk">${habitDone(h)?"✓":"○"}</span><span class="hn">${esc(h)}</span><button class="hx" data-habit-del="${esc(h)}" title="删除该习惯">✕</button></div>`).join("")}
         <span style="flex:1"></span>
@@ -731,26 +760,70 @@
         <button class="chip" data-habit-add>＋ 添加</button>
       </div>
 
-      <div class="sec-title">✅ 习惯周跟踪 <small>本周（周一~周日）完成打卡情况 · 在上方勾选每日习惯</small></div>
-      ${habits.length?`<div class="habit-dash">
-        <div class="hd-head">
-          <div class="hd-name">习惯</div>
-          <div class="hd-grid">${WEEK_MON.map((d,i)=>`<div class="hd-dow ${wkDates[i]===todayStr?"today":""}">周${d}</div>`).join("")}</div>
-          <div class="hd-rate">本周完成率</div>
+      <div class="sec-title">📌 今日任务（按周计划） <small>周${WEEK[todayDow]} · 共 ${dayPlan.length} 类 · 点击卡片开始学习</small></div>
+      ${taskBlocks}
+
+      ${todayList.length?`
+        <div class="sec-title">✅ 今日完成 <small>已打卡 ${todayList.length} 项 · 点击复习</small></div>
+        <div class="task-grid">${todayList.map(t=>cardHTML(t)).join("")}</div>`
+        :`<div class="placeholder" style="padding:20px 16px">今天还没有打卡，从上方「今日任务」开始第一项吧 🚀</div>`}
+
+      ${reviews.length?`
+      <div class="sec-title">🔁 艾宾浩斯复习 <small>到期 ${reviews.length} 项 · 按遗忘曲线 1/2/4/7/15 天安排 · 全部记录在「📊 本周」页</small></div>
+      <div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`:""}
+
+      ${last?`
+      <div class="sec-title">▶ 继续学习 <small>上次打开</small></div>
+      <div class="task-grid">${cardHTML(last)}</div>`:""}
+
+      <div class="sec-title">🔥 热门标签 <small>来自 314 首诗词 · 点击直达专题</small></div>
+      <div class="tagcloud">${hot.map(t=>`<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>
+    `;
+  }
+
+  /* ---------- 本周页：复习 · 看板 · 周计划（与今日任务分页，避免首页过挤） ---------- */
+  function renderWeek(){
+    const el = $("#view-week");
+    const d = new Date();
+    const todayStr = fmt(d);
+    const reviews = dueReviews();
+    const habits = state.habits || [];
+    const habitDoneCnt = habits.filter(habitDone).length;
+    const reviewDoneCnt = reviews.filter(r=>!!(state.reviewed[todayStr]&&state.reviewed[todayStr][r.key])).length;
+    const tg = todayTasks();
+    const allTasks = Object.keys(tg).reduce((acc,k)=>acc.concat(tg[k]||[]), []);
+    const semDay = Math.max(1, dayDiff(state.semesterStart)+1);
+    const semWeek = Math.ceil(semDay/7);
+    const todayDow = d.getDay();
+
+    // 看板数据
+    const learnedList = Object.keys(state.learned).map(k=>INDEX[k]).filter(Boolean);
+    const todayList = learnedList.filter(it=>state.learned[it.key]===todayStr);
+    const weekList = learnedList.filter(it=>dayDiff(state.learned[it.key])<7);
+    const subjCount=(list,s)=>list.filter(it=>it.subject===s).length;
+    const SUBJ=["语文","数学","英语","科学","人文"];
+    const weekDays=[];
+    for(let i=6;i>=0;i--){ const dd=new Date(); dd.setDate(dd.getDate()-i); const ds=fmt(dd); weekDays.push({ds, c:learnedList.filter(it=>state.learned[it.key]===ds).length}); }
+    const wkDates = weekDatesMondayStart();
+
+    const learnedCount = Object.keys(state.learned).length;
+    const favCount = Object.keys(state.fav).length;
+
+    el.innerHTML = `
+      <div class="hero">
+        <div>
+          <h2>📊 本周学习</h2>
+          <p>${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 复习到期 ${reviews.length} 项（已完成 ${reviewDoneCnt}）</p>
         </div>
-        ${habits.map(h=>{
-          const ds=weekDatesMondayStart();
-          const cells=ds.map(d=>{ const done=!!(state.habitLog[d]&&state.habitLog[d][h]); return `<div class="hd-cell ${done?"on":""}">${done?"✓":""}</div>`; }).join("");
-          const doneCnt=ds.filter(d=>!!(state.habitLog[d]&&state.habitLog[d][h])).length;
-          const rate=Math.round(doneCnt/7*100);
-          return `<div class="hd-row">
-            <div class="hd-name" title="${esc(h)}">${esc(h)}</div>
-            <div class="hd-grid">${cells}</div>
-            <div class="hd-rate ${rate>=70?"good":rate>=40?"mid":"low"}">${rate}%</div>
-          </div>`;
-        }).join("")}
-      </div>`
-      :`<div class="placeholder" style="padding:14px 16px">还没有任何习惯，在上方输入框添加「房间卫生 / 早睡早起 / 学校作业」等，即可开始每日打卡与周跟踪。</div>`}
+        <div class="done" style="min-width:180px;">
+          今日复习 ${reviewDoneCnt} / ${reviews.length}
+          <div class="pbar"><div class="pfill" style="width:${reviews.length?Math.round(reviewDoneCnt/reviews.length*100):100}%"></div></div>
+        </div>
+      </div>
+
+      <div class="sec-title">🔁 艾宾浩斯复习 <small>${reviews.length?`到期 ${reviews.length} 项 · 按遗忘曲线 1/2/4/7/15 天安排`:"今天没有到期复习，保持就好"}</small></div>
+      ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
+        :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
       <div class="stat-strip">
         <div class="stat"><div class="num">${POEMS.length + CUSTOM.filter(c=>c.type==="诗词").length}</div><div class="lbl">诗词</div></div>
@@ -768,30 +841,29 @@
           <div class="dc-row"><span>今日打卡</span><b>${subjCount(todayList,s)}</b></div>
           <div class="dc-row"><span>本周打卡</span><b>${subjCount(weekList,s)}</b></div></div>`).join("")}
       </div>
-      ${todayList.length?`
-        <div class="sec-title">✅ 今日完成 <small>已打卡 ${todayList.length} 项 · 点击复习</small></div>
-        <div class="task-grid">${todayList.map(t=>cardHTML(t)).join("")}</div>`
-        :`<div class="placeholder" style="padding:20px 16px">今天还没有打卡，去下方「今日任务」开始第一项吧 🚀</div>`}
       <div class="sec-title">📅 本周学习 <small>近 7 天打卡分布 · 今天高亮</small></div>
       <div class="week-bar">${weekDays.map(w=>`<div class="wk ${w.ds===todayStr?"today":""}"><div class="wk-bar" style="height:${w.c*16+4}px"></div><div class="wk-c">${w.c}</div><div class="wk-d">${w.ds===todayStr?"今天":w.ds.slice(5)}</div></div>`).join("")}</div>
 
-      <div class="chips cn-scope">
-        <span class="lbl">打卡范围：</span>
-        ${CHECKIN_TYPES.map(({subject,type})=>{
-          const k=checkinKey(subject,type);
-          const on=checkinOn(subject,type);
-          return `<button class="chip ${on?"on":""}" style="${subjectStyle(subject,on)}" data-checkin="${esc(k)}" title="${esc(subject)}·${esc(type)}">${esc(subject)}·${esc(type)}</button>`;
+      <div class="sec-title">✅ 习惯周跟踪 <small>本周（周一~周日）完成情况 ${habitDoneCnt}/${habits.length} 已完成今天 · 每日勾选在「首页」</small></div>
+      ${habits.length?`<div class="habit-dash">
+        <div class="hd-head">
+          <div class="hd-name">习惯</div>
+          <div class="hd-grid">${WEEK_MON.map((d,i)=>`<div class="hd-dow ${wkDates[i]===todayStr?"today":""}">周${d}</div>`).join("")}</div>
+          <div class="hd-rate">本周完成率</div>
+        </div>
+        ${habits.map(h=>{
+          const ds=weekDatesMondayStart();
+          const cells=ds.map(dd=>{ const done=!!(state.habitLog[dd]&&state.habitLog[dd][h]); return `<div class="hd-cell ${done?"on":""}">${done?"✓":""}</div>`; }).join("");
+          const doneCnt=ds.filter(dd=>!!(state.habitLog[dd]&&state.habitLog[dd][h])).length;
+          const rate=Math.round(doneCnt/7*100);
+          return `<div class="hd-row">
+            <div class="hd-name" title="${esc(h)}">${esc(h)}</div>
+            <div class="hd-grid">${cells}</div>
+            <div class="hd-rate ${rate>=70?"good":rate>=40?"mid":"low"}">${rate}%</div>
+          </div>`;
         }).join("")}
-        <span style="flex:1"></span>
-        <span class="af-tip">总开关：关闭的「学科·类型」不参与周计划安排（已存本地）</span>
-      </div>
-
-      <div class="sec-title">📌 今日任务（按周计划） <small>周${WEEK[todayDow]} · 共 ${dayPlan.length} 类 · 点击卡片开始学习</small></div>
-      ${taskBlocks}
-
-      <div class="sec-title">🔁 艾宾浩斯复习 <small>${reviews.length?`到期 ${reviews.length} 项 · 按遗忘曲线 1/2/4/7/15 天安排`:"今天没有到期复习，保持就好"}</small></div>
-      ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
-        :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
+      </div>`
+      :`<div class="placeholder" style="padding:14px 16px">还没有任何习惯，去「首页」的「今日习惯」添加。</div>`}
 
       <div class="sec-title">🗓 本周计划 <small>以周为单位均匀安排 · 主课多、副课少 · 周一至周日 · 今天已高亮</small></div>
       <div class="week-plan">
@@ -804,12 +876,16 @@
         </div>`; }).join("")}
       </div>
 
-      ${last?`
-      <div class="sec-title">▶ 继续学习 <small>上次打开</small></div>
-      <div class="task-grid">${cardHTML(last)}</div>`:""}
-
-      <div class="sec-title">🔥 热门标签 <small>来自 314 首诗词 · 点击直达专题</small></div>
-      <div class="tagcloud">${hot.map(t=>`<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>
+      <div class="chips cn-scope">
+        <span class="lbl">打卡范围：</span>
+        ${CHECKIN_TYPES.map(({subject,type})=>{
+          const k=checkinKey(subject,type);
+          const on=checkinOn(subject,type);
+          return `<button class="chip ${on?"on":""}" style="${subjectStyle(subject,on)}" data-checkin="${esc(k)}" title="${esc(subject)}·${esc(type)}">${esc(subject)}·${esc(type)}</button>`;
+        }).join("")}
+        <span style="flex:1"></span>
+        <span class="af-tip">总开关：关闭的「学科·类型」不参与周计划安排（已存本地）</span>
+      </div>
     `;
   }
 
@@ -1444,6 +1520,20 @@
         }).join("")
         : '<div class="placeholder"><div class="big">📝</div>还没有修改过内置内容；在任意内置条目弹窗点「✏️ 编辑内容」即可覆盖</div>'}
       </div>
+
+      <div class="sec-title">🗄 存档与版本（${loadArchives().length}）<small>本机快照 · 可随时回退 · 还原前会自动再备份一份（撤回有据）</small></div>
+      <div class="chips"><button class="btn primary" id="arcNow">💾 立即存档</button></div>
+      <div class="admin-list">
+        ${(()=>{ const arcs=loadArchives(); return arcs.length? arcs.map((a,i)=>`<div class="admin-item">
+            <div class="ai-main"><b>${esc(a.t)}</b> <span class="badge" style="background:${a.auto?"#f1f5f9":"#eef2ff"};color:${a.auto?"#475569":"#3730a3"}">${a.auto?"自动":"手动"}</span> <span style="font-size:13px;color:var(--muted)">${esc(a.note||"")}</span> <span style="font-size:12px;color:var(--muted)">${(a.size/1024).toFixed(1)} KB</span></div>
+            <div style="display:flex;gap:6px;flex:0 0 auto">
+              <button class="btn" data-arc-restore="${i}">⤺ 还原此版本</button>
+              <button class="va-del" data-arc-del="${i}" title="删除存档">✕</button>
+            </div>
+          </div>`).join("")
+        : '<div class="placeholder"><div class="big">🗄</div>还没有存档；点上方「💾 立即存档」保存当前全部进度</div>'; })()}
+      </div>
+      <p class="af-tip">存档内容：学习进度、打卡、习惯、复习记录、后台素材与所有内容修改。最多保留 ${ARCHIVE_MAX} 份，超出时自动淘汰最早的「自动」存档；手动存档优先保留。每天首次打开网站会自动存一份。</p>
     `;
     // 内置教材：搜索过滤 / 修改 / 还原 / 显示更多
     const biSearch=$("#biSearch");
@@ -1464,6 +1554,17 @@
     }));
     const biMore=$("#biMore");
     if(biMore) biMore.addEventListener("click", ()=>{ biView.limit+=30; renderAdmin(); });
+    // 存档与版本：立即存档 / 还原 / 删除
+    const arcNow=$("#arcNow");
+    if(arcNow) arcNow.onclick=()=>{ archiveCreate("手动存档"); renderAdmin(); toast("已存档 💾 可随时在下方还原"); };
+    el.querySelectorAll("[data-arc-restore]").forEach(b=>b.onclick=()=>{
+      const arcs=loadArchives(); const a=arcs[parseInt(b.dataset.arcRestore,10)]; if(!a) return;
+      if(!confirm("把全部数据还原到 "+a.t+" "+(a.note||"")+" ？\n当前状态会先自动备份一份，可随时再退回来。")) return;
+      archiveRestore(parseInt(b.dataset.arcRestore,10));
+    });
+    el.querySelectorAll("[data-arc-del]").forEach(b=>b.onclick=()=>{
+      const arcs=loadArchives(); arcs.splice(parseInt(b.dataset.arcDel,10),1); saveArchives(arcs); renderAdmin(); toast("已删除该存档");
+    });
     // 后台口令：修改 / 退出登录
     const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
     if(bLogout) bLogout.onclick=()=>{ state.adminAuthed=false; save(); toast("已退出登录"); go("home"); };
@@ -1484,7 +1585,7 @@
       });
       state.custom.push(item); save(); rebuildAll(); cnView=null; gnView[subSel.value]=gnView[subSel.value]||{};
       toast("已添加并自动归类 🎉"); renderAdmin();
-      if(view.name==="home") renderHome(); else if(view.name==="subject") renderSubject(view.param);
+      refreshView();
     };
     $("#afClear").onclick=()=>{ ["afTitle","afSub","afBody","afTags","afVideos","afUnit"].forEach(i=>$("#"+i).value=""); };
     // 批量导入
@@ -1503,30 +1604,34 @@
       if(!added){ toast("没有可导入的条目"); return; }
       save(); rebuildAll(); cnView=null;
       toast(`已批量导入 ${added} 条 🎉`); renderAdmin();
-      if(view.name==="home") renderHome(); else if(view.name==="subject") renderSubject(view.param);
+      refreshView();
     };
     // 删除
     el.querySelectorAll("[data-del-custom]").forEach(b=>b.onclick=()=>{
       state.custom=state.custom.filter(x=>x.key!==b.dataset.delCustom); save(); rebuildAll(); cnView=null;
       toast("已删除"); renderAdmin();
-      if(view.name==="home") renderHome(); else if(view.name==="subject") renderSubject(view.param);
+      refreshView();
     });
     // 还原被覆盖的内置内容
     el.querySelectorAll("[data-revert-custom]").forEach(b=>b.onclick=()=>{
       const k=b.dataset.revertCustom; if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原内置内容 ⤺"); renderAdmin(); }
-      if(view.name==="home") renderHome(); else if(view.name==="subject") renderSubject(view.param);
+      refreshView();
     });
   }
 
   /* ---------- 总渲染 ---------- */
-  function render(){
-    ["home","subject","tag","search","admin"].forEach(n=>{ $("#view-"+n).hidden = (n!==view.name); });
-    setNav(view.name);
+  function refreshView(){
     if(view.name==="home") renderHome();
+    else if(view.name==="week") renderWeek();
     else if(view.name==="subject") renderSubject(view.param);
     else if(view.name==="tag") renderTag(view.param);
     else if(view.name==="search") renderSearch(view.param);
     else if(view.name==="admin"){ if(state.adminAuthed) renderAdmin(); else renderAdminLogin(); }
+  }
+  function render(){
+    ["home","week","subject","tag","search","admin"].forEach(n=>{ $("#view-"+n).hidden = (n!==view.name); });
+    setNav(view.name);
+    refreshView();
   }
 
   /* ---------- 事件绑定 ---------- */
@@ -1636,13 +1741,13 @@
     const sg=e.target.closest("[data-switch-grade]");
     if(sg){ state.grade=sg.dataset.switchGrade; gs.value=state.grade; save(); render(); toast("已切换到 "+state.grade); }
     const ci=e.target.closest("[data-checkin]");
-    if(ci){ const k=ci.dataset.checkin; state.checkin[k] = !checkinOn(k.split("·")[0], k.split("·")[1]); save(); renderHome(); return; }
+    if(ci){ const k=ci.dataset.checkin; state.checkin[k] = !checkinOn(k.split("·")[0], k.split("·")[1]); save(); refreshView(); return; }
     const hdel=e.target.closest("[data-habit-del]");
-    if(hdel){ const h=hdel.dataset.habitDel; state.habits=state.habits.filter(x=>x!==h); save(); toast("已删除习惯："+h); renderHome(); return; }
+    if(hdel){ const h=hdel.dataset.habitDel; state.habits=state.habits.filter(x=>x!==h); save(); toast("已删除习惯："+h); refreshView(); return; }
     const hadd=e.target.closest("[data-habit-add]");
-    if(hadd){ const inp=$("#habitNew"); const v=((inp&&inp.value)||"").trim(); if(v&&!state.habits.includes(v)){ state.habits.push(v); save(); toast("已添加习惯："+v); } renderHome(); return; }
+    if(hadd){ const inp=$("#habitNew"); const v=((inp&&inp.value)||"").trim(); if(v&&!state.habits.includes(v)){ state.habits.push(v); save(); toast("已添加习惯："+v); } refreshView(); return; }
     const hb=e.target.closest("[data-habit]");
-    if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else state.habitLog[t][h]=true; save(); renderHome(); return; }
+    if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else state.habitLog[t][h]=true; save(); refreshView(); return; }
   });
   // 学科内搜索（input 事件需单独绑定以保持焦点）
   document.querySelector("main").addEventListener("input", e=>{
@@ -1663,6 +1768,7 @@
   document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
 
   /* ---------- 启动 ---------- */
+  { const _a=loadArchives(); if(!_a.length || (_a[0].t||"").slice(0,10)!==fmt(new Date())) archiveCreate("每日自动存档", true); }
   render();
   // 测试钩子（仅当显式开启 window.__ENABLE_TEST__ 时挂载，正常站点无副作用）
   if(typeof window!=="undefined" && window.__ENABLE_TEST__){
@@ -1673,6 +1779,7 @@
       rebuildAll, switchStudent, applyPerStudent, syncPerStudent, save,
       openModal, mathBodyHTML, effBody, renderAdmin, renderAdminLogin, renderAdminPwdForm,
       pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
+      archiveCreate, archiveRestore, loadArchives, renderWeek, refreshView,
       todayTasks, poolFor, splitSections, weekDatesMondayStart
     };
   }
