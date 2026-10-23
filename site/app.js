@@ -483,6 +483,36 @@
     save();
     return -e.n;
   }
+  // 需后台权限的操作（如撤销扣分）：未登录则弹家长口令验证，验证通过后再执行回调
+  function requireAdminThen(cb){
+    if(state.adminAuthed){ cb(); return; }
+    const body=$("#modal-body");
+    body.innerHTML = `
+      <div class="m-type"><span class="badge" style="background:#fef3c7;color:#b45309">🔒 需要家长权限</span></div>
+      <h3 class="m-title">撤销扣分 · 家长确认</h3>
+      <p class="subj-desc">此操作会影响积分，请输入内容后台口令（默认 admin / 123456）进行确认。</p>
+      <div class="edit-form">
+        <label class="ef-row">账号<input id="paUser" value="${esc(state.admin.user)}" /></label>
+        <label class="ef-row">密码<input id="paPwd" type="password" placeholder="请输入密码" /></label>
+        <div class="af-actions">
+          <button class="btn primary" data-act="pa-ok">确认撤销</button>
+          <button class="btn" data-act="pa-cancel">取消</button>
+        </div>
+      </div>`;
+    const modal=$("#modal"); modal.hidden=false; document.body.style.overflow="hidden";
+    const ok=()=>{
+      const u=$("#paUser").value.trim(), p=$("#paPwd").value;
+      if(!p){ toast("请输入密码"); return; }
+      if(u!==state.admin.user || pwHash(p,state.admin.salt)!==state.admin.hash){ toast("账号或密码不正确"); $("#paPwd").value=""; $("#paPwd").focus(); return; }
+      state.adminAuthed=true; save(); closeModal(); toast("家长验证通过 ✅"); cb();
+    };
+    body.querySelectorAll("[data-act]").forEach(btn=>btn.addEventListener("click", ()=>{
+      const act=btn.dataset.act;
+      if(act==="pa-cancel"){ closeModal(); return; }
+      if(act==="pa-ok"){ ok(); }
+    }));
+    const pwd=$("#paPwd"); if(pwd) pwd.addEventListener("keydown", e=>{ if(e.key==="Enter") ok(); });
+  }
   function todayStrNow(){ return fmt(new Date()); }
   function pointToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n>0).reduce((a,b)=>a+b.n,0); }
   function pointWeek(){ const ws=weekDatesMondayStart(); return (state.pointLog||[]).filter(x=>x.n>0 && ws.indexOf(x.t)>=0).reduce((a,b)=>a+b.n,0); }
@@ -966,6 +996,22 @@
         <input id="habitNew" class="search-input" style="width:150px" placeholder="添加习惯…" />
         <button class="chip" data-habit-add>＋ 添加</button>
       </div>
+
+      ${penaltyLogToday().length?`
+      <div class="sec-title">⚠️ 今日行为扣分 <small>只扣行为不扣学习 · 当天改正可撤销返还（撤销需家长权限）</small></div>
+      <div class="pen-home-list">
+        ${penaltyLogToday().map(e=>{
+          const pid=String(e.hook||"").split(":")[1];
+          const p=(state.penalties||[]).find(x=>x.id===pid) || DEFAULT_PENALTIES.find(x=>x.id===pid);
+          return `<div class="pen-home-item">
+            <span class="pen-ic">${esc((p&&p.icon)||"⚠️")}</span>
+            <span class="pen-nm">${esc((e.note||"").replace("行为扣分 · ",""))}</span>
+            <span class="pen-val">-${ -e.n }</span>
+            <button class="btn" data-home-pen-undo="${esc(e.hook||"")}" title="孩子已改正 → 撤销返还（需家长权限）">✅ 撤销</button>
+          </div>`;
+        }).join("")}
+      </div>`
+      :`<div class="sec-title">⚠️ 今日行为扣分 <small>暂无 · 今天表现不错 👍</small></div>`}
 
       <div class="sec-title">📌 今日任务（按周计划） <small>周${WEEK[todayDow]} · 共 ${dayPlan.length} 类 · 点击卡片开始学习</small></div>
       ${taskBlocks}
@@ -2240,6 +2286,8 @@
     if(hadd){ const inp=$("#habitNew"); const v=((inp&&inp.value)||"").trim(); if(v&&!state.habits.includes(v)){ state.habits.push(v); save(); toast("已添加习惯："+v); } refreshView(); return; }
     const hb=e.target.closest("[data-habit]");
     if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else { state.habitLog[t][h]=true; awardQuiet(POINT_RULES.habit, "习惯打卡 · "+h, "habit:"+t+":"+h, true); settleBonuses(); } save(); refreshView(); return; }
+    const hpu=e.target.closest("[data-home-pen-undo]");
+    if(hpu){ const hook=hpu.dataset.homePenUndo; requireAdminThen(()=>{ const got=undoPenalty(hook); if(got) toast("已改正，返还 +"+got+" 分 👍"); refreshView(); }); return; }
   });
   // 学科内搜索（input 事件需单独绑定以保持焦点）
   document.querySelector("main").addEventListener("input", e=>{
@@ -2274,7 +2322,7 @@
       archiveCreate, archiveRestore, loadArchives, renderWeek, renderHome, refreshView,
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
-      penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
+      penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES, requireAdminThen,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, get biView(){ return biView; }
     };

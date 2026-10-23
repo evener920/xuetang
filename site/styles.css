@@ -333,6 +333,13 @@ label.af-block textarea:focus,label.af-block input:focus{border-color:var(--acce
 }
 .habit .hx:hover{opacity:1;color:var(--pink);}
 
+/* ===== 首页 · 今日行为扣分 ===== */
+.pen-home-list{display:flex;flex-direction:column;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:6px;}
+.pen-home-item{display:flex;align-items:center;gap:10px;font-size:14px;}
+.pen-home-item .pen-ic{font-size:16px;}
+.pen-home-item .pen-nm{flex:1;color:var(--fg);}
+.pen-home-item .pen-val{font-weight:700;color:#b91c1c;}
+
 /* ===== 本周计划总览 ===== */
 .week-plan{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:6px;}
 .wp-day{
