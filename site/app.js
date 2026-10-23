@@ -598,6 +598,14 @@
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function fmt(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
   function dateSeed(){ const d=new Date(); return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate(); }
+  // 今日内容选取起点 = 日期 + 当前年级 + 当前学生。
+  // 这样「今日学习」的诗词 / 成语 / 文言 / 数学等内容会随年级与学生切换而改变（英语单词本就按年级过滤）。
+  function todaySeed(){
+    let h=0; const s=(state.grade||"")+"#"+(state.currentStudent||"");
+    for(let i=0;i<s.length;i++){ h=((h*131) + s.charCodeAt(i)) >>> 0; }
+    return (dateSeed() + h) >>> 0;
+  }
+  function curStudentName(){ const s=state.students && state.students[state.currentStudent]; return (s&&s.name)?s.name:"学生"; }
   const WEEK = ["日","一","二","三","四","五","六"];
   function dayDiff(dateStr){ try{ return Math.floor((Date.now()-new Date(dateStr+"T00:00:00"))/86400000); }catch(e){ return 999; } }
   function pick(arr, n, seed){
@@ -764,7 +772,10 @@
   function poolFor(subject, type){
     const cus = CUSTOM.filter(c=>c.subject===subject && c.type===type);
     if(subject==="语文" && type==="诗词")  return [...POEMS, ...cus];
-    if(subject==="语文" && type==="成语")  return [...IDIOMS, ...cus];
+    if(subject==="语文" && type==="成语"){
+      const g = IDIOMS.filter(i=>(i.grade||"")===state.grade);
+      return [...(g.length?g:IDIOMS), ...cus]; // 有本年级成语则用本年级；否则回退到全学段共享成语池
+    }
     if(subject==="语文" && type==="文言")  return [...WENYAN, ...cus];
     if(subject==="语文" && type==="成语动画廊") return [...GALLERY, ...cus];
     if(subject==="英语" && type==="单词")  return [...WORDS, ...cus];
@@ -775,7 +786,7 @@
   /* ---------- 首页：今日学习 ---------- */
   // 今日任务：只包含今天（按周计划）排到的「学科·类型」，每类型按配额取条目（控制每日总量）
   function todayTasks(){
-    const seed = dateSeed();
+    const seed = todaySeed();
     const day = new Date().getDay();
     const plan = weekPlan();
     const tasks = {}; // key=学科·类型 → 今日条目数组
@@ -870,7 +881,7 @@
       <div class="hero">
         <div>
           <h2>今日学习</h2>
-          <p>${d.getMonth()+1} 月 ${d.getDate()} 日 星期${WEEK[d.getDay()]} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 共 ${total} 项任务</p>
+          <p>${d.getMonth()+1} 月 ${d.getDate()} 日 星期${WEEK[d.getDay()]} · 🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 共 ${total} 项任务</p>
           <div style="margin-top:6px"><span class="badge" style="background:#fef3c7;color:#b45309">🏆 今日 +${pointToday()} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
         </div>
         <div class="done" style="min-width:180px;">
@@ -903,7 +914,7 @@
       <div class="sec-title">▶ 继续学习 <small>上次打开</small></div>
       <div class="task-grid">${cardHTML(last)}</div>`:""}
 
-      <div class="sec-title">🔥 热门标签 <small>来自 314 首诗词 · 点击直达专题</small></div>
+      <div class="sec-title">🔥 热门标签 <small>来自 ${POEMS.length} 首诗词 · 点击直达专题</small></div>
       <div class="tagcloud">${hot.map(t=>`<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>
     `;
   }
@@ -940,7 +951,7 @@
       <div class="hero">
         <div>
           <h2>📊 本周学习</h2>
-          <p>${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 复习到期 ${reviews.length} 项（已完成 ${reviewDoneCnt}）</p>
+          <p>🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 复习到期 ${reviews.length} 项（已完成 ${reviewDoneCnt}）</p>
         </div>
         <div class="done" style="min-width:180px;">
           今日复习 ${reviewDoneCnt} / ${reviews.length}
