@@ -687,9 +687,16 @@
   function seedDefaultContent(){
     const seeds = [
       {flag:"historyGuide", src:(typeof window!=="undefined" && window.HISTORY_GUIDE_7)||[]},
-      {flag:"englishReading4", src:(typeof window!=="undefined" && window.ENGLISH_READING_4)||[]}
+      {flag:"englishReading4v2", src:(typeof window!=="undefined" && window.ENGLISH_READING_4)||[]}
     ];
     state.seeded = state.seeded || {};
+    // 迁移：清理旧版「一页两篇」英语阅读卡（rd4:p*），避免用户本地新旧重复、新版不显示
+    const oldReadingKeys = new Set((state.custom||[]).filter(x=>x.key && /^rd4:p\d+$/.test(x.key)).map(x=>x.key));
+    if(oldReadingKeys.size){
+      state.custom = (state.custom||[]).filter(x=>!(x.key && oldReadingKeys.has(x.key)));
+      state.seeded.englishReading4 = false;   // 旧版标记作废
+      state.seeded.englishReading4v2 = false;  // 确保重新注入新版
+    }
     const have = new Set((state.custom||[]).map(x=>x.key));
     seeds.forEach(s=>{
       if(state.seeded[s.flag]) return;
