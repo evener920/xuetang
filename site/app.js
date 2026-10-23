@@ -820,20 +820,34 @@
     if(/channels\.weixin\.qq\.com/i.test(url)) return {type:"link", raw:url, src:"channels"};
     return {type:"link", raw:url, src:"web"};
   }
-  // 抖音短链解析（尽力而为）：经公共 CORS 代理取跳转目标，提取视频 id
+  // 抖音短链解析（尽力而为）：经公共 CORS 代理取跳转目标，提取视频 id。
+  // 最可靠来源是 allorigins /get 返回的 status.url（= 最终跳转地址，天然含 /video/数字）。
   async function resolveDouyinShort(raw){
+    const idOf = s=>{
+      const m = s.match(/douyin\.com\/(?:video|note)\/(\d{10,25})/)
+             || s.match(/iesdouyin\.com\/[^"'\s]*\/(?:video|note)\/(\d{10,25})/)
+             || s.match(/\/share\/(?:video|note)\/(\d{10,25})/)
+             || s.match(/"aweme_id":"(\d{10,25})"/);
+      return m ? m[1] : null;
+    };
+    const enc = encodeURIComponent(raw);
     const targets = [
-      "https://api.allorigins.win/get?url=" + encodeURIComponent(raw),
-      "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(raw)
+      "https://api.allorigins.win/get?url=" + enc,
+      "https://api.allorigins.win/raw?url=" + enc,
+      "https://corsproxy.io/?url=" + enc,
+      "https://api.codetabs.com/v1/proxy?quest=" + enc
     ];
     for(const t of targets){
       try{
-        const r = await fetch(t);
+        const ctl = new AbortController();
+        const tm = setTimeout(()=>ctl.abort(), 8000);   // 单个代理最多等 8 秒，避免卡住弹窗
+        const r = await fetch(t, { signal: ctl.signal });
+        clearTimeout(tm);
         const txt = await r.text();
         let blob = txt;
         try{ const j=JSON.parse(txt); blob = ((j.contents||"") + " " + ((j.status&&j.status.url)||"")); }catch(e){}
-        const m = blob.match(/douyin\.com\/(?:video|note)\/(\d+)/) || blob.match(/iesdouyin\.com\/[^"'\s]*\/(?:video|note)\/(\d+)/);
-        if(m) return "https://www.douyin.com/video/" + m[1];
+        const id = idOf(blob);
+        if(id) return "https://www.douyin.com/video/" + id;
       }catch(e){}
     }
     return null;
@@ -1684,7 +1698,7 @@
           <input id="vidUrl" class="search-input" style="flex:1;min-width:180px" placeholder="粘贴视频链接或本地路径（videos/xxx.mp4）" />
           <button class="btn primary" data-act="savevideo">保存视频</button>
         </div>
-        <p class="va-tip">自动解析并站内播放：B站视频页/播放器链接、抖音视频页（douyin.com/video/…，短链会自动尝试解析）、腾讯视频、YouTube、本地视频文件（可放入 site/videos/ 后填相对路径）；仅视频号等个别平台需新窗口打开。同一内容可挂多个视频。</p>
+        <p class="va-tip">自动解析并站内播放：B站视频页/播放器链接、抖音视频页（douyin.com/video/…）、腾讯视频、YouTube、本地视频文件（可放入 site/videos/ 后填相对路径）。抖音短链会自动尝试解析，但依赖公共代理、偶尔失败 —— 失败时用浏览器打开短链，把地址栏的完整链接（douyin.com/video/数字）粘进来即可 100% 站内竖屏播放。仅视频号等个别平台需新窗口打开。同一内容可挂多个视频。</p>
       </div>
     `;
     $("#modal").hidden=false;
@@ -1733,7 +1747,10 @@
           const pushAndRefresh=(u)=>{ (state.videos[it.key]=state.videos[it.key]||[]).push(u); modalAdmin=true; save(); toast("视频已添加 🎬"); openModal(it); refreshIfVisible(); };
           if(/v\.douyin\.com/i.test(val)){
             toast("抖音短链解析中…");
-            resolveDouyinShort(val).then(full=>{ if(!full) toast("短链未解析成功，已按原链接保存"); pushAndRefresh(full||val); });
+            resolveDouyinShort(val).then(full=>{
+              if(!full) toast("短链解析失败，已按原链接保存（仅能新窗口打开）。站内播放请改粘完整链接：浏览器打开短链 → 地址栏 douyin.com/video/数字");
+              pushAndRefresh(full||val);
+            });
           }else pushAndRefresh(val);
           return;
         }else if(act==="togglecn"){
