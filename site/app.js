@@ -2246,7 +2246,7 @@
       <div class="res-grid" id="biGrid">
         ${D.show.length?D.show.map(x=>{
           const ov=(state.overrides||{})[x.key];
-          const isCustom = x.key.indexOf("custom:")===0;
+          const isCustom = (CUSTOM||[]).some(c=>c.key===x.key); // 后台添加 + 批量导入/注入素材
           return `<div class="res-card" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
             <div class="rc-top">
               ${badge(x.type)}
@@ -2264,13 +2264,14 @@
               <button class="btn" data-res-open="${esc(x.key)}">查看</button>
               <button class="btn" data-bi-edit="${esc(x.key)}">✏️ 修改</button>
               ${ov?`<button class="btn" data-bi-revert="${esc(x.key)}" title="还原原文">⤺</button>`:""}
+              ${isCustom?`<button class="btn" data-bi-del="${esc(x.key)}" title="删除该素材">🗑 删除</button>`:""}
             </div>
           </div>`;
         }).join("")
         : '<div class="placeholder"><div class="big">🔍</div>没有匹配的资源，换个筛选条件试试</div>'}
       </div>
       ${D.filtered.length>biView.limit?`<div style="margin-top:12px"><button class="btn" id="biMore">显示更多（当前 ${D.show.length} / ${D.filtered.length}）</button></div>`:""}
-      <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 想新增素材可展开上方「📥 批量导入」，单条添加请到「🛠 后台」。</p>
+      <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 想新增素材可展开上方「📥 批量导入」，单条添加请到「🛠 后台」—— 添加后都会<b>直接归位到本页</b>（「我的素材」标签 + 删除按钮也在这里）。</p>
     `;
     bindResEvents(el);
   }
@@ -2303,6 +2304,14 @@
     el.querySelectorAll("[data-bi-revert]").forEach(b=>b.addEventListener("click", ()=>{
       const k=b.dataset.biRevert;
       if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原原文 ⤺"); renderRes(); }
+    }));
+    // 删除我的素材（后台添加 / 批量导入的条目；管理入口在资源页）
+    el.querySelectorAll("[data-bi-del]").forEach(b=>b.addEventListener("click", ()=>{
+      const k=b.dataset.biDel;
+      const it=INDEX[k];
+      if(!confirm("删除素材《"+((it&&it.title)||k)+"》？删除后不可恢复（内置教材不受影响）。")) return;
+      state.custom=(state.custom||[]).filter(x=>x.key!==k); save(); rebuildAll();
+      toast("已删除该素材 🗑"); renderRes(); refreshView();
     }));
     const biReset=$("#biReset");
     if(biReset) biReset.addEventListener("click", ()=>{
@@ -2348,14 +2357,10 @@
         </div>
       </div>
 
-      <div class="sec-title">🗂 已添加素材（${CUSTOM.length}）<small>本地保存，可删除 · 内容已同步展示在「📚 资源」页最前（来源 → 我的素材 可快速查看）</small></div>
-      <div class="admin-list">
-        ${CUSTOM.length? CUSTOM.slice().reverse().map(it=>`
-          <div class="admin-item">
-            <div class="ai-main"><b>${esc(it.title)}</b> <span class="badge" style="background:#eef2ff;color:#3730a3">${esc(it.type)}</span> ${it.grade?`<span class="tag" style="cursor:default">#${esc(it.grade)}</span>`:""}${it.volume?`<span class="tag" style="cursor:default">#${esc(it.volume)}</span>`:""}${it.videos&&it.videos.length?` <span class="play">▶ ${it.videos.length}视频</span>`:""}</div>
-            <button class="va-del" data-del-custom="${esc(it.key)}" title="删除">✕</button>
-          </div>`).join("")
-        : '<div class="placeholder"><div class="big">📭</div>还没有在后台添加的素材</div>'}
+      <div class="sec-title">🗂 我的素材（${CUSTOM.length}）<small>添加后直接归位到「📚 资源」页展示 · 查看 / 修改 / 删除都在资源页进行，后台不再留存列表</small></div>
+      <div class="chips">
+        <span class="lbl" style="align-self:center">共 ${CUSTOM.length} 条素材已自动归位到资源页（「来源 → 我的素材」可快速筛选）</span>
+        <button class="btn primary" id="goRes">📚 打开资源页管理</button>
       </div>
 
       <div class="sec-title">🛍 兑换审核 · 奖励设置 <small>孩子提交的兑换需家长在这里确认兑现；可自定义奖励目录</small></div>
@@ -2582,12 +2587,9 @@
       refreshView();
     };
     $("#afClear").onclick=()=>{ ["afTitle","afSub","afBody","afTags","afVideos","afUnit"].forEach(i=>$("#"+i).value=""); };
-    // 删除
-    el.querySelectorAll("[data-del-custom]").forEach(b=>b.onclick=()=>{
-      state.custom=state.custom.filter(x=>x.key!==b.dataset.delCustom); save(); rebuildAll(); cnView=null;
-      toast("已删除"); renderAdmin();
-      refreshView();
-    });
+    // 我的素材：跳转资源页管理（查看/修改/删除都在资源页）
+    const goRes=$("#goRes");
+    if(goRes) goRes.onclick=()=>go("res");
     // 还原被覆盖的内置内容
     el.querySelectorAll("[data-revert-custom]").forEach(b=>b.onclick=()=>{
       const k=b.dataset.revertCustom; if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原内置内容 ⤺"); renderAdmin(); }
