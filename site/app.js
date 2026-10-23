@@ -1981,7 +1981,7 @@
       return out;
     };
     const subjM=cntBy(matchExcept("subj"), x=>x.subject);
-    const gradeM=cntBy(matchExcept("grade"), x=>x.grade);
+    const gradeM=cntBy(matchExcept("grade").filter(x=>x.grade), x=>x.grade);
     const typeM=cntBy(matchExcept("type"), x=>x.type);
     const filtered = builtins.filter(x=>{
       if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
