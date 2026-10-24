@@ -1055,7 +1055,7 @@
   if(!window.__lsZoomBound){
     document.addEventListener("click", e=>{
       const img = e.target.closest && e.target.closest(".ls-figs img");
-      if(img){
+      if(img && !img.classList.contains("ls-opt-img")){
         e.preventDefault();
         const ov = document.createElement("div");
         ov.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.82);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;";
@@ -1068,6 +1068,39 @@
       }
     });
     window.__lsZoomBound = true;
+  }
+  // 听力卡交互：选项点选高亮（单选/复选）、图片选项点选、对答案
+  if(!window.__lsOptBound){
+    document.addEventListener("click", e=>{
+      const opt = e.target.closest && e.target.closest(".ls-opt");
+      if(opt){
+        e.preventDefault();
+        if(opt.classList.contains("ls-multi")){
+          opt.classList.toggle("ls-picked");
+        } else {
+          const q = opt.closest(".ls-q") || opt.parentElement;
+          if(q) q.querySelectorAll(".ls-opt:not(.ls-multi)").forEach(o=>{ if(o!==opt) o.classList.remove("ls-picked"); });
+          opt.classList.toggle("ls-picked");
+        }
+        return;
+      }
+      const imgopt = e.target.closest && e.target.closest(".ls-opt-img");
+      if(imgopt){
+        e.preventDefault();
+        const box = imgopt.closest(".ls-figs-opt") || imgopt.parentElement;
+        if(box) box.querySelectorAll(".ls-opt-img").forEach(o=>{ if(o!==imgopt) o.classList.remove("ls-picked"); });
+        imgopt.classList.toggle("ls-picked");
+        return;
+      }
+      const check = e.target.closest && e.target.closest(".ls-check");
+      if(check){
+        e.preventDefault();
+        const ans = check.parentElement && check.parentElement.querySelector(".ls-answer");
+        if(ans) ans.classList.toggle("ls-show");
+        return;
+      }
+    });
+    window.__lsOptBound = true;
   }
   // 首次启动：把内置指南/练习作为后台素材注入（按 grade 限定年级，可在后台删除；删除后不再重生）
   function seedDefaultContent(){
