@@ -24,12 +24,13 @@ function json(obj, status) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    // 云端同步接口优先处理
+    // 云端同步接口（assets 优先模式下，只有未命中静态资产的请求才会进入 worker）
     if (url.pathname === "/api/sync") {
       return handleSync(request, env);
     }
-    // 本站静态资源由 xuetang.201573.xyz（Pages）提供；此 Worker 仅负责云端同步接口
-    return new Response("xuetang sync worker：请用 xuetang.201573.xyz 打开站点", { status: 200 });
+    // 其余请求（理论上 assets 已优先接管，这里兜底透传，保证 404 等行为正常）
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+    return new Response("not found", { status: 404 });
   }
 };
 

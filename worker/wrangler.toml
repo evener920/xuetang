@@ -1,5 +1,10 @@
-# Cloudflare Worker 部署配置（云端同步 + 托管 site/ 静态站）
+# Cloudflare Worker 部署配置（静态站 site/ + 云端同步接口 /api/sync 合体部署）
 # 本文件位于 worker/ 目录，故 assets.directory 用 "../site" 指向仓库根的 site/
+#
+# ⚠️ 重要：本账号的 Worker `xuetang` 挂着 Custom Domain xuetang.201573.xyz，
+# 且 git push 会触发 Workers Builds 自动构建（纯静态资产、无绑定）覆盖本部署。
+# 因此**每次 git push 之后必须重新执行 `cd worker && wrangler deploy`**，
+# 否则 /api/sync 会变回 404（同步失败）。
 
 name = "xuetang"
 main = "worker.js"
@@ -9,14 +14,13 @@ workers_dev = true
 # 你的 Cloudflare 账户 ID（已填好）
 account_id = "82129ffe005dfd5010505adf73de06cb"
 
-# 本 Worker 仅负责云端同步接口 /api/sync（静态站点由 xuetang.201573.xyz 的 Pages 提供）
-# 前端同源调用 xuetang.201573.xyz/api/sync（SYNC_BASE=""），由下方 zone 路由把 /api/* 拦到本 Worker。
-# 不用 *.workers.dev：该域名在国内网络无法访问（用户实测）。
-routes = [
-  { pattern = "xuetang.201573.xyz/api/*", zone_name = "201573.xyz" }
-]
-
+# 静态资产优先服务；未命中资产的请求（如 /api/sync）进入 worker.js 逻辑。
+# 注意：wrangler 语法要求 kv_namespaces/routes 等键写在 [assets] 表之前。
 # 云端同步用的 KV（已建好 xuetang-sync）：变量名必须叫 SYNC_KV
 kv_namespaces = [
   { binding = "SYNC_KV", id = "a52c5b9f80b0477eb6923ab17ad58f57" }
 ]
+
+[assets]
+directory = "../site"
+binding = "ASSETS"
