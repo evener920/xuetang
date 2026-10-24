@@ -482,20 +482,6 @@
     try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }catch(e){ return {}; }
   }
   let state = loadState();
-  state.grade = state.grade || "四年级";
-  state.learned = state.learned || {};
-  state.fav = state.fav || {};
-  state.videos = state.videos || {};  // 用户为任意条目补充的视频（key → [链接]）
-  state.custom = state.custom || [];  // 后台添加的素材（已归一化为标准条目）
-  state.overrides = state.overrides || {}; // 对「内置教材」条目的覆盖版本（key = 内置条目 key，仅本机保存，可还原）
-  state.checkin = state.checkin || {}; // 首页每日打卡范围（学科→true/false，缺省=开启）
-  state.mastery = state.mastery || {}; // 每张内容卡的掌握度星级 0~5（按学生独立）
-  state.sectionPlan = state.sectionPlan || {}; // 每个「学科·类型」板块的起止日/每周频次（按学生独立）
-  state.lastKey = state.lastKey || null;
-  state.habits = Array.isArray(state.habits) ? state.habits : ["房间卫生","早睡早起","学校作业"]; // 每日习惯打卡
-  state.habitLog = state.habitLog || {};   // 日期 → {习惯名: true}
-  state.reviewed = state.reviewed || {};   // 日期 → {条目key: true}（艾宾浩斯复习打卡）
-  state.semesterStart = state.semesterStart || fmt(new Date()); // 学期第 1 天（90 天学期）
   /* ---------- 后台登录口令（存本机，防止孩子随手改动后台内容；非服务端鉴权） ---------- */
   function pwHash(pw, salt){
     let h=2166136261>>>0; const s=(salt||"")+"::"+(pw||"");
@@ -508,13 +494,42 @@
     const salt=Math.random().toString(36).slice(2,10);
     state.admin={ user:(state.admin&&state.admin.user)||"admin", salt, hash:pwHash(pw,salt) };
   }
-  if(!state.admin || !state.admin.hash) setAdminPassword("123456"); // 默认口令 admin / 123456
-  state.adminAuthed = !!state.adminAuthed; // 登录状态（本机保持，可退出）
+  // 补齐 state 缺省字段（首次启动 / 从云端拉取旧包后都要跑一遍，避免缺字段报错）
+  function applyStateDefaults(){
+    state.grade = state.grade || "四年级";
+    state.learned = state.learned || {};
+    state.fav = state.fav || {};
+    state.videos = state.videos || {};  // 用户为任意条目补充的视频（key → [链接]）
+    state.custom = state.custom || [];  // 后台添加的素材（已归一化为标准条目）
+    state.overrides = state.overrides || {}; // 对「内置教材」条目的覆盖版本（key = 内置条目 key，仅本机保存，可还原）
+    state.checkin = state.checkin || {}; // 首页每日打卡范围（学科→true/false，缺省=开启）
+    state.mastery = state.mastery || {}; // 每张内容卡的掌握度星级 0~5（按学生独立）
+    state.sectionPlan = state.sectionPlan || {}; // 每个「学科·类型」板块的起止日/每周频次（按学生独立）
+    state.lastKey = state.lastKey || null;
+    state.habits = Array.isArray(state.habits) ? state.habits : ["房间卫生","早睡早起","学校作业"]; // 每日习惯打卡
+    state.habitLog = state.habitLog || {};   // 日期 → {习惯名: true}
+    state.reviewed = state.reviewed || {};   // 日期 → {条目key: true}（艾宾浩斯复习打卡）
+    state.semesterStart = state.semesterStart || fmt(new Date()); // 学期第 1 天（90 天学期）
+    state.points   = typeof state.points==="number" ? state.points : 0;
+    state.pointLog = Array.isArray(state.pointLog) ? state.pointLog : [];  // 流水 [{t,n,note,hook}]
+    state.redeems  = Array.isArray(state.redeems)  ? state.redeems  : [];  // 兑换记录 [{t,name,cost,status}]
+    if(!state.admin || !state.admin.hash) setAdminPassword("123456"); // 默认口令 admin / 123456
+    state.adminAuthed = !!state.adminAuthed; // 登录状态（本机保持，可退出）
+    state.sync = state.sync || { enabled:false, pass:"", at:0 }; // 云端同步：启用 / 同步密钥(明文存本机) / 上次与云端一致的时间戳
+  }
+  // 保证多学生结构存在（首次启动 / 从云端拉取的数据都可能缺 students 字段）
+  function ensureStudents(){
+    if(!state.students || typeof state.students!=="object" || !Object.keys(state.students).length){
+      const snap=capturePerStudent();
+      state.students={ s1:{name:"学生1", data:snap}, s2:{name:"学生2", data:defaultPerStudent()} };
+      state.currentStudent="s1";
+    } else {
+      if(!state.currentStudent || !state.students[state.currentStudent]) state.currentStudent=Object.keys(state.students)[0];
+      applyPerStudent(state.currentStudent);
+    }
+  }
+  applyStateDefaults();
   /* ---------- 打卡积分奖励（账号按学生独立；奖励目录全局） ---------- */
-  state.points   = typeof state.points==="number" ? state.points : 0;
-  state.pointLog = Array.isArray(state.pointLog) ? state.pointLog : [];  // 流水 [{t,n,note,hook}]
-  state.redeems  = Array.isArray(state.redeems)  ? state.redeems  : [];  // 兑换记录 [{t,name,cost,status}]
-  /* ---------- 打卡积分：规则 · 发放 · 连续天数 · 兑奖 ---------- */
   // 计分原则：① 即时反馈（打卡立刻到账）② 复习 > 学新（间隔重复收益最高）
   // ③ 只加不减（不让孩子因漏打卡受挫）④ 短中长期目标并存（小额天天能换、大额需攒几个月）
   // ⑤ 兑奖需家长在后台确认，避免自行「提现」
@@ -760,6 +775,77 @@
   function save(){
     syncPerStudent(); // 先把当前学生的进度/打卡/年级/习惯写入其独立快照
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    if(!_applyRemote) scheduleSyncPush(); // 云同步开启时，防抖推送（拉取落地阶段不触发，避免回环）
+  }
+
+  /* ---------- 云端同步（Cloudflare KV + Pages Function；跨域名/设备共享同一份数据） ---------- */
+  // 同步密钥明文存本机（仅家长设备可见）；云端 key = SHA-256(密钥)；data 整包存取，last-write-wins 按 updatedAt 裁决
+  var _pushTimer = null, _pushing = false, _applyRemote = false;
+  function cloudSyncEnabled(){ return !!(state.sync && state.sync.enabled && state.sync.pass); }
+  function sha256Hex(str){
+    try{
+      if(window.crypto && window.crypto.subtle){
+        return window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str))
+          .then(buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join(""));
+      }
+    }catch(e){}
+    return Promise.resolve(null); // 非安全上下文（http）无法用云同步
+  }
+  async function syncPush(){
+    if(!cloudSyncEnabled() || _pushing) return;
+    const k = await sha256Hex(state.sync.pass);
+    if(!k){ toast("云同步需 https 环境"); return; }
+    _pushing = true;
+    try{
+      const payload = JSON.stringify({ updatedAt: Date.now(), data: state });
+      const r = await fetch("/api/sync?k="+encodeURIComponent(k), { method:"PUT", headers:{"content-type":"application/json"}, body: payload });
+      if(r.ok){ const j = await r.json().catch(()=>({})); if(j && j.updatedAt) state.sync.at = j.updatedAt; }
+      else console.warn("syncPush 失败", r && r.status);
+    }catch(e){ /* 离线/网络错误静默，下次保存或手动同步再试 */ }
+    finally{ _pushing = false; }
+  }
+  function scheduleSyncPush(){ // 防抖：连续保存只推送一次
+    if(!cloudSyncEnabled()) return;
+    if(_pushTimer) clearTimeout(_pushTimer);
+    _pushTimer = setTimeout(()=>{ _pushTimer=null; syncPush(); }, 800);
+  }
+  async function syncPull(){
+    if(!cloudSyncEnabled()) return null;
+    const k = await sha256Hex(state.sync.pass);
+    if(!k) return null;
+    try{
+      const r = await fetch("/api/sync?k="+encodeURIComponent(k), { method:"GET" });
+      if(!r.ok) return null;
+      const j = await r.json().catch(()=>({}));
+      if(!j || !j.data) return null;
+      if((state.sync.at||0) >= (j.updatedAt||0)) return null; // 本地已是最新
+      return j;
+    }catch(e){ return null; }
+  }
+  // 启动或手动触发：拉取云端更新（若更新则覆盖本地并重渲染）；返回是否发生了变化
+  async function initCloudSync(){
+    if(!cloudSyncEnabled()) return false;
+    const j = await syncPull();
+    if(j && j.data){
+      _applyRemote = true;
+      state = j.data;
+      applyStateDefaults();        // 补齐缺省字段，防止旧包缺字段
+      ensureStudents();            // 远端包可能缺 students，必须补齐，否则 save→syncPerStudent 会崩
+      state.adminAuthed = false;   // 拉取后回到未登录，需家长重新进后台
+      state.sync.at = j.updatedAt;
+      rebuildAll();
+      save();                      // 落地到本机（此时 _applyRemote=true 不会回推）
+      refreshView();
+      _applyRemote = false;
+      return true;
+    }
+    return false;
+  }
+  async function syncNow(){ // 手动「立即同步」：先拉（云更新本地），再推（本地改动上云）
+    if(!cloudSyncEnabled() && state.sync){ state.sync.enabled = true; }
+    const pulled = await initCloudSync();
+    await syncPush();
+    return pulled;
   }
 
   /* ---------- 工具 ---------- */
@@ -2461,6 +2547,19 @@
       <div class="chips"><button class="btn primary" id="schedSave">💾 保存排程</button></div>
       <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>
 
+      <div class="sec-title">☁️ 云端同步（跨域名 / 跨设备）<small>绑定同一个 Cloudflare KV 后，两个域名、不同设备共享同一份数据；靠「同步密钥」作为云端存储键，无需注册</small></div>
+      <div class="admin-form">
+        <div class="af-row">
+          <label class="af-grow">同步密钥<input id="syncPass" type="password" placeholder="设一个只有家里人知道的词，如 xiaoming2026" value="${esc((state.sync&&state.sync.pass)||"")}" /></label>
+          <label style="align-self:center"><input type="checkbox" id="syncOn" ${cloudSyncEnabled()?"checked":""}/> 启用云同步</label>
+        </div>
+        <div class="af-actions">
+          <button class="btn primary" id="syncNow">🔄 立即同步（拉取 + 推送）</button>
+          <span class="af-tip" id="syncStatus">${(state.sync&&state.sync.at)? "上次同步："+new Date(state.sync.at).toLocaleString() : "尚未同步"}</span>
+        </div>
+        <p class="af-tip">开启后，每次保存会自动推送到云端；打开网站会自动拉取最新。两个域名都要在 Cloudflare 绑定<strong>同一个</strong> KV 命名空间（变量名必须叫 SYNC_KV）才会互通。密钥即账号：知道密钥的人可读写这份数据，请勿外泄。仍建议偶尔用下方「导出备份」留一份本地副本。</p>
+      </div>
+
       <div class="sec-title">💾 数据备份（导出 / 导入文件）<small>把全部数据（含后台素材、七年级英语词库等）存成文件，换设备 / 清缓存前请先备份</small></div>
       <div class="chips">
         <button class="btn primary" id="btnExport">⬇️ 导出备份文件</button>
@@ -2564,6 +2663,30 @@
         }; }
       });
       save(); toast("已保存学习板块排程 📅"); renderAdmin(); renderHome(); if(view.name==="week") renderWeek();
+    };
+    // 云端同步：配置变更 / 立即同步
+    const syncOn=$("#syncOn"), syncPass=$("#syncPass"), syncNow=$("#syncNow"), syncStatus=$("#syncStatus");
+    function syncCfgChange(){
+      state.sync = state.sync || {};
+      state.sync.enabled = !!(syncOn && syncOn.checked);
+      state.sync.pass = (syncPass && syncPass.value||"").trim();
+      save();
+      if(syncStatus) syncStatus.textContent = state.sync.enabled ? "已启用，保存即同步" : "已关闭";
+    }
+    if(syncOn) syncOn.onchange=syncCfgChange;
+    if(syncPass) syncPass.onchange=syncCfgChange;
+    if(syncNow) syncNow.onclick=async ()=>{
+      if(syncOn && !syncOn.checked){ toast("请先勾选启用云同步"); return; }
+      const pass=(syncPass && syncPass.value||"").trim();
+      if(!pass){ toast("请填写同步密钥"); return; }
+      state.sync = state.sync || {}; state.sync.enabled=true; state.sync.pass=pass; save();
+      if(syncStatus) syncStatus.textContent="同步中…";
+      try{
+        const pulled = await syncNow();
+        if(syncStatus) syncStatus.textContent = "上次同步：" + new Date(state.sync.at||Date.now()).toLocaleString();
+        toast(pulled ? "已从云端更新并上传 ☁️" : "已上传到云端 ☁️");
+      }catch(e){ if(syncStatus) syncStatus.textContent="同步失败：" + (e&&e.message||e); toast("同步失败，检查网络/部署"); }
+      renderAdmin();
     };
     // 后台口令：修改 / 退出登录
     const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
@@ -2765,6 +2888,7 @@
 
   /* ---------- 启动 ---------- */
   { const _a=loadArchives(); if(!_a.length || (_a[0].t||"").slice(0,10)!==fmt(new Date())) archiveCreate("每日自动存档", true); }
+  initCloudSync().catch(()=>{}); // 启动即拉取云端最新（启用时）；本地先渲染，拉到后再刷新
   render();
   // 测试钩子（仅当显式开启 window.__ENABLE_TEST__ 时挂载，正常站点无副作用）
   if(typeof window!=="undefined" && window.__ENABLE_TEST__){
@@ -2782,7 +2906,8 @@
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
-      getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt, get state(){ return state; }
+      getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
+      cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }
     };
   }
 })();
