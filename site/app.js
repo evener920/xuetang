@@ -1086,7 +1086,14 @@
     }
     const have = new Set((state.custom||[]).map(x=>x.key));
     seeds.forEach(s=>{
+      // 自愈（ls4 专用）：旧版曾在听力脚本未加载时用空 src 置位 flag（污染），
+      // 导致听力卡永远不再注入。flag 已置位但一张 ls4 卡都没有 → 清 flag 重新注入。
+      if(s.flag==="englishListening4" && state.seeded[s.flag]
+         && !((state.custom||[]).some(x=>x.key && /^ls4:\d+$/.test(x.key)))){
+        state.seeded[s.flag] = false;
+      }
       if(state.seeded[s.flag]) return;
+      if(!s.src.length) return;  // 源脚本未加载（缓存旧版/加载失败）：不置位 flag，等下次启动再试
       s.src.forEach(it=>{ if(it && it.key && !have.has(it.key)) (state.custom=state.custom||[]).push(it); });
       state.seeded[s.flag] = true;
     });
