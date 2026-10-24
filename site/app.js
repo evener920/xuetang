@@ -2145,9 +2145,9 @@
           <p>${esc(state.grade)} · 今日 +${pointToday()} 分${penaltyToday()?` · <span style="color:#fecaca;font-weight:700">-${penaltyToday()} 分</span>`:""} · 本周 +${pointWeek()} 分 · 最近 7 天平均 ${avg} 分/天${nextMile?` · 再学 ${nextMile[0]-streak} 天解锁「连续 ${nextMile[0]} 天」+${nextMile[1]} 分`:""}</p>
         </div>
         <div class="done" style="min-width:200px;">
-          <div style="font-size:30px;font-weight:800;color:#fff">${state.points} <span style="font-size:14px;font-weight:600;opacity:.85">分</span></div>
+          <div style="font-size:28px;font-weight:800;color:#4c1d95">${state.points} <span style="font-size:14px;font-weight:600;opacity:.75">分</span></div>
           <div class="pbar"><div class="pfill" style="width:${taskMax?Math.min(100,Math.round(pointToday()/taskMax*100)):0}%"></div></div>
-          <div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:4px">今日还可拿到约 ${Math.max(0,taskMax-pointToday())} 分</div>
+          <div style="font-size:12px;color:#6d28d9;margin-top:4px">今日还可拿到约 ${Math.max(0,taskMax-pointToday())} 分</div>
         </div>
       </div>
 
