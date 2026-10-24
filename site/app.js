@@ -780,13 +780,14 @@
 
   /* ---------- 云端同步（Cloudflare KV + Pages Function；跨域名/设备共享同一份数据） ---------- */
   // 同步密钥明文存本机（仅家长设备可见）；云端 key = SHA-256(密钥)；data 整包存取，last-write-wins 按 updatedAt 裁决
-  var _pushTimer = null, _pushing = false, _applyRemote = false;
+  var _pushTimer = null, _pushing = false, _applyRemote = false, _netFail = false;
   function cloudSyncEnabled(){ return !!(state.sync && state.sync.enabled && state.sync.pass); }
   function sha256Hex(str){
     try{
       if(window.crypto && window.crypto.subtle){
         return window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str))
-          .then(buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join(""));
+          .then(buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join(""))
+          .catch(()=>null); // digest 异常时不至于让整条同步链路抛未捕获错误
       }
     }catch(e){}
     return Promise.resolve(null); // 非安全上下文（http）无法用云同步
@@ -799,9 +800,9 @@
     try{
       const payload = JSON.stringify({ updatedAt: Date.now(), data: state });
       const r = await fetch("/api/sync?k="+encodeURIComponent(k), { method:"PUT", headers:{"content-type":"application/json"}, body: payload });
-      if(r.ok){ const j = await r.json().catch(()=>({})); if(j && j.updatedAt) state.sync.at = j.updatedAt; }
-      else console.warn("syncPush 失败", r && r.status);
-    }catch(e){ /* 离线/网络错误静默，下次保存或手动同步再试 */ }
+      if(r.ok){ const j = await r.json().catch(()=>({})); if(j && j.updatedAt) state.sync.at = j.updatedAt; return true; }
+      console.warn("syncPush 失败", r && r.status); return false;
+    }catch(e){ _netFail = true; return false; /* 离线/网络错误静默，下次保存或手动同步再试 */ }
     finally{ _pushing = false; }
   }
   function scheduleSyncPush(){ // 防抖：连续保存只推送一次
@@ -820,31 +821,72 @@
       if(!j || !j.data) return null;
       if((state.sync.at||0) >= (j.updatedAt||0)) return null; // 本地已是最新
       return j;
-    }catch(e){ return null; }
+    }catch(e){ _netFail = true; return null; }
+  }
+  // 云端包白名单清洗：另一设备 / 旧版本推来的包可能缺字段或类型不对，直接覆盖会崩。
+  // 就地修复常见畸形；完全不可用返回 null（调用方放弃本次拉取，保留本地数据）。
+  function sanitizeRemoteData(d){
+    if(!d || typeof d!=="object" || Array.isArray(d)) return null;
+    const obj = (k, def)=>{ if(!d[k] || typeof d[k]!=="object" || Array.isArray(d[k])) d[k]=def; };
+    obj("learned",{}); obj("fav",{}); obj("videos",{}); obj("overrides",{});
+    obj("checkin",{}); obj("habitLog",{}); obj("reviewed",{});
+    if(!Array.isArray(d.custom)) d.custom=[];
+    if(!Array.isArray(d.habits)) delete d.habits; // 交给 applyStateDefaults 补默认
+    if(!d.students || typeof d.students!=="object" || Array.isArray(d.students)) d.students=null; // null → ensureStudents 重建
+    else Object.keys(d.students).forEach(k=>{
+      const s=d.students[k];
+      if(!s || typeof s!=="object" || Array.isArray(s)) d.students[k]={name:"", data:null};
+      else if(!s.data || typeof s.data!=="object") s.data=null; // applyPerStudent 对空 data 兜底 defaultPerStudent
+    });
+    if(!d.sync || typeof d.sync!=="object" || Array.isArray(d.sync)) d.sync={enabled:false, pass:"", at:0};
+    d.sync.enabled=!!d.sync.enabled;
+    if(typeof d.sync.pass!=="string") d.sync.pass="";
+    if(typeof d.sync.at!=="number" || !isFinite(d.sync.at)) d.sync.at=0;
+    return d;
   }
   // 启动或手动触发：拉取云端更新（若更新则覆盖本地并重渲染）；返回是否发生了变化
   async function initCloudSync(){
     if(!cloudSyncEnabled()) return false;
     const j = await syncPull();
     if(j && j.data){
+      const clean = sanitizeRemoteData(j.data);
+      if(!clean) return false; // 云端包整体不可用 → 保留本地数据
+      // 同步开关与密钥只留在本机：若被云端包覆盖，B 设备没开同步的推送会把本机同步静默关掉
+      const localSync = {
+        enabled: !!(state.sync && state.sync.enabled),
+        pass: (state.sync && state.sync.pass) || "",
+        at: (state.sync && state.sync.at) || 0
+      };
       _applyRemote = true;
-      state = j.data;
-      applyStateDefaults();        // 补齐缺省字段，防止旧包缺字段
-      ensureStudents();            // 远端包可能缺 students，必须补齐，否则 save→syncPerStudent 会崩
-      state.adminAuthed = false;   // 拉取后回到未登录，需家长重新进后台
-      state.sync.at = j.updatedAt;
-      rebuildAll();
-      save();                      // 落地到本机（此时 _applyRemote=true 不会回推）
-      refreshView();
+      try{
+        state = clean;
+        applyStateDefaults();        // 补齐缺省字段，防止旧包缺字段
+        ensureStudents();            // 远端包可能缺 students，必须补齐，否则 save→syncPerStudent 会崩
+        state.adminAuthed = false;   // 拉取后回到未登录，需家长重新进后台
+        state.sync = { enabled: localSync.enabled, pass: localSync.pass, at: j.updatedAt };
+        rebuildAll();
+        save();                      // 落地到本机（此时 _applyRemote=true 不会回推）
+        refreshView();
+      }catch(e){
+        // 应用失败：回滚到本地存档，避免半套数据；并把原因抛给界面显示
+        _applyRemote = false;
+        try{
+          const back = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+          if(back && typeof back==="object"){ state = back; applyStateDefaults(); ensureStudents(); rebuildAll(); }
+        }catch(_e){}
+        throw new Error("云端数据应用失败：" + ((e && e.message) || e));
+      }
       _applyRemote = false;
       return true;
     }
     return false;
   }
   async function syncNow(){ // 手动「立即同步」：先拉（云更新本地），再推（本地改动上云）
+    _netFail = false;
     if(!cloudSyncEnabled() && state.sync){ state.sync.enabled = true; }
     const pulled = await initCloudSync();
-    await syncPush();
+    const pushed = await syncPush();
+    if(!pushed && _netFail && !pulled) throw new Error("连不上云端（网络/部署），稍后会随保存自动重试");
     return pulled;
   }
 
@@ -2668,8 +2710,12 @@
         const pulled = await syncNow();
         if(syncStatus) syncStatus.textContent = "上次同步：" + new Date(state.sync.at||Date.now()).toLocaleString();
         toast(pulled ? "已从云端更新并上传 ☁️" : "已上传到云端 ☁️");
-      }catch(e){ if(syncStatus) syncStatus.textContent="同步失败：" + (e&&e.message||e); toast("同步失败，检查网络/部署"); }
-      renderAdmin();
+        renderAdmin(); // 成功才重渲染；失败时保留错误信息不被覆盖
+      }catch(e){
+        const msg = (e && e.message) || String(e);
+        if(syncStatus) syncStatus.textContent = "同步失败：" + msg;
+        toast("同步失败：" + msg);
+      }
     };
     // 后台口令：修改 / 退出登录
     const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
