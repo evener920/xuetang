@@ -156,8 +156,10 @@ safe('④ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
   const be=(html.match(/20261024be/g)||[]).length;
   const bf=(html.match(/20261024bf/g)||[]).length;
+  const bg=(html.match(/20261024bg/g)||[]).length;
   ok('  0 处 be', be===0, 'be='+be);
-  ok('  10 处 bf', bf===10, 'bf='+bf);
+  ok('  0 处 bf（已升级至 bg）', bf===0, 'bf='+bf);
+  ok('  10 处 bg', bg===10, 'bg='+bg);
 });
 
 let pass=0;

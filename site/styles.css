@@ -356,6 +356,31 @@ label.af-block textarea:focus,label.af-block input:focus{border-color:var(--acce
 .pen-home-item .pen-ic{font-size:16px;}
 .pen-home-item .pen-nm{flex:1;color:var(--fg);}
 .pen-home-item .pen-val{font-weight:700;color:#b91c1c;}
+/* 首页扣分 chip：点击即扣 · 不可撤销 */
+.pen-chip{background:#fff1f2;border-color:#fecdd3;color:#be123c;font-weight:600;}
+.pen-chip:hover{background:#ffe4e6;border-color:#fda4af;color:#be123c;}
+.pen-chip b{font-weight:800;}
+.pen-chips{margin:8px 0 10px;}
+
+/* 可折叠分区（首页「今日完成」等，默认收起） */
+.sec-collapse{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;margin:0 0 6px;overflow:hidden;
+}
+.sec-collapse>summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
+  padding:12px 16px;font-size:15px;font-weight:700;color:var(--fg);user-select:none;
+}
+.sec-collapse>summary::-webkit-details-marker{display:none;}
+.sec-collapse>summary::before{content:"▸";color:var(--muted);font-size:12px;transition:transform .15s;}
+.sec-collapse[open]>summary::before{transform:rotate(90deg);}
+.sec-collapse .sc-cnt{font-size:12px;font-weight:600;color:var(--muted);margin-left:auto;}
+.sec-collapse .task-grid{padding:0 16px 14px;}
+
+/* 本周页 · 学习库板块卡（点击进管理弹窗） */
+.lib-sec{display:flex;flex-direction:column;align-items:center;gap:2px;transition:border-color .15s, box-shadow .15s;}
+.lib-sec:hover{border-color:var(--accent);box-shadow:0 0 0 2px rgba(37,99,235,.12);}
+.lib-sec .num{line-height:1.1;}
+.lib-ck.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
 
 /* ===== 本周计划总览 ===== */
 .week-plan{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:6px;}

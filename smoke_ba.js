@@ -166,10 +166,12 @@ safe('⑥ 版本号', ()=>{
   const ba=(html.match(/20261024ba/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const bf=(html.match(/20261024bf/g)||[]).length;
+  const bg=(html.match(/20261024bg/g)||[]).length;
   ok('  0 处 az', az===0, 'az='+az);
   ok('  0 处 ba', ba===0, 'ba='+ba);
-  ok('  0 处 bd（已升级至 bf）', bd===0, 'bd='+bd);
-  ok('  10 处 bf（含听力卡脚本）', bf===10, 'bf='+bf);
+  ok('  0 处 bd（已升级至 bg）', bd===0, 'bd='+bd);
+  ok('  0 处 bf（已升级至 bg）', bf===0, 'bf='+bf);
+  ok('  10 处 bg（含听力卡脚本）', bg===10, 'bg='+bg);
   ok('  引入 english_listening_4.js', html.includes('english_listening_4.js'), '');
 });
 

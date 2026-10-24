@@ -518,6 +518,7 @@
     state.custom = state.custom || [];  // 后台添加的素材（已归一化为标准条目）
     state.overrides = state.overrides || {}; // 对「内置教材」条目的覆盖版本（key = 内置条目 key，仅本机保存，可还原）
     state.checkin = state.checkin || {}; // 首页每日打卡范围（学科→true/false，缺省=开启）
+    state.studySet = state.studySet || {}; // 学习库：加入学习目标的条目（key→true，按学生独立；只有加入的才计入「学习目标」统计）
     state.mastery = state.mastery || {}; // 每张内容卡的掌握度星级 0~5（按学生独立）
     state.sectionPlan = state.sectionPlan || {}; // 每个「学科·类型」板块的起止日/每周频次（按学生独立）
     state.lastKey = state.lastKey || null;
@@ -802,9 +803,9 @@
   }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules","orderMode"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","studySet","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules","orderMode"];
   function defaultPerStudent(){
-    return { grade:"四年级", learned:{}, fav:{}, checkin:{},
+    return { grade:"四年级", learned:{}, fav:{}, checkin:{}, studySet:{},
       habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{},
       points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{}, rules:{}, orderMode:"seq" };
   }
@@ -1435,7 +1436,7 @@
       }).join("");
       return blocks;
     }).join("");
-    if(!taskBlocks) taskBlocks = `<div class="placeholder" style="padding:20px 16px">当前未勾选任何打卡内容，去「📊 本周」页的「打卡范围」勾选。</div>`;
+    if(!taskBlocks) taskBlocks = `<div class="placeholder" style="padding:20px 16px">当前未勾选任何打卡内容，去「📊 本周 → 📖 学习库」开启板块的打卡开关。</div>`;
 
     const last = state.lastKey ? INDEX[state.lastKey] : null;
 
@@ -1466,8 +1467,11 @@
         <button class="chip" data-habit-add>＋ 添加</button>
       </div>
 
+      <div class="sec-title">⚠️ 今日行为扣分 <small>点击即扣 · 不可撤销 · 只扣行为不扣学习 · 同一项每天只记一次 · 每日上限 ${penaltyCapDay()} 分</small></div>
+      <div class="chips pen-chips">
+        ${penaltyList().map(p=>`<button class="chip pen-chip" data-pen="${esc(p.id)}" title="${esc(p.tip||"")}（-${p.cost} 分）">${esc(p.icon||"⚠️")} ${esc(p.name)} <b>-${p.cost}</b></button>`).join("")}
+      </div>
       ${penaltyLogToday().length?`
-      <div class="sec-title">⚠️ 今日行为扣分 <small>只扣行为不扣学习 · 当天改正后家长可在「🛠 后台」撤销返还</small></div>
       <div class="pen-home-list">
         ${penaltyLogToday().map(e=>{
           const pid=String(e.hook||"").split(":")[1];
@@ -1479,15 +1483,16 @@
           </div>`;
         }).join("")}
       </div>`
-      :`<div class="sec-title">⚠️ 今日行为扣分 <small>暂无 · 今天表现不错 👍</small></div>`}
+      :`<p class="af-tip" style="margin-top:2px">今天还没有扣分记录 · 表现不错 👍</p>`}
 
       <div class="sec-title">📌 今日任务（按周计划） <small>周${WEEK[todayDow]} · 共 ${dayPlan.length} 类 · 点击卡片开始学习</small></div>
       ${taskBlocks}
 
-      ${todayList.length?`
-        <div class="sec-title">✅ 今日完成 <small>已打卡 ${todayList.length} 项 · 点击复习</small></div>
-        <div class="task-grid">${todayList.map(t=>cardHTML(t)).join("")}</div>`
-        :`<div class="placeholder" style="padding:20px 16px">今天还没有打卡，从上方「今日任务」开始第一项吧 🚀</div>`}
+      <details class="sec-collapse">
+        <summary>✅ 今日完成 <span class="sc-cnt">已打卡 ${todayList.length} 项 · 点击展开</span></summary>
+        <div class="task-grid" style="margin-top:10px">${todayList.map(t=>cardHTML(t)).join("")}</div>
+      </details>
+      ${todayList.length?"":`<div class="placeholder" style="padding:20px 16px">今天还没有打卡，从上方「今日任务」开始第一项吧 🚀</div>`}
 
       ${reviews.length?`
       <div class="sec-title">🔁 艾宾浩斯复习 <small>到期 ${reviews.length} 项 · 按遗忘曲线安排（不会的更密、全会的更稀）· 全部记录在「📊 本周」页</small></div>
@@ -1511,20 +1516,21 @@
   }
 
   /* ---------- 本周页：复习 · 看板 · 周计划（与今日任务分页，避免首页过挤） ---------- */
-  /* ---------- 本周目标进度（总量/已学/未学 + 明细弹窗） ---------- */
-  // 本周周计划排到的板块（去重）× 各自内容池 → 统计学习总量/已学/未学
+  /* ---------- 学习目标进度（只统计「加入学习」的条目）---------- */
+  // 学习库（本周页）里每个条目可「加入学习」；只有加入的才计入这里的目标进度
   function weekGoalData(){
-    const plan7 = weekPlan();
-    const secs = [];
-    plan7.forEach(day=>day.forEach(s=>{
-      if(!secs.some(x=>x.subject===s.subject&&x.type===s.type)) secs.push({subject:s.subject, type:s.type});
-    }));
     const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
-    const out = secs.map(sec=>{
-      let pool=[]; try{ pool=poolFor(sec.subject, sec.type); }catch(e){ pool=[]; }
-      const items = pool.map(it=>({ it, done: isDone(it.key), at: state.learned[it.key]||"" }));
-      items.sort((a,b)=> (a.done===b.done) ? 0 : (a.done?1:-1)); // 未学排前
-      return { subject:sec.subject, type:sec.type, items, done: items.filter(x=>x.done).length, total: items.length };
+    const keys = Object.keys(state.studySet||{}).filter(k=>state.studySet[k]);
+    const bySec = {};
+    keys.forEach(k=>{
+      const it = INDEX[k]; if(!it) return;
+      const sk = it.subject+"·"+it.type;
+      (bySec[sk]=bySec[sk]||{subject:it.subject, type:it.type, items:[]});
+      bySec[sk].items.push({ it, done: isDone(it.key), at: state.learned[it.key]||"" });
+    });
+    const out = Object.values(bySec).map(sec=>{
+      sec.items.sort((a,b)=> (a.done===b.done) ? 0 : (a.done?1:-1)); // 未学排前
+      return { subject:sec.subject, type:sec.type, items:sec.items, done: sec.items.filter(x=>x.done).length, total: sec.items.length };
     }).filter(s=>s.total>0);
     return {
       sections: out,
@@ -1532,14 +1538,40 @@
       done: out.reduce((a,s)=>a+s.done,0)
     };
   }
-  // 明细弹窗：按板块分组列出每个条目的已学/未学状态；点击条目可打开卡片详情
+  /* ---------- 学习库数据：本学期（当前年级）全部「学科·类型」板块 ---------- */
+  // 板块来源：内置穷举（SUBJECT_TYPES）+ 后台自定义素材实际用到的「学科·类型」；只列有内容的板块
+  // 每板块：total=该年级内容池总数（与科目页数字同源 poolFor）、done=已学、joined=已加入学习目标
+  function studyLibData(){
+    const secs = [];
+    const push = (subject,type)=>{ if(!secs.some(x=>x.subject===subject&&x.type===type)) secs.push({subject,type}); };
+    CHECKIN_TYPES.forEach(({subject,type})=>push(subject,type));
+    [...CUSTOM, ...EXTRA].forEach(c=>{ if(c.subject && c.type) push(c.subject, c.type); });
+    const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
+    const out = secs.map(sec=>{
+      let pool=[]; try{ pool=poolFor(sec.subject, sec.type); }catch(e){ pool=[]; }
+      const items = pool.map(it=>({ it, done: isDone(it.key), at: state.learned[it.key]||"", joined: !!(state.studySet&&state.studySet[it.key]) }));
+      return { subject:sec.subject, type:sec.type, items,
+        done: items.filter(x=>x.done).length, total: items.length,
+        joined: items.filter(x=>x.joined).length };
+    }).filter(s=>s.total>0);
+    // 排序：主课（语数英）在前，其余按名称；与科目导航顺序观感一致
+    const order = ["语文","数学","英语"];
+    out.sort((a,b)=>{
+      const ia=order.indexOf(a.subject), ib=order.indexOf(b.subject);
+      if(ia!==ib) return (ia<0?98:ia)-(ib<0?98:ib);
+      return a.subject===b.subject ? a.type.localeCompare(b.type,"zh") : a.subject.localeCompare(b.subject,"zh");
+    });
+    return { sections: out, total: out.reduce((a,s)=>a+s.total,0), done: out.reduce((a,s)=>a+s.done,0), joined: out.reduce((a,s)=>a+s.joined,0) };
+  }
+  // 明细弹窗：按板块分组列出已加入学习目标的条目（已学/未学）；点击条目可打开卡片详情
   function openWeekGoal(){
     const data = weekGoalData();
     $("#modal-body").innerHTML = `
-      <div class="m-type">🎯 目标明细</div>
+      <div class="m-type">🎯 学习目标明细</div>
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
-        共 <strong>${data.total}</strong> 项 · 已学 <strong style="color:#15803d">${data.done}</strong> · 未学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
-        （本周计划排到的 ${data.sections.length} 个板块，按当前年级「${esc(state.grade)}」统计）
+        共 <strong>${data.total}</strong> 项目标 · 已学 <strong style="color:#15803d">${data.done}</strong> · 未学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
+        ${data.total?"":"· 还没有加入任何学习内容，去下方「📖 学习库」把要学的内容「加入学习」"}
+        （按当前年级「${esc(state.grade)}」统计；只有在学习库点过「加入学习」的内容才计入目标进度）
       </div>
       ${data.sections.map(s=>`
         <div style="margin-bottom:16px">
@@ -1559,6 +1591,61 @@
     `;
     $("#modal-body").querySelectorAll("[data-wg-key]").forEach(b=>{
       b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.wgKey]; if(it) openModal(it); });
+    });
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+  }
+
+  // 学习库板块管理弹窗：该「学科·类型」本学期全部内容（与科目页同源），逐条「加入学习/移出」
+  function openLibSection(subject,type){
+    const sec = studyLibData().sections.find(s=>s.subject===subject&&s.type===type);
+    if(!sec){ toast("该板块暂无内容"); return; }
+    renderLibModal(sec);
+  }
+  function renderLibModal(sec){
+    $("#modal-body").innerHTML = `
+      <div class="m-type">📖 ${esc(sec.subject)} · ${esc(sec.type)} <span style="font-size:12px;color:#475569">（学习库 · 按当前年级「${esc(state.grade)}」· 与科目页数字一致）</span></div>
+      <div style="margin:6px 0 12px;font-size:14px;color:#475569">
+        共 <strong>${sec.total}</strong> 项 · 已学 <strong style="color:#15803d">${sec.done}</strong> · 已加入学习目标 <strong style="color:#4f46e5">${sec.joined}</strong>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn primary" data-study-all="1">＋ 全部加入学习</button>
+        <button class="btn" data-study-all="0">↩ 全部移出</button>
+        <span class="af-tip" style="align-self:center">只有「加入学习」的内容才计入「🎯 学习目标」进度</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${sec.items.map(x=>`
+          <span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;${x.done?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":(x.joined?"background:#eef2ff;border-color:#c7d2fe;color:#3730a3;":"background:#f8fafc;border-color:#e2e8f0;color:#475569;")}">
+            <button class="tag-btn" data-lib-key="${esc(x.it.key)}" title="点击查看详情" style="all:unset;cursor:pointer;${x.done?"color:#15803d;":""}">${esc(stripTags(x.it.title||x.it.name||x.it.key)).slice(0,18)}${x.done?" ✓":""}</button>
+            <button class="tag-btn" data-study-toggle="${esc(x.it.key)}" title="${x.joined?"移出学习目标":"加入学习目标"}" style="all:unset;cursor:pointer;font-weight:700">${x.joined?"✓":"＋"}</button>
+          </span>`).join("")}
+      </div>
+      <p class="af-tip" style="margin-top:12px">绿色=已学（带完成日期）· 蓝色=已加入学习目标 · 灰=未加入；点击条目名查看详情，点右侧 ＋/✓ 加入或移出。</p>
+    `;
+    const mb=$("#modal-body");
+    mb.querySelectorAll("[data-lib-key]").forEach(b=>{
+      b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.libKey]; if(it) openModal(it); });
+    });
+    mb.querySelectorAll("[data-study-toggle]").forEach(b=>b.addEventListener("click", ()=>{
+      const k=b.dataset.studyToggle;
+      state.studySet = state.studySet || {};
+      if(state.studySet[k]) delete state.studySet[k]; else state.studySet[k]=true;
+      save();
+      const sec2 = studyLibData().sections.find(s=>s.subject===sec.subject&&s.type===sec.type);
+      renderLibModal(sec2);
+      refreshView();
+    }));
+    const allBtn = mb.querySelector('[data-study-all="1"]'), noneBtn = mb.querySelector('[data-study-all="0"]');
+    if(allBtn) allBtn.addEventListener("click", ()=>{
+      state.studySet = state.studySet || {};
+      sec.items.forEach(x=>{ state.studySet[x.it.key]=true; });
+      save(); renderLibModal(studyLibData().sections.find(s=>s.subject===sec.subject&&s.type===sec.type)); refreshView();
+      toast("已全部加入学习目标 🎯");
+    });
+    if(noneBtn) noneBtn.addEventListener("click", ()=>{
+      state.studySet = state.studySet || {};
+      sec.items.forEach(x=>{ delete state.studySet[x.it.key]; });
+      save(); renderLibModal(studyLibData().sections.find(s=>s.subject===sec.subject&&s.type===sec.type)); refreshView();
+      toast("已全部移出学习目标");
     });
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
@@ -1640,29 +1727,6 @@
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
-  // 内容库分类明细：目标期内某「学科·类型」板块的具体内容（已学/未学，点击进卡片详情）
-  function openLibSection(subject,type){
-    const sec = weekGoalData().sections.find(s=>s.subject===subject&&s.type===type);
-    if(!sec){ toast("该板块不在本周目标内"); return; }
-    $("#modal-body").innerHTML = `
-      <div class="m-type">📚 ${esc(subject)} · ${esc(type)} <span style="font-size:12px;color:#475569">（目标期内 · 按当前年级「${esc(state.grade)}」统计）</span></div>
-      <div style="margin:6px 0 12px;font-size:14px;color:#475569">
-        共 <strong>${sec.total}</strong> 项 · 已学 <strong style="color:#15803d">${sec.done}</strong> · 未学 <strong style="color:#b91c1c">${sec.total-sec.done}</strong>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${sec.items.map(x=>`
-          <button class="tag" data-lib-key="${esc(x.it.key)}" title="${x.done?("已学："+x.at):"未学"}"
-            style="cursor:pointer;${x.done?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":"background:#fff1f2;border-color:#fecdd3;color:#be123c;"}">
-            ${esc(stripTags(x.it.title||x.it.name||x.it.key)).slice(0,20)}${x.done?" ✓":" ·"}
-          </button>`).join("")}
-      </div>
-      <p class="af-tip" style="margin-top:12px">统计随后台素材增删与周计划变化自动更新；绿色=已学（带完成日期），红色=未学，点击条目查看详情。</p>`;
-    $("#modal-body").querySelectorAll("[data-lib-key]").forEach(b=>{
-      b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.libKey]; if(it) openModal(it); });
-    });
-    $("#modal").hidden=false; document.body.style.overflow="hidden";
-  }
-
   function renderWeek(){
     const el = $("#view-week");
     const d = new Date();
@@ -1686,8 +1750,9 @@
     const weekDays=[];
     for(let i=6;i>=0;i--){ const dd=new Date(); dd.setDate(dd.getDate()-i); const ds=fmt(dd); weekDays.push({ds, c:learnedList.filter(it=>state.learned[it.key]===ds).length}); }
     const wkDates = weekDatesMondayStart();
-    // 本周目标进度（周计划板块的内容池：总量/已学/未学，点击看明细）
+    // 学习目标进度（只统计学习库里「加入学习」的条目）
     const goal = weekGoalData();
+    const lib = studyLibData();
 
     el.innerHTML = `
       <div class="hero">
@@ -1701,9 +1766,9 @@
         </div>
       </div>
 
-      <div class="sec-title">🎯 目标进度 <small>本周计划板块的学习总量 · 点击卡片查看明细</small></div>
-      <div class="stat-strip" id="wkGoalCard" style="cursor:pointer" title="点击查看本周目标明细">
-        <div class="stat"><div class="num">${goal.total}</div><div class="lbl">学习总量</div></div>
+      <div class="sec-title">🎯 学习目标 <small>只有「加入学习」的内容才计入进度 · 点击卡片查看明细</small></div>
+      <div class="stat-strip" id="wkGoalCard" style="cursor:pointer" title="点击查看学习目标明细">
+        <div class="stat"><div class="num">${goal.total}</div><div class="lbl">目标总量</div></div>
         <div class="stat"><div class="num" style="color:#15803d">${goal.done}</div><div class="lbl">已学习</div></div>
         <div class="stat"><div class="num" style="color:#be123c">${goal.total-goal.done}</div><div class="lbl">未学习</div></div>
         <div class="stat" style="flex:2;min-width:220px">
@@ -1716,15 +1781,16 @@
       ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
         :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
-      <div class="sec-title">📚 内容库 <small>目标期内（本周计划板块）分类学习总量 · 点击查看具体内容 · 后台增删素材后自动更新</small></div>
+      <div class="sec-title">📖 学习库 <small>本学期全部学习内容（与科目页数字一致）· 点条目卡「管理」把内容「加入学习」后才计入上方目标 · 打卡开关控制该板块是否参与今日排课</small></div>
       <div class="stat-strip">
-        ${goal.sections.map(s=>`
-          <div class="stat" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击查看「${esc(s.subject)}·${esc(s.type)}」的具体内容">
+        ${lib.sections.map(s=>`
+          <div class="stat lib-sec" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
             <div class="num">${s.total}</div>
             <div class="lbl">${esc(s.subject)}·${esc(s.type)}</div>
-            <div style="font-size:11px;margin-top:2px;color:#15803d">已学 ${s.done}</div>
+            <div style="font-size:11px;margin-top:2px;color:#15803d">已学 ${s.done}${s.joined?` · 目标内 ${s.joined}`:""}</div>
+            <button class="chip lib-ck ${checkinOn(s.subject,s.type)?"on":""}" data-checkin="${esc(checkinKey(s.subject,s.type))}" title="打卡开关：参与今日排课的板块" style="margin-top:4px;font-size:11px;padding:1px 8px">${checkinOn(s.subject,s.type)?"打卡中":"已暂停"}</button>
           </div>`).join("")}
-        ${goal.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">本周计划暂无板块内容，去「🛠 后台 → 📅 学习板块排程」开启板块并勾选打卡范围。</div>`}
+        ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
       </div>
 
       <div class="sec-title">📊 学习看板 <small>内容打卡概览（今日 / 本周）</small></div>
@@ -1770,21 +1836,11 @@
           }).join("")||"—"}</div>
         </div>`; }).join("")}
       </div>
-
-      <div class="chips cn-scope">
-        <span class="lbl">打卡范围：</span>
-        ${CHECKIN_TYPES.filter(ct=>allSubjects().includes(ct.subject)).map(({subject,type})=>{
-          const k=checkinKey(subject,type);
-          const on=checkinOn(subject,type);
-          return `<button class="chip ${on?"on":""}" style="${subjectStyle(subject,on)}" data-checkin="${esc(k)}" title="${esc(subject)}·${esc(type)}">${esc(subject)}·${esc(type)}</button>`;
-        }).join("")}
-        <span style="flex:1"></span>
-        <span class="af-tip">总开关：关闭的「学科·类型」不参与周计划安排（已存本地）</span>
-      </div>
     `;
     const wgCard = $("#wkGoalCard");
     if(wgCard) wgCard.addEventListener("click", openWeekGoal);
-    el.querySelectorAll("[data-lib-sec]").forEach(b=>b.addEventListener("click", ()=>{
+    el.querySelectorAll("[data-lib-sec]").forEach(b=>b.addEventListener("click", (e)=>{
+      if(e.target.closest("[data-checkin]")) return; // 打卡开关不触发打开管理
       const i=b.dataset.libSec.indexOf("·");
       openLibSection(b.dataset.libSec.slice(0,i), b.dataset.libSec.slice(i+1));
     }));
@@ -1801,7 +1857,7 @@
   // —— 数学 / 英语 / 科学 / 人文：类型 tab 驱动，后台素材自动归类；英语单词含上下册与单元 ——
   const gnView = {};
   function renderGeneric(el, subject){
-    const types = SUBJECT_TYPES[subject] || [];
+    const types = subjectTypesOf(subject);
     if(!gnView[subject]) gnView[subject] = {type:types[0]||"", grade:"全部", q:"", volume:"全部", unit:"全部", tag:""};
     const v = gnView[subject];
     const isEngWord = (subject==="英语" && v.type==="单词");
@@ -1846,6 +1902,7 @@
       <div class="chips">
         ${types.map(t=>`<button class="chip ${v.type===t?"on":""}" data-gn-type="${esc(t)}">${esc(t)}</button>`).join("")}
         ${listCnt?`<button class="chip" data-gn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案">🃏 闪卡</button>`:""}
+        <button class="chip" data-gn-add title="自定义添加板块或板块下的内容，添加后归集到「📚 资源」页">＋ 添加</button>
         ${isEngWord?`<span style="width:14px"></span><span class="lbl">年级语境：</span><span class="badge" style="background:#eef2ff;color:#1e40af">${esc(state.grade)}</span>`:""}
         <span style="flex:1"></span>
         <input id="gnSearch" class="search-input" style="width:200px" placeholder="搜索…" value="${esc(v.q)}" />
@@ -1868,6 +1925,50 @@
       const keep = document.activeElement && document.activeElement.id==="gnSearch";
       renderGeneric(el, subject);
       if(keep){ const i=$("#gnSearch"); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
+    };
+  }
+
+  /* ---------- 科目页「＋ 添加」：自定义添加板块 / 板块下的内容（归集到资源） ---------- */
+  function subjectTypesOf(subject){
+    return [...new Set([...(SUBJECT_TYPES[subject]||[]),
+      ...CUSTOM.filter(c=>c.subject===subject).map(c=>c.type),
+      ...EXTRA.filter(c=>c.subject===subject).map(c=>c.type)])];
+  }
+  function openSubjectAdd(subject, defType){
+    const types = subjectTypesOf(subject);
+    $("#modal-body").innerHTML = `
+      <div class="m-type">➕ 添加到「${esc(subject)}」</div>
+      <p class="af-tip" style="margin:4px 0 10px">板块名可下拉选择，也可直接输入新名字（自定义新板块）；添加的内容会归集到「📚 资源」页，并出现在「${esc(subject)}」科目页与类型筛选、首页、搜索中。</p>
+      <div class="admin-form">
+        <div class="af-row">
+          <label class="af-grow">板块名（类型）<input id="saType" list="saTypes" value="${esc(defType||"")}" placeholder="如 诗词 / 实验，或输入新板块名"/>
+            <datalist id="saTypes">${types.map(t=>`<option>${esc(t)}</option>`).join("")}</datalist>
+          </label>
+          <label>年级<select id="saGrade"><option>—</option>${GRADES.map(g=>`<option ${g===state.grade?"selected":""}>${g}</option>`).join("")}</select></label>
+        </div>
+        <div class="af-row">
+          <label class="af-grow">标题<input id="saTitle" placeholder="必填，如 春夜喜雨"/></label>
+          <label>作者 / 副标题<input id="saSub" placeholder="可空"/></label>
+        </div>
+        <label class="af-block">正文 / 内容<textarea id="saBody" rows="4" placeholder="诗词正文、成语解释、题目或知识点内容…"></textarea></label>
+        <div class="af-actions">
+          <button class="btn primary" id="saSubmit">＋ 添加</button>
+          <button class="btn" id="saCancel">取消</button>
+        </div>
+      </div>`;
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+    $("#saCancel").onclick=closeModal;
+    $("#saSubmit").onclick=()=>{
+      const title=$("#saTitle").value.trim();
+      if(!title){ toast("请填写标题"); return; }
+      const type=($("#saType").value.trim() || defType || "自定义");
+      const item=makeCustomItem({ subject, type,
+        grade:$("#saGrade").value, title, sub:$("#saSub").value.trim(), body:$("#saBody").value.trim() });
+      state.custom.push(item); save(); rebuildAll();
+      gnView[subject]=gnView[subject]||{};
+      closeModal();
+      toast("已添加到「"+subject+" · "+type+"」，并归集到资源页 🎉");
+      refreshView();
     };
   }
 
@@ -2056,6 +2157,7 @@
   }
   function renderChinese(el){
     if(!cnView) cnView = {type:"诗词", grade:"全部", q:"", learn:"all"};
+    const cnTypes = subjectTypesOf("语文"); // 内置类型 + 后台自定义板块（动态）
     let pool = cnPool(cnView.type);
     const isIdiom   = cnView.type==="成语";
     const isGallery = cnView.type==="成语动画廊";
@@ -2080,7 +2182,7 @@
         <div class="subj-head"><h2>语文 · 成语动画廊</h2><span class="cnt">${GALLERY.length} 集 · B 站动画</span></div>
         <p class="subj-desc">每集一个成语典故动画，点击卡片即可在弹窗内观看。整年级导入后可按年级匹配。</p>
         <div class="chips">
-          ${CN_TYPES.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}
+          ${cnTypes.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}
           <span style="flex:1"></span>
           <input id="cnSearch" class="search-input" style="width:200px" placeholder="搜索成语动画…" value="${esc(cnView.q)}" />
         </div>
@@ -2095,7 +2197,7 @@
       el.innerHTML = `
         <div class="subj-head"><h2>语文 · ${esc(cnView.type)}</h2><span class="cnt">待导入</span></div>
         <p class="subj-desc">「${esc(cnView.type)}」是语文栏目规划的内容类型之一，入口已就绪。</p>
-        <div class="chips">${CN_TYPES.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}</div>
+        <div class="chips">${cnTypes.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}</div>
         <div class="placeholder">
           <div class="big">📥</div>
           <h3>${esc(cnView.type)}内容待导入</h3>
@@ -2115,8 +2217,9 @@
       <div class="subj-head"><h2>语文 · ${esc(cnView.type)}</h2><span class="cnt">${pool.length} 条</span></div>
       <p class="subj-desc">${isIdiom?"成语已按年级自动匹配。":"诗词已按部编版教材标注年级，可筛选查看对应年级的篇目。"}点击卡片查看全文与解析。</p>
       <div class="chips">
-        ${CN_TYPES.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}
+        ${cnTypes.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}
         <button class="chip" data-cn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案">🃏 闪卡</button>
+        <button class="chip" data-cn-add title="自定义添加板块或板块下的内容，添加后归集到「📚 资源」页">＋ 添加</button>
         <span style="flex:1"></span>
         <input id="cnSearch" class="search-input" style="width:200px" placeholder="在语文内搜索…" value="${esc(cnView.q)}" />
       </div>
@@ -2790,9 +2893,11 @@
     const builtins = ALL.filter(x=>x.key!=="practice:maththought" && !/^mtq:/.test(x.key));
     // 结构型标签（年级/册/学科/类型名）不应污染「主题标签」分面，避免与对应维度重复
     const isStructTag = t => !t || GRADES.includes(t) || VOLUMES.includes(t) || SUBJECT_TYPES[t] || Object.values(SUBJECT_TYPES).some(arr=>arr.includes(t));
+    // 学科归一：「历史」并入「人文」（资源页不再单列历史学科）
+    const subjOf = x => (x.subject==="历史") ? "人文" : x.subject;
     // 联动筛选：每个维度的候选与计数，都在「其他维度已选条件」的范围内计算
     const matchExcept = except => builtins.filter(x=>{
-      if(except!=="subj"   && biView.subj   !=="全部" && x.subject!==biView.subj)   return false;
+      if(except!=="subj"   && biView.subj   !=="全部" && subjOf(x)!==biView.subj)   return false;
       if(except!=="grade"  && biView.grade  !=="全部" && x.grade  !==biView.grade)  return false;
       if(except!=="type"   && biView.type   !=="全部" && x.type   !==biView.type)   return false;
       if(except!=="volume" && biView.volume !=="全部" && x.volume !==biView.volume) return false;
@@ -2810,7 +2915,7 @@
       });
       return out;
     };
-    const subjM=cntBy(matchExcept("subj"), x=>x.subject);
+    const subjM=cntBy(matchExcept("subj"), subjOf);
     const gradeM=cntBy(matchExcept("grade").filter(x=>x.grade), x=>x.grade);
     const typeM=cntBy(matchExcept("type"), x=>x.type);
     const volumeM=cntBy(matchExcept("volume").filter(x=>x.volume), x=>x.volume);
@@ -2821,7 +2926,7 @@
     if(biView.tag && !tagM.has(biView.tag)) tagEntries.unshift([biView.tag, 0]); // 选中项即便当前 0 也保留
     tagEntries=tagEntries.slice(0,24);
     const filtered = builtins.filter(x=>{
-      if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
+      if(biView.subj!=="全部" && subjOf(x)!==biView.subj) return false;
       if(biView.grade!=="全部" && x.grade!==biView.grade) return false;
       if(biView.type!=="全部" && x.type!==biView.type) return false;
       if(biView.volume!=="全部" && x.volume!==biView.volume) return false;
@@ -2909,7 +3014,7 @@
           return `<div class="res-card" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
             <div class="rc-top">
               ${badge(x.type)}
-              <span class="tag ${isCustom?"tag-custom":"tag-built"}" title="${isCustom?"本机添加的素材":"内置素材"}">${isCustom?esc([x.subject,x.type].filter(Boolean).join("")||"自定义"):"内置"}</span>
+              <span class="tag ${isCustom?"tag-custom":"tag-built"}" title="${isCustom?"本机添加的素材":"内置素材"}">${isCustom?esc([subjOf(x),x.type].filter(Boolean).join("")||"自定义"):"内置"}</span>
             </div>
             <div class="rc-title">${esc(x.title)}</div>
             ${x.sub?`<div class="rc-sub">${esc(x.sub.slice(0,40))}</div>`:""}
@@ -3016,12 +3121,6 @@
           <button class="btn" id="afClear">清空表单</button>
           <span class="af-tip">提示：年级留「—」且类型为诗词时，系统会按诗题自动匹配部编版年级。</span>
         </div>
-      </div>
-
-      <div class="sec-title">🗂 我的素材（${CUSTOM.length}）<small>添加后直接归位到「📚 资源」页展示 · 查看 / 修改 / 删除都在资源页进行，后台不再留存列表</small></div>
-      <div class="chips">
-        <span class="lbl" style="align-self:center">共 ${CUSTOM.length} 条素材已自动归位到资源页（与内置内容合并进各学科板块，卡片自动带内容标签，如「英语阅读」）</span>
-        <button class="btn primary" id="goRes">📚 打开资源页管理</button>
       </div>
 
       <div class="sec-title">🛍 兑换审核 · 奖励设置 <small>孩子提交的兑换需家长在这里确认兑现；可自定义奖励目录</small></div>
@@ -3348,9 +3447,6 @@
       refreshView();
     };
     $("#afClear").onclick=()=>{ ["afTitle","afSub","afBody","afTags","afVideos","afUnit"].forEach(i=>$("#"+i).value=""); };
-    // 我的素材：跳转资源页管理（查看/修改/删除都在资源页）
-    const goRes=$("#goRes");
-    if(goRes) goRes.onclick=()=>go("res");
     // 还原被覆盖的内置内容
     el.querySelectorAll("[data-revert-custom]").forEach(b=>b.onclick=()=>{
       const k=b.dataset.revertCustom; if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原内置内容 ⤺"); renderAdmin(); }
@@ -3488,6 +3584,10 @@
     if(cnG){ cnView.grade=cnG.dataset.cnGrade; renderSubject("语文"); return; }
     const cnL=e.target.closest("[data-cn-learn]");
     if(cnL){ cnView.learn=cnL.dataset.cnLearn||"all"; renderSubject("语文"); return; }
+    const cnAdd=e.target.closest("[data-cn-add]");
+    if(cnAdd){ openSubjectAdd("语文", cnView?cnView.type:""); return; }
+    const gnAdd=e.target.closest("[data-gn-add]");
+    if(gnAdd){ const s=view.param; openSubjectAdd(s||"", (gnView[s]||{}).type||""); return; }
     const gnT=e.target.closest("[data-gn-type]");
     if(gnT){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].type=gnT.dataset.gnType; gnView[s].grade="全部"; gnView[s].q=""; gnView[s].unit="全部"; gnView[s].tag=""; renderSubject(s); return; }
     const gnG=e.target.closest("[data-gn-grade]");
@@ -3508,6 +3608,15 @@
     if(ci){ const k=ci.dataset.checkin; state.checkin[k] = !checkinOn(k.split("·")[0], k.split("·")[1]); save(); refreshView(); return; }
     const hdel=e.target.closest("[data-habit-del]");
     if(hdel){ const h=hdel.dataset.habitDel; state.habits=state.habits.filter(x=>x!==h); save(); toast("已删除习惯："+h); refreshView(); return; }
+    const penB=e.target.closest("[data-pen]");
+    if(penB){
+      const r=penalize(penB.dataset.pen);
+      if(r>0) toast("已扣 "+r+" 分（不可撤销）⚠️");
+      else if(r===-1) toast("这一项今天已经记过了");
+      else if(r===-2) toast("今日扣分已达上限（"+penaltyCapDay()+" 分），明天再说");
+      else if(r===-3) toast("已到欠分下限（-"+penaltyFloor()+" 分），先挣回来再扣");
+      refreshView(); return;
+    }
     const hadd=e.target.closest("[data-habit-add]");
     if(hadd){ const inp=$("#habitNew"); const v=((inp&&inp.value)||"").trim(); if(v&&!state.habits.includes(v)){ state.habits.push(v); save(); toast("已添加习惯："+v); } refreshView(); return; }
     const wgb=e.target.closest("[data-word-game]");
@@ -3565,7 +3674,8 @@
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
       pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay, openLibSection,
-      inTodayGoal, undoLearn, isLearnedKey
+      inTodayGoal, undoLearn, isLearnedKey,
+      studyLibData, subjectTypesOf, openSubjectAdd
     };
   }
 })();
