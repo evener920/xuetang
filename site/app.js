@@ -1699,6 +1699,7 @@
     const units = isEngWord ? [...new Set([...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"), ...EXTRA.filter(c=>c.subject==="英语"&&c.type==="单词")].filter(w=>w.grade===state.grade && (v.volume==="全部"||w.volume===v.volume)).map(w=>w.unit).filter(Boolean))].sort() : [];
     const hasVolume = basePool.some(x=>x.volume); // 当前学科·类型下是否存在标注了册的素材（有才显示册筛选）
     const listCnt = pool.filter(x=>x.key!=="practice:maththought").length;
+    el._gnPool = pool; // 闪卡入口用：当前筛选出的卡片池
     const desc = (hasCustom || isEngWord)
       ? `${subject}内容由「🛠 后台」添加的素材与内置教材自动归类到对应学科 / 类型 / 年级。`
       : `该栏目规划中。可在「🛠 后台」添加素材，系统自动归类到这里。`;
@@ -1707,6 +1708,7 @@
       <p class="subj-desc">${desc}</p>
       <div class="chips">
         ${types.map(t=>`<button class="chip ${v.type===t?"on":""}" data-gn-type="${esc(t)}">${esc(t)}</button>`).join("")}
+        ${listCnt?`<button class="chip" data-gn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案">🃏 闪卡</button>`:""}
         ${isEngWord?`<span style="width:14px"></span><span class="lbl">年级语境：</span><span class="badge" style="background:#eef2ff;color:#1e40af">${esc(state.grade)}</span>`:""}
         <span style="flex:1"></span>
         <input id="gnSearch" class="search-input" style="width:200px" placeholder="搜索…" value="${esc(v.q)}" />
@@ -1974,6 +1976,7 @@
       <p class="subj-desc">${isIdiom?"成语已按年级自动匹配。":"诗词已按部编版教材标注年级，可筛选查看对应年级的篇目。"}点击卡片查看全文与解析。</p>
       <div class="chips">
         ${CN_TYPES.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}
+        <button class="chip" data-cn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案">🃏 闪卡</button>
         <span style="flex:1"></span>
         <input id="cnSearch" class="search-input" style="width:200px" placeholder="在语文内搜索…" value="${esc(cnView.q)}" />
       </div>
@@ -1988,6 +1991,7 @@
       </div>`:""}
       <div class="task-grid">${pool.map(x=>cardHTML(x)).join("") || emptyHint}</div>
     `;
+    el._cnPool = pool; // 闪卡入口用：当前筛选出的语文卡片池
     bindCnRefresh(el);
   }
   function bindCnRefresh(el){ // 仅重渲染列表，保持搜索输入焦点
@@ -2000,6 +2004,102 @@
   }
 
   // —— 英语 / 数学 / 科学 / 人文 等栏目由 renderGeneric 统一渲染（见上方） ——
+
+  /* ---------- 闪卡浏览（选中一组卡片，像闪卡一样滑动翻面、猜意思） ---------- */
+  // 入口：学科页「🃏 闪卡」按钮 —— 把当前筛选出的卡片（类型/册/单元/年级/标签/搜索）作为一副牌
+  // 正面=标题（单词/成语/诗题），点击翻面看释义/全文；←→切换、空格翻面、手机左右滑动；「我会了」与学会/积分体系打通。
+  // 适用于 英语单词 / 成语 / 诗词 / 文言 / 经典阅读 等一切「有标题+正文」的卡片。
+  let fcState = { deck:[], order:[], idx:0, flipped:false, label:"", shuffle:false };
+  let fcJustSwiped = false; // 滑动后短暂屏蔽 click 翻面，避免滑动误触发
+  function fcBuildOrder(){
+    const arr=[...Array(fcState.deck.length).keys()];
+    if(fcState.shuffle){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
+    fcState.order=arr;
+  }
+  function openFlashcards(pool, label){
+    const deck=(pool||[]).filter(x=>x && x.key && x.key!=="practice:maththought" && x.key.indexOf("mtq:")!==0 && (x.title||x.body));
+    if(!deck.length){ toast("当前筛选下没有可用的闪卡内容"); return; }
+    fcState={ deck, order:[], idx:0, flipped:false, label:label||"闪卡", shuffle:false };
+    fcBuildOrder();
+    fcRender();
+  }
+  function fcCur(){ return fcState.deck[fcState.order[fcState.idx]]; }
+  function fcFlip(){ if(!fcState.deck.length) return; fcState.flipped=!fcState.flipped; fcRender(); }
+  function fcNav(d){ if(!fcState.deck.length) return; const n=fcState.deck.length; fcState.idx=(fcState.idx+d+n)%n; fcState.flipped=false; fcRender(); }
+  function fcShuffle(){ if(!fcState.deck.length) return; fcState.shuffle=!fcState.shuffle; fcBuildOrder(); fcState.idx=0; fcState.flipped=false; fcRender(); toast(fcState.shuffle?"已乱序 🔀":"已恢复原顺序"); }
+  function fcKnown(){ // 与弹窗「标记为学会」同一套语义：learned + 默认5星 + 学会积分（同一 hook 防重复计分）
+    const it=fcCur(); if(!it) return;
+    if(!state.learned[it.key]){
+      state.learned[it.key]=fmt(new Date());
+      if(getMastery(it.key)===null) setMastery(it.key, 5);
+      awardQuiet(pointRules().learn, "学会《"+it.title+"》", "learn:"+it.key, true);
+      settleBonuses();
+      toast("已记为学会 ✅《"+it.title+"》");
+    }else{ toast("这张已经在学会列表里了"); }
+    save(); refreshIfVisible(); fcNav(1);
+  }
+  function fcRender(){
+    const it=fcCur();
+    if(!it){ closeModal(); return; }
+    const isWord = it.subject==="英语";
+    const learned = !!state.learned[it.key];
+    const N = fcState.deck.length, i = fcState.idx;
+    // 正面：只出「要猜的」—— 单词/成语=词，诗词=题+作者；副标题（如音标）只出现在背面
+    const front = `
+      <div class="fc-front-title">${esc(it.title)}</div>
+      ${(!isWord && it.sub)?`<div class="fc-front-sub">${esc(it.sub)}</div>`:""}
+      <div class="fc-hint">想一想它的意思 · 点击卡片翻面</div>`;
+    // 背面：释义 / 全文（长文可滚动）
+    const back = isWord
+      ? `<div class="fc-front-title">${esc(it.title)}</div>
+         ${it.sub?`<div class="fc-front-sub">${esc(it.sub)}</div>`:""}
+         <div class="fc-back-cn">${esc(it.body||"（无释义）")}</div>`
+      : `<div class="fc-body"><b>${esc(it.title)}</b>${it.sub?`<span class="fc-src">${esc(it.sub)}</span>`:""}<br>${esc(it.body||"（无正文）").replace(/\n/g,"<br>")}</div>`;
+    $("#modal-body").innerHTML = `
+      <div class="fc-wrap">
+        <div class="fc-top">
+          <span>🃏 ${esc(fcState.label)}${fcState.shuffle?" · 乱序":""}</span>
+          <span>${i+1} / ${N}${learned?" · <span class='fc-ok'>✓已会</span>":""}</span>
+        </div>
+        <div class="fc-prog"><div class="fc-prog-fill" style="width:${Math.round((i+1)/N*100)}%"></div></div>
+        <div class="fc-card" data-fc-flip>
+          ${fcState.flipped?back:front}
+        </div>
+        <div class="fc-nav">
+          <button class="btn" data-fc-prev>← 上一张</button>
+          <button class="btn primary" data-fc-flip-btn>${fcState.flipped?"🙈 藏起答案":"🔄 翻面"}</button>
+          <button class="btn" data-fc-next>下一张 →</button>
+        </div>
+        <div class="fc-nav">
+          <button class="btn" data-fc-shuffle>${fcState.shuffle?"➡ 恢复原序":"🔀 乱序"}</button>
+          <button class="btn pa" data-fc-speak>🔊 朗读</button>
+          <button class="btn pa" data-fc-known>✓ 我会了（下一张）</button>
+        </div>
+        <p class="fc-tip">← → 键切换 · 空格翻面 · 手机上左右滑动</p>
+      </div>`;
+    const mb=$("#modal-body");
+    mb.querySelectorAll("[data-fc-flip],[data-fc-flip-btn]").forEach(b=>b.addEventListener("click",()=>{ if(fcJustSwiped) return; fcFlip(); }));
+    mb.querySelectorAll("[data-fc-prev]").forEach(b=>b.addEventListener("click",()=>fcNav(-1)));
+    mb.querySelectorAll("[data-fc-next]").forEach(b=>b.addEventListener("click",()=>fcNav(1)));
+    mb.querySelectorAll("[data-fc-shuffle]").forEach(b=>b.addEventListener("click",fcShuffle));
+    mb.querySelectorAll("[data-fc-known]").forEach(b=>b.addEventListener("click",fcKnown));
+    mb.querySelectorAll("[data-fc-speak]").forEach(b=>b.addEventListener("click",()=>{ const c=fcCur(); if(c) speak(isWord? c.title : c.title+"。"+(c.body||""), isWord?"en-US":"zh-CN"); }));
+    // 手机滑动：左右滑=切换（滑动后短暂屏蔽 click，防止误翻面）
+    const card=mb.querySelector(".fc-card");
+    if(card){
+      let sx=0, sy=0;
+      card.addEventListener("touchstart", ev=>{ sx=ev.touches[0].clientX; sy=ev.touches[0].clientY; }, {passive:true});
+      card.addEventListener("touchend", ev=>{
+        const dx=ev.changedTouches[0].clientX-sx, dy=ev.changedTouches[0].clientY-sy;
+        if(Math.abs(dx)>48 && Math.abs(dx)>Math.abs(dy)){
+          fcJustSwiped=true; setTimeout(()=>{ fcJustSwiped=false; }, 400);
+          fcNav(dx<0?1:-1);
+        }
+      }, {passive:true});
+    }
+    $("#modal").hidden=false;
+    document.body.style.overflow="hidden";
+  }
 
   /* ---------- 标签专题页 ---------- */
   function renderTag(tag){
@@ -3217,6 +3317,10 @@
     if(gnU){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].unit=gnU.dataset.gnUnit; gnView[s].tag=""; renderSubject(s); return; }
     const gnTag=e.target.closest("[data-gn-tag]");
     if(gnTag){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].tag=gnTag.dataset.gnTag||""; renderSubject(s); return; }
+    const gnF=e.target.closest("[data-gn-flash]");
+    if(gnF){ const s=view.param; const pe=$("#view-subject"); openFlashcards((pe&&pe._gnPool)||[], (s||"学科")+" · "+((gnView[s]||{}).type||"")); return; }
+    const cnF=e.target.closest("[data-cn-flash]");
+    if(cnF){ const pe=$("#view-subject"); openFlashcards((pe&&pe._cnPool)||[], "语文 · "+(cnView?cnView.type:"语文")); return; }
     const sg=e.target.closest("[data-switch-grade]");
     if(sg){ state.grade=sg.dataset.switchGrade; gs.value=state.grade; save(); render(); toast("已切换到 "+state.grade); }
     const ci=e.target.closest("[data-checkin]");
@@ -3247,6 +3351,14 @@
     if(e.target.closest("[data-close]")) closeModal();
   });
   document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+  // 闪卡键盘操作：← → 切换、空格翻面（焦点在按钮/输入框时让位，避免与 click 双触发）
+  document.addEventListener("keydown", e=>{
+    if($("#modal").hidden || !fcState.deck.length) return;
+    if(/^(BUTTON|INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||"")) return;
+    if(e.key==="ArrowLeft"){ e.preventDefault(); fcNav(-1); }
+    else if(e.key==="ArrowRight"){ e.preventDefault(); fcNav(1); }
+    else if(e.key===" "){ e.preventDefault(); fcFlip(); }
+  });
 
   /* ---------- 启动 ---------- */
   { const _a=loadArchives(); if(!_a.length || (_a[0].t||"").slice(0,10)!==fmt(new Date())) archiveCreate("每日自动存档", true); }
@@ -3268,6 +3380,7 @@
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
+      openFlashcards, fcFlip, fcNav, fcShuffle, fcKnown, get fcState(){ return fcState; },
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
       pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay, openLibSection
