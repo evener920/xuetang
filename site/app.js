@@ -1377,7 +1377,7 @@
   function openWeekGoal(){
     const data = weekGoalData();
     $("#modal-body").innerHTML = `
-      <div class="m-type">🎯 本周目标明细</div>
+      <div class="m-type">🎯 目标明细</div>
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
         共 <strong>${data.total}</strong> 项 · 已学 <strong style="color:#15803d">${data.done}</strong> · 未学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
         （本周计划排到的 ${data.sections.length} 个板块，按当前年级「${esc(state.grade)}」统计）
@@ -1542,7 +1542,7 @@
         </div>
       </div>
 
-      <div class="sec-title">🎯 本周目标进度 <small>本周计划板块的学习总量 · 点击卡片查看明细</small></div>
+      <div class="sec-title">🎯 目标进度 <small>本周计划板块的学习总量 · 点击卡片查看明细</small></div>
       <div class="stat-strip" id="wkGoalCard" style="cursor:pointer" title="点击查看本周目标明细">
         <div class="stat"><div class="num">${goal.total}</div><div class="lbl">学习总量</div></div>
         <div class="stat"><div class="num" style="color:#15803d">${goal.done}</div><div class="lbl">已学习</div></div>
@@ -1643,26 +1643,33 @@
   const gnView = {};
   function renderGeneric(el, subject){
     const types = SUBJECT_TYPES[subject] || [];
-    if(!gnView[subject]) gnView[subject] = {type:types[0]||"", grade:"全部", q:"", volume:"上册", unit:"全部"};
+    if(!gnView[subject]) gnView[subject] = {type:types[0]||"", grade:"全部", q:"", volume:"上册", unit:"全部", tag:""};
     const v = gnView[subject];
     const isEngWord = (subject==="英语" && v.type==="单词");
-    let pool;
+    let basePool, pool;
     if(isEngWord){
-      pool = [...WORDS.filter(w=>w.grade===state.grade && w.volume===v.volume),
+      basePool = [...WORDS.filter(w=>w.grade===state.grade && w.volume===v.volume),
               ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"&&c.grade===state.grade&&c.volume===v.volume)];
     }else{
       // 统一从 ALL 取（思维母题已拆分为单题、公式已拆分为小节；打散练习入口随后置顶）
-      pool = ALL.filter(c=>c.subject===subject && c.type===v.type);
+      basePool = ALL.filter(c=>c.subject===subject && c.type===v.type);
       if(subject==="数学" && v.type==="思维母题"){
-        const pe = pool.filter(x=>x.key==="practice:maththought");
-        pool = [...pe, ...pool.filter(x=>x.key!=="practice:maththought")];
+        const pe = basePool.filter(x=>x.key==="practice:maththought");
+        basePool = [...pe, ...basePool.filter(x=>x.key!=="practice:maththought")];
       }
     }
+    pool = basePool.slice();
     if(v.grade!=="全部" && !isEngWord) pool = pool.filter(x=>x.grade===v.grade);
     if(isEngWord && v.unit!=="全部") pool = pool.filter(w=>w.unit===v.unit);
+    // 主题标签筛选（与语文·诗词页一致）：按当前「学科·类型」的内容标签聚合，点选即筛选
+    if(v.tag) pool = pool.filter(x=>(x.tags||[]).includes(v.tag));
     if(v.q){ const q=v.q.toLowerCase(); pool = pool.filter(x=>(x.title+x.sub+x.body+(x.tags||[]).join("")).toLowerCase().includes(q)); }
     const grades = [...new Set(pool.map(c=>c.grade).filter(Boolean))].sort((a,b)=>GRADES.indexOf(a)-GRADES.indexOf(b));
     const hasCustom = CUSTOM.some(c=>c.subject===subject) || EXTRA.some(c=>c.subject===subject);
+    // 主题标签云：按当前「学科·类型」内容自带的 tags 聚合（与语文·诗词页一致），英文单词无标签则不显示
+    const tagFreq={};
+    basePool.forEach(x=>(x.tags||[]).forEach(t=>tagFreq[t]=(tagFreq[t]||0)+1));
+    const topTags=Object.entries(tagFreq).sort((a,b)=>b[1]-a[1]).slice(0,18).map(x=>x[0]);
     const engTotal = isEngWord ? [...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"), ...EXTRA.filter(c=>c.subject==="英语"&&c.type==="单词")].filter(w=>w.grade===state.grade).length : null;
     const units = isEngWord ? [...new Set([...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"), ...EXTRA.filter(c=>c.subject==="英语"&&c.type==="单词")].filter(w=>w.grade===state.grade&&w.volume===v.volume).map(w=>w.unit).filter(Boolean))].sort() : [];
     const listCnt = pool.filter(x=>x.key!=="practice:maththought").length;
@@ -1681,6 +1688,7 @@
       </div>
       ${(grades.length && !isEngWord)?`<div class="chips"><span class="lbl">年级：</span><button class="chip ${v.grade==="全部"?"on":""}" data-gn-grade="全部">全部</button>${grades.map(g=>`<button class="chip ${v.grade===g?"on":""}" data-gn-grade="${esc(g)}">${esc(g)}</button>`).join("")}</div>`:""}
       ${isEngWord&&units.length?`<div class="chips"><span class="lbl">单元：</span><button class="chip ${v.unit==="全部"?"on":""}" data-gn-unit="全部">全部</button>${units.map(u=>`<button class="chip ${v.unit===u?"on":""}" data-gn-unit="${esc(u)}">${esc(u)}</button>`).join("")}</div>`:""}
+      ${topTags.length?`<div class="chips"><span class="lbl">热门主题：</span><button class="tag ${!v.tag?"on":""}" data-gn-tag="">全部</button>${topTags.map(t=>`<button class="tag ${v.tag===t?"on":""}" data-gn-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>`:""}
       ${isEngWord?`
       <div class="sec-title">🎮 单词游戏 <small>用 ${esc(state.grade)}${esc(v.volume)} 的单词玩 · 完成一轮 +5 分（每天每项限一次）</small></div>
       <div class="game-row">
@@ -2367,7 +2375,6 @@
 
       <div class="sec-title">🏅 加分规则 <small>只加不减 · 复习比学新更值钱 · 连续性额外加权</small></div>
       <div class="task-grid">
-        <div class="rule-card"><div class="rl-name">学会 / 打卡内容</div><div class="rl-val">+${PR.learn} 分</div><div class="rl-tip">每学会或打卡一条内容记一次；同一条内容重复标记，不重复计分。</div></div>
         <div class="rule-card"><div class="rl-name">完成到期复习</div><div class="rl-val">+${PR.review} 分</div><div class="rl-tip">每完成一次艾宾浩斯到期复习；间隔重复最能形成长期记忆，所以比学新更值钱。</div></div>
         <div class="rule-card"><div class="rl-name">习惯打卡</div><div class="rl-val">+${PR.habit} 分</div><div class="rl-tip">每完成一个当日习惯；今天共有 ${hs.length} 个习惯。</div></div>
         <div class="rule-card"><div class="rl-name">小测答对</div><div class="rl-val">+${PR.quizRight} 分</div><div class="rl-tip">单词小测答对一题；每日上限 ${quizCapDay()} 分，防止刷分。</div></div>
@@ -2771,13 +2778,13 @@
         ${(()=>{
           // 穷举所有真实存在的「学科·类型」板块（含自定义素材），而非仅内置 CHECKIN_TYPES
           const boardMap = {};
-          ALL.forEach(x=>{ if(x.subject && x.type){ const key=x.subject+"||"+x.type; (boardMap[key]=boardMap[key]||{subject:x.subject,type:x.type,count:0}).count++; } });
+          ALL.forEach(x=>{ if(x.subject && x.type && gradeOk(x)){ const key=x.subject+"||"+x.type; (boardMap[key]=boardMap[key]||{subject:x.subject,type:x.type,count:0}).count++; } });
           const subs = [...new Set([...allSubjects(), ...Object.values(boardMap).map(b=>b.subject)])]
             .filter(s=>Object.values(boardMap).some(b=>b.subject===s));
           return subs.map(sub=>{
             const boards = Object.values(boardMap).filter(b=>b.subject===sub).sort((a,b)=>a.type.localeCompare(b.type,"zh"));
             if(!boards.length) return "";
-            return `<details class="sched-group" open>
+            return `<details class="sched-group">
               <summary><span class="sg-subj">${esc(sub)}</span><span class="sg-cnt">${boards.length} 个板块 · 点击折叠</span></summary>
               <div class="sg-body">
                 ${boards.map(({subject,type,count})=>{
@@ -3149,13 +3156,15 @@
     const cnG=e.target.closest("[data-cn-grade]");
     if(cnG){ cnView.grade=cnG.dataset.cnGrade; renderSubject("语文"); return; }
     const gnT=e.target.closest("[data-gn-type]");
-    if(gnT){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].type=gnT.dataset.gnType; gnView[s].grade="全部"; gnView[s].q=""; gnView[s].unit="全部"; renderSubject(s); return; }
+    if(gnT){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].type=gnT.dataset.gnType; gnView[s].grade="全部"; gnView[s].q=""; gnView[s].unit="全部"; gnView[s].tag=""; renderSubject(s); return; }
     const gnG=e.target.closest("[data-gn-grade]");
-    if(gnG){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].grade=gnG.dataset.gnGrade; renderSubject(s); return; }
+    if(gnG){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].grade=gnG.dataset.gnGrade; gnView[s].tag=""; renderSubject(s); return; }
     const gnV=e.target.closest("[data-gn-volume]");
-    if(gnV){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].volume=gnV.dataset.gnVolume; gnView[s].unit="全部"; renderSubject(s); return; }
+    if(gnV){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].volume=gnV.dataset.gnVolume; gnView[s].unit="全部"; gnView[s].tag=""; renderSubject(s); return; }
     const gnU=e.target.closest("[data-gn-unit]");
-    if(gnU){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].unit=gnU.dataset.gnUnit; renderSubject(s); return; }
+    if(gnU){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].unit=gnU.dataset.gnUnit; gnView[s].tag=""; renderSubject(s); return; }
+    const gnTag=e.target.closest("[data-gn-tag]");
+    if(gnTag){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].tag=gnTag.dataset.gnTag||""; renderSubject(s); return; }
     const sg=e.target.closest("[data-switch-grade]");
     if(sg){ state.grade=sg.dataset.switchGrade; gs.value=state.grade; save(); render(); toast("已切换到 "+state.grade); }
     const ci=e.target.closest("[data-checkin]");
