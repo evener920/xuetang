@@ -685,6 +685,87 @@
     save();
     return e.n;
   }
+  // —— 积分撤销的权限闸门：未登录后台时先弹框验证家长口令，通过后才允许执行撤销 ——
+  let adminGate = null; // 待授权动作（验证通过后执行）
+  function requireAdmin(action){
+    if(state.adminAuthed){ action(); return; }
+    adminGate = action;
+    $("#modal-body").innerHTML = `
+      <div class="m-type">🔐 家长验证</div>
+      <p class="af-tip" style="margin:4px 0 10px">撤销积分会改动余额和学习记录，需要先验证后台口令（默认 admin / 123456，可在后台「🔑 修改密码」更改）。</p>
+      <div class="admin-form">
+        <div class="af-row"><label class="af-grow">账号<input id="agUser" value="${esc((state.admin&&state.admin.user)||"admin")}" /></label></div>
+        <div class="af-row"><label class="af-grow">口令<input id="agPw" type="password" placeholder="后台口令" /></label></div>
+        <div class="af-actions">
+          <button class="btn primary" id="agOk">验证并继续</button>
+          <button class="btn" id="agCancel">取消</button>
+        </div>
+      </div>`;
+    $("#agCancel").onclick = closeModal;
+    $("#agOk").onclick = adminGateTry;
+    $("#agPw").addEventListener("keydown", e=>{ if(e.key==="Enter") adminGateTry(); });
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+  }
+  function adminGateTry(){
+    const u=((($("#agUser")||{}).value)||"").trim(), p=(($("#agPw")||{}).value)||"";
+    if(!p){ toast("请输入口令"); return false; }
+    if(u!==state.admin.user || pwHash(p,state.admin.salt)!==state.admin.hash){
+      toast("账号或口令不正确"); const pw=$("#agPw"); if(pw){ pw.value=""; pw.focus(); } return false;
+    }
+    state.adminAuthed=true; save(); closeModal();
+    const act=adminGate; adminGate=null; if(act) act();
+    return true;
+  }
+  // 撤销确认框：把后果说清再动手（pen=行为扣分返还；learn=退分并取消已学/星级）
+  // ref：pen 传完整 hook；learn 传卡片 key（自动补 "learn:" 前缀）
+  function confirmUndo(kind, ref){
+    const logHook = kind==="pen" ? ref : "learn:"+ref;
+    const e=(state.pointLog||[]).find(x=>x.hook===logHook && (kind==="pen" ? x.n<0 : x.n>0));
+    if(!e){ toast("这条记录不存在或已撤销"); return; }
+    const isPen = kind==="pen";
+    $("#modal-body").innerHTML = `
+      <div class="m-type">${isPen?"✅ 撤销行为扣分":"↩️ 撤销学会积分"}</div>
+      <div class="af-tip" style="margin:6px 0 12px;font-size:14px;line-height:1.7">
+        <p>将撤销：<b>${esc(e.note||"")}</b>（${esc(e.t)}，${isPen?(-e.n+" 分"):("+"+e.n+" 分")}）。</p>
+        <p>撤销后${isPen?`<b>返还 +${-e.n} 分</b>到当前积分，这条扣分记录同时消失`:`<b>退回 ${e.n} 分</b>，并取消该卡的已学标记与星级（之后可重新学、重新计分）`}。</p>
+      </div>
+      <div class="af-actions">
+        <button class="btn primary" id="cfOk">确定撤销</button>
+        <button class="btn" id="cfCancel">再想想</button>
+      </div>`;
+    $("#cfCancel").onclick = closeModal;
+    $("#cfOk").onclick = ()=>{
+      closeModal();
+      if(isPen){ const got=undoPenalty(ref); toast(got>0?("已改正，返还 +"+got+" 分 👍"):"这条扣分已撤销过"); }
+      else { const back=undoLearn(ref); toast(back>0?("已撤销学会：退回 "+back+" 分 ↩️"):"该记录已撤销过"); }
+      refreshView();
+    };
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+  }
+  // 卡片弹窗里的「撤销学会」：同样要家长口令 + 确认框（可能退分，也可能只是取消未计分的已学标记）
+  function confirmUnlearn(it){
+    const e=(state.pointLog||[]).find(x=>x.hook==="learn:"+it.key && x.n>0);
+    $("#modal-body").innerHTML = `
+      <div class="m-type">↩️ 撤销学会</div>
+      <div class="af-tip" style="margin:6px 0 12px;font-size:14px;line-height:1.7">
+        <p>将撤销《${esc(stripTags(it.title||it.name||it.key))}》的学会记录：</p>
+        ${e?`<p>· 退回 <b>+${e.n} 分</b>（学会积分）</p>`:`<p>· 该卡没有产生过学会积分</p>`}
+        <p>· 取消已学标记与星级，之后可重新学习、重新计分</p>
+      </div>
+      <div class="af-actions">
+        <button class="btn primary" id="cfOk">确定撤销</button>
+        <button class="btn" id="cfCancel">再想想</button>
+      </div>`;
+    $("#cfCancel").onclick = closeModal;
+    $("#cfOk").onclick = ()=>{
+      closeModal();
+      const back=undoLearn(it.key);
+      if(back>0) toast("已撤销学会：退回 "+back+" 分，取消已学标记 ↩️");
+      else { delete state.learned[it.key]; const t=fmt(new Date()); if(state.reviewed[t]) delete state.reviewed[t][it.key]; toast("已取消学会标记（该卡未产生积分）"); }
+      save(); openModal(it); refreshIfVisible();
+    };
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+  }
   // 学习日期集合（已打卡的日期）与连续天数
   function studyDates(){
     const s=new Set();
@@ -1888,7 +1969,7 @@
       </div>`
       :`<div class="placeholder" style="padding:14px 16px">还没有任何习惯，去「首页」的「今日习惯」添加。</div>`}
 
-      <div class="sec-title">🚨 行为扣分记录 <small>与习惯放一起看 · 只扣行为不扣学习 · 每日上限 ${penaltyCapDay()} 分 · 欠分下限 -${penaltyFloor()} 分 · 当天改正可撤销返还 · 记录在「首页」</small></div>
+      <div class="sec-title">🚨 行为扣分记录 <small>与习惯放一起看 · 只扣行为不扣学习 · 每日上限 ${penaltyCapDay()} 分 · 欠分下限 -${penaltyFloor()} 分 · 当天改正可撤销返还（需家长口令）· 扣分在「🛠 后台」记录</small></div>
       <div class="chips" style="margin:6px 0 10px">
         <span class="badge" style="background:#fee2e2;color:#b91c1c">本周共扣 -${penWeek.reduce((a,b)=>a-b.n,0)} 分</span>
         <span class="badge" style="background:#f1f5f9;color:#475569">今日 -${penaltyToday()} / 上限 ${penaltyCapDay()}</span>
@@ -1920,11 +2001,9 @@
       const i=b.dataset.libSec.indexOf("·");
       openLibSection(b.dataset.libSec.slice(0,i), b.dataset.libSec.slice(i+1));
     }));
-    // 行为扣分记录：改正撤销（返还积分）
+    // 行为扣分记录：改正撤销（需家长口令 + 确认框）
     el.querySelectorAll("[data-pen-undo]").forEach(b=>b.addEventListener("click", ()=>{
-      const got=undoPenalty(b.dataset.penUndo);
-      if(got) toast("已改正，返还 +"+got+" 分 👍");
-      renderWeek(); if(view.name==="reward") renderReward();
+      requireAdmin(()=>confirmUndo("pen", b.dataset.penUndo));
     }));
     renderCalGrid();
   }
@@ -2654,16 +2733,9 @@
             settleBonuses();
           }
         }else if(act==="unlearn"){
-          // 撤销学会：加错积分时用 —— 退分 + 删流水 + 取消已学/星级
-          const back=undoLearn(it.key);
-          if(back>0) toast("已撤销学会：退回 "+back+" 分，取消已学标记 ↩️");
-          else {
-            delete state.learned[it.key];
-            const t=fmt(new Date());
-            if(state.reviewed[t]) delete state.reviewed[t][it.key];
-            toast("已取消学会标记（该卡未产生积分）");
-          }
-          save(); openModal(it); refreshIfVisible(); return;
+          // 撤销学会：退分 + 删流水 + 取消已学/星级；需家长口令 + 确认框（加错时用）
+          requireAdmin(()=>confirmUnlearn(it));
+          return;
         }else if(act==="star"){
           setMastery(it.key, parseInt(btn.dataset.n,10)||5);
           toast("掌握度已设为 "+ (getMastery(it.key)) +" 星");
@@ -2896,9 +2968,9 @@
         }).join("")}
       </div>
 
-      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 学习所得不会因漏打卡被扣回 · 行为扣分由家长记录，改正后可撤销 · 学会积分加错了可「撤销」（退分并取消该卡已学）</small></div>
+      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 学习所得不会因漏打卡被扣回 · 行为扣分由家长记录，改正后可撤销 · 学会积分加错了可「撤销」（退分并取消该卡已学）· 撤销需验证家长口令</small></div>
       ${(state.pointLog||[]).length?`<div class="admin-list">
-        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${x.n<0?`<span class="badge" style="background:#fef2f2;color:#b91c1c">行为扣分</span>`:""}${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div>${/^learn:/.test(x.hook)?`<button class="btn" style="font-size:12px;padding:2px 8px" data-undo-learn="${esc(x.hook.slice(6))}" title="退回这 +${x.n} 分，并取消该卡的已学标记（加错时用）">撤销</button>`:""}</div>`).join("")}
+        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${x.n<0?`<span class="badge" style="background:#fef2f2;color:#b91c1c">行为扣分</span>`:""}${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div>${/^learn:/.test(x.hook)?`<button class="btn" style="font-size:12px;padding:2px 8px" data-undo-learn="${esc(x.hook.slice(6))}" title="退回这 +${x.n} 分，并取消该卡的已学标记（加错时用）">撤销</button>`:""}${/^pen:/.test(x.hook)?`<button class="btn" style="font-size:12px;padding:2px 8px" data-undo-pen="${esc(x.hook)}" title="孩子已改正 → 返还 +${-x.n} 分">撤销</button>`:""}</div>`).join("")}
       </div>`:'<div class="placeholder" style="padding:16px">还没有积分记录，去首页完成今天的任务吧 🚀</div>'}
 
       <div class="sec-title">📦 兑换记录 <small>兑换后需家长在「🛠 后台」确认兑现</small></div>
@@ -2909,10 +2981,12 @@
       </div>`:'<div class="placeholder" style="padding:16px">还没有兑换过奖励</div>'}
     `;
     el.querySelectorAll("[data-redeem]").forEach(b=>b.addEventListener("click", ()=>redeemReward(b.dataset.redeem)));
+    // 积分流水撤销：先过家长口令（requireAdmin），再弹确认框（confirmUndo）
     el.querySelectorAll("[data-undo-learn]").forEach(b=>b.addEventListener("click", ()=>{
-      const back=undoLearn(b.dataset.undoLearn);
-      toast(back>0 ? ("已撤销学会：退回 "+back+" 分 ↩️") : "该记录已撤销过");
-      renderReward();
+      requireAdmin(()=>confirmUndo("learn", b.dataset.undoLearn));
+    }));
+    el.querySelectorAll("[data-undo-pen]").forEach(b=>b.addEventListener("click", ()=>{
+      requireAdmin(()=>confirmUndo("pen", b.dataset.undoPen));
     }));
   }
 
@@ -3732,6 +3806,7 @@
       get biView(){ return biView; }, settleBonuses, pointToday, pointTodayNet, pointWeekNet, POINT_RULES, DEFAULT_REWARDS,
       get cnView(){ return cnView; }, get gnView(){ return gnView; },
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, penaltyLogWeek, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
+      requireAdmin, adminGateTry, confirmUndo, confirmUnlearn,
       todayTasks, poolFor, poolForAll, libPoolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, renderLibModal, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,

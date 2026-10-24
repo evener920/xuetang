@@ -8,7 +8,8 @@
 // ⑧ 全视图渲染回归（防 renderRes 白屏类事故）
 // ⑨ 学习库年级筛选（bo：扩大选择范围）：poolForAll/libPoolFor/年级 chips/跨年级加入
 // ⑩ 语文页筛选空态与「↩ 返回」（bp：点已学筛选被待导入空态困住）
-// ⑦ 版本号：10×bp
+// ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框）
+// ⑦ 版本号：10×bq
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -473,6 +474,75 @@ safe('⑩ 语文页筛选空态与返回', ()=>{
   ok('  源码含 data-cn-clear 处理器', code.includes('[data-cn-clear]'), '');
 });
 
+/* ---------- ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框） ---------- */
+safe('⑪ 积分撤销权限闸门', ()=>{
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  const doc = ctx.window.document;
+  const today = S.fmt(new Date());
+  // 造一条扣分 + 一条学会积分
+  S.penalize('p1'); // -5
+  S.award(8, '学会《测试卡》', 'learn:test:key1');
+  S.renderReward();
+  const rw = doc.getElementById('view-reward').innerHTML;
+  ok('  积分流水扣分明细带撤销按钮', rw.includes('data-undo-pen="pen:p1:'+today+'"'), '');
+  ok('  积分流水学会明细带撤销按钮', rw.includes('data-undo-learn="test:key1"'), '');
+  ok('  流水说明标注撤销需家长口令', rw.includes('撤销需验证家长口令'), '');
+
+  // 权限闸门：未登录 → 弹验证框且不执行
+  S.state.adminAuthed = false;
+  let ran = 0;
+  S.requireAdmin(()=>{ ran++; });
+  let mb = doc.getElementById('modal-body').innerHTML;
+  ok('  未登录时弹出家长验证框', mb.includes('家长验证') && mb.includes('id="agPw"'), '');
+  ok('  未通过验证不执行动作', ran===0, 'ran='+ran);
+  // 口令错误 → false，仍不执行
+  doc.getElementById('agUser').value = 'admin';
+  doc.getElementById('agPw').value = 'wrong';
+  ok('  口令错误返回 false 且不执行', S.adminGateTry()===false && ran===0, '');
+  // 口令正确 → 放行执行 + 标记登录态
+  doc.getElementById('agPw').value = '123456';
+  ok('  口令正确放行并执行', S.adminGateTry()===true && ran===1 && S.state.adminAuthed===true, 'ran='+ran);
+  // 已登录 → 直接执行不弹框
+  ran = 0;
+  S.requireAdmin(()=>{ ran++; });
+  ok('  已登录后直接执行不弹验证框', ran===1, 'ran='+ran);
+
+  // 确认框（扣分）：说清后果
+  S.confirmUndo('pen', 'pen:p1:'+today);
+  mb = doc.getElementById('modal-body').innerHTML;
+  ok('  扣分撤销前弹确认框', mb.includes('撤销行为扣分') && mb.includes('确定撤销') && mb.includes('再想想'), '');
+  const pts0 = S.state.points;
+  doc.getElementById('cfOk').onclick();
+  ok('  确认后扣分撤销返还积分', S.state.points===pts0+5 && S.penaltyLogToday().length===0, 'p='+S.state.points);
+
+  // 确认框（学会）：退分 + 取消已学
+  S.state.learned['test:key1'] = today;
+  S.confirmUndo('learn', 'test:key1');
+  mb = doc.getElementById('modal-body').innerHTML;
+  ok('  学会撤销前弹确认框', mb.includes('撤销学会积分') && mb.includes('退回'), '');
+  const pts1 = S.state.points;
+  doc.getElementById('cfOk').onclick();
+  ok('  确认后学会撤销退分并取消已学', S.state.points===pts1-8 && !S.state.learned['test:key1'], 'p='+S.state.points);
+
+  // 已撤销的记录再点 → 不弹确认框
+  S.confirmUndo('pen', 'pen:p1:'+today);
+  ok('  重复撤销同一记录被拒（不弹框）', doc.getElementById('modal').hidden===true, '');
+
+  // 卡片弹窗「撤销学会」也走确认框
+  const poem = S.ALL.find(x=>x.subject==='语文'&&x.type==='诗词');
+  S.state.learned[poem.key] = today;
+  S.confirmUnlearn(poem);
+  mb = doc.getElementById('modal-body').innerHTML;
+  ok('  卡片撤销学会弹确认框', mb.includes('撤销学会') && mb.includes('该卡没有产生过学会积分'), '');
+  doc.getElementById('cfOk').onclick();
+  ok('  确认后取消已学标记', !S.state.learned[poem.key], '');
+
+  // 源码守卫：撤销入口均走 requireAdmin
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  ok('  撤销按钮均走 requireAdmin（含定义≥5 处）', (code.match(/requireAdmin\(/g)||[]).length>=5, 'n='+(code.match(/requireAdmin\(/g)||[]).length);
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -483,6 +553,7 @@ safe('⑦ 版本号', ()=>{
   const bn=(html.match(/20261024bn/g)||[]).length;
   const bo=(html.match(/20261024bo/g)||[]).length;
   const bp=(html.match(/20261024bp/g)||[]).length;
+  const bq=(html.match(/20261024bq/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -490,8 +561,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bp', bp===10, 'bp='+bp);
-  ok('  0 处 bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 bq', bq===10, 'bq='+bq);
+  ok('  0 处 bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;
