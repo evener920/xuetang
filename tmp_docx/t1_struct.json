@@ -1,0 +1,844 @@
+[
+ {
+  "num": 1,
+  "steps": [
+   {
+    "label": "",
+    "diff": "",
+    "content": [
+     {
+      "t": "Exercise 1",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image59.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image60.jpeg"
+      ]
+     },
+     {
+      "t": "听力音频",
+      "imgs": []
+     },
+     {
+      "t": "听录音，选出正确的应答语。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1.A.It's not my cat. B.It's in the living room.",
+      "imgs": []
+     },
+     {
+      "t": "( )2.A.It's my brother's. B.My brother has a computer.",
+      "imgs": []
+     },
+     {
+      "t": "( )3.A.Thank you. B.No,it isn't.",
+      "imgs": []
+     },
+     {
+      "t": "( )4.A.No,I have a study. B.Yes,I do.",
+      "imgs": []
+     },
+     {
+      "t": "( )5.A.It's yellow and white. B.It's new and nice.",
+      "imgs": []
+     }
+    ]
+   },
+   {
+    "label": "Step 2 听对话 难度：☆☆☆",
+    "diff": "☆☆☆",
+    "content": [
+     {
+      "t": "听录音，判断下列图片与你所听内容是(T) 否( F) 相符。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1. ( )2. ( )3. ( )4.",
+      "imgs": [
+       "assets/listen/t1/image61.jpeg",
+       "assets/listen/t1/image62.jpeg",
+       "assets/listen/t1/image63.jpeg",
+       "assets/listen/t1/image64.jpeg"
+      ]
+     }
+    ]
+   },
+   {
+    "label": "Step 听短文 难度：☆☆☆☆",
+    "diff": "☆☆☆☆",
+    "content": [
+     {
+      "t": "听录音，选择正确答案。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1.There are rooms in Amy's home.",
+      "imgs": []
+     },
+     {
+      "t": "A . two B.three",
+      "imgs": []
+     },
+     {
+      "t": "( )2.The walls in Amy's bedroom are",
+      "imgs": []
+     },
+     {
+      "t": "A.brown B.white ( )3.There is a on the wall.",
+      "imgs": []
+     },
+     {
+      "t": "A.picture B.map ( )4.The table is near the",
+      "imgs": []
+     },
+     {
+      "t": "A.bed B.window",
+      "imgs": []
+     },
+     {
+      "t": "( )5.What does Amy like to do in her bedroom?",
+      "imgs": [
+       "assets/listen/t1/image66.jpeg"
+      ]
+     },
+     {
+      "t": "A. B.",
+      "imgs": [
+       "assets/listen/t1/image67.jpeg"
+      ]
+     },
+     {
+      "t": "C.eight",
+      "imgs": []
+     },
+     {
+      "t": "C.yellow",
+      "imgs": []
+     },
+     {
+      "t": "C.clock",
+      "imgs": []
+     },
+     {
+      "t": "C.door",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image68.jpeg"
+      ]
+     },
+     {
+      "t": "C.",
+      "imgs": []
+     },
+     {
+      "t": "002 I 一本 小学英语听力训练100篇 · 四年级",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image69.jpeg"
+      ]
+     }
+    ]
+   },
+   {
+    "label": "听句子 难度：",
+    "diff": "",
+    "content": []
+   }
+  ]
+ },
+ {
+  "num": 2,
+  "steps": [
+   {
+    "label": "",
+    "diff": "",
+    "content": [
+     {
+      "t": "Exercise 2",
+      "imgs": []
+     },
+     {
+      "t": "0-593725听力音频",
+      "imgs": [
+       "assets/listen/t1/image71.jpeg"
+      ]
+     },
+     {
+      "t": "听录音，判断下列图片与你所听内容是(T) 否( F) 相符。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1.",
+      "imgs": [
+       "assets/listen/t1/image72.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image73.jpeg"
+      ]
+     },
+     {
+      "t": "( )2.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image74.jpeg"
+      ]
+     },
+     {
+      "t": "( )3.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image75.jpeg"
+      ]
+     },
+     {
+      "t": "( )4.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image76.jpeg"
+      ]
+     }
+    ]
+   },
+   {
+    "label": "听对话 难度：☆☆☆",
+    "diff": "☆☆☆",
+    "content": [
+     {
+      "t": "听录音，选择正确答案。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1.What is Mum doing?",
+      "imgs": []
+     },
+     {
+      "t": "A.She is making noodles. B.She is making cakes.",
+      "imgs": []
+     },
+     {
+      "t": "C.She is making soup.",
+      "imgs": []
+     },
+     {
+      "t": "( )2.Where is Amy?",
+      "imgs": []
+     },
+     {
+      "t": "A.In the kitchen. B.In the living room.",
+      "imgs": []
+     },
+     {
+      "t": "C.In the bedroom.",
+      "imgs": []
+     },
+     {
+      "t": "( )3.What is the cat doing?",
+      "imgs": []
+     },
+     {
+      "t": "A.It's eating fish. B.It's drinking water.",
+      "imgs": []
+     },
+     {
+      "t": "C.It's playing with a ball. Step 听短文 难度：☆☆☆☆",
+      "imgs": [
+       "assets/listen/t1/image77.jpeg"
+      ]
+     },
+     {
+      "t": "听录音，将人物与其准备的礼物连线。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "Grandma Grandpa Mother Father Tom",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image78.jpeg"
+      ]
+     },
+     {
+      "t": "Part 1 话题训练 I 003",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image79.jpeg"
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "num": 3,
+  "steps": [
+   {
+    "label": "",
+    "diff": "",
+    "content": [
+     {
+      "t": "Exercise 3",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image80.jpeg"
+      ]
+     },
+     {
+      "t": "听力音频",
+      "imgs": []
+     },
+     {
+      "t": "[新题型]听录音，将物品序号填入右侧图片中正确的位置。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image81.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image82.jpeg"
+      ]
+     },
+     {
+      "t": "C. D.",
+      "imgs": []
+     },
+     {
+      "t": "E.",
+      "imgs": []
+     }
+    ]
+   },
+   {
+    "label": "Step 听对话 难度：",
+    "diff": "",
+    "content": [
+     {
+      "t": "听录音，将物品放到对应房间。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image88.jpeg",
+       "assets/listen/t1/image89.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image90.jpeg",
+       "assets/listen/t1/image91.jpeg",
+       "assets/listen/t1/image92.jpeg"
+      ]
+     },
+     {
+      "t": "A. B.",
+      "imgs": []
+     },
+     {
+      "t": "E.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image93.jpeg",
+       "assets/listen/t1/image94.jpeg",
+       "assets/listen/t1/image95.jpeg"
+      ]
+     },
+     {
+      "t": "1. 2. 3.",
+      "imgs": []
+     }
+    ]
+   },
+   {
+    "label": "Step 3 听短文 难度：",
+    "diff": "",
+    "content": [
+     {
+      "t": "听录音，从方框中选择正确的选项，完成表格。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "A.dance B.make soup C.study D.living room",
+      "imgs": []
+     },
+     {
+      "t": "Who",
+      "imgs": []
+     },
+     {
+      "t": "Where",
+      "imgs": []
+     },
+     {
+      "t": "What to do",
+      "imgs": []
+     },
+     {
+      "t": "Mother",
+      "imgs": []
+     },
+     {
+      "t": "kitchen",
+      "imgs": []
+     },
+     {
+      "t": "1.",
+      "imgs": []
+     },
+     {
+      "t": "Father",
+      "imgs": []
+     },
+     {
+      "t": "2.",
+      "imgs": []
+     },
+     {
+      "t": "read",
+      "imgs": []
+     },
+     {
+      "t": "Tom",
+      "imgs": []
+     },
+     {
+      "t": "bedroom",
+      "imgs": []
+     },
+     {
+      "t": "3.",
+      "imgs": []
+     },
+     {
+      "t": "Amy",
+      "imgs": []
+     },
+     {
+      "t": "4.",
+      "imgs": []
+     },
+     {
+      "t": "play",
+      "imgs": []
+     },
+     {
+      "t": "听录音，选出与你所听相符的图片。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1.A.",
+      "imgs": []
+     },
+     {
+      "t": "( )3.A.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image97.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image98.jpeg"
+      ]
+     },
+     {
+      "t": "B.",
+      "imgs": []
+     },
+     {
+      "t": "B.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image99.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image100.jpeg"
+      ]
+     },
+     {
+      "t": "( )2.A.",
+      "imgs": []
+     },
+     {
+      "t": "( )4.A.",
+      "imgs": []
+     }
+    ]
+   },
+   {
+    "label": "Step 2 听对话 难度：☆☆☆",
+    "diff": "☆☆☆",
+    "content": [
+     {
+      "t": "听录音，将人物和各自要做的家务连线。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image102.jpeg",
+       "assets/listen/t1/image103.jpeg"
+      ]
+     },
+     {
+      "t": "Sam",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image104.jpeg"
+      ]
+     },
+     {
+      "t": "B.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image105.jpeg"
+      ]
+     },
+     {
+      "t": "B.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image106.jpeg"
+      ]
+     },
+     {
+      "t": "Lisa",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image107.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image108.jpeg"
+      ]
+     },
+     {
+      "t": "A.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image109.jpeg"
+      ]
+     },
+     {
+      "t": "B.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image110.jpeg"
+      ]
+     },
+     {
+      "t": "C.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image111.jpeg"
+      ]
+     },
+     {
+      "t": "D.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image112.jpeg"
+      ]
+     }
+    ]
+   },
+   {
+    "label": "Step 3 听短文 难度：",
+    "diff": "",
+    "content": [
+     {
+      "t": "听录音，在人物会做的家务下打“ √”。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "Wash the clothes",
+      "imgs": []
+     },
+     {
+      "t": "Wash the dishes",
+      "imgs": []
+     },
+     {
+      "t": "Make the beds",
+      "imgs": []
+     },
+     {
+      "t": "Clean the table",
+      "imgs": []
+     },
+     {
+      "t": "Sweep the floor",
+      "imgs": []
+     },
+     {
+      "t": "Lily",
+      "imgs": []
+     },
+     {
+      "t": "Sam",
+      "imgs": []
+     },
+     {
+      "t": "Mary",
+      "imgs": []
+     },
+     {
+      "t": "Tom",
+      "imgs": []
+     },
+     {
+      "t": "Lisa",
+      "imgs": []
+     },
+     {
+      "t": "Part 1 话题训练 | 005",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image114.jpeg"
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "num": 5,
+  "steps": [
+   {
+    "label": "",
+    "diff": "",
+    "content": [
+     {
+      "t": "Exercise 5",
+      "imgs": []
+     },
+     {
+      "t": "听力音频",
+      "imgs": []
+     }
+    ]
+   },
+   {
+    "label": "听句子",
+    "diff": "",
+    "content": [
+     {
+      "t": "难度：☆☆",
+      "imgs": []
+     },
+     {
+      "t": "Step",
+      "imgs": []
+     },
+     {
+      "t": "听录音，判断下列图片与你所听内容是(T) 否( F) 相符。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image116.jpeg"
+      ]
+     },
+     {
+      "t": "( )2.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image117.jpeg"
+      ]
+     },
+     {
+      "t": "( )3.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image118.jpeg"
+      ]
+     },
+     {
+      "t": "( )4.",
+      "imgs": [
+       "assets/listen/t1/image119.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image120.jpeg"
+      ]
+     },
+     {
+      "t": "( )5.",
+      "imgs": []
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image121.jpeg"
+      ]
+     }
+    ]
+   },
+   {
+    "label": "听对话 难度：",
+    "diff": "",
+    "content": [
+     {
+      "t": "听录音，选出与你所听内容相符的图片。(听两遍)",
+      "imgs": []
+     },
+     {
+      "t": "( )1.A. B.",
+      "imgs": [
+       "assets/listen/t1/image122.jpeg",
+       "assets/listen/t1/image123.jpeg"
+      ]
+     },
+     {
+      "t": "( )2.A. B.",
+      "imgs": [
+       "assets/listen/t1/image124.jpeg",
+       "assets/listen/t1/image125.jpeg"
+      ]
+     },
+     {
+      "t": "B.",
+      "imgs": [
+       "assets/listen/t1/image126.jpeg",
+       "assets/listen/t1/image127.jpeg"
+      ]
+     },
+     {
+      "t": "( )4.A. B.",
+      "imgs": [
+       "assets/listen/t1/image128.jpeg",
+       "assets/listen/t1/image129.jpeg"
+      ]
+     },
+     {
+      "t": "",
+      "imgs": [
+       "assets/listen/t1/image130.jpeg"
+      ]
+     },
+     {
+      "t": "听 短 文 难度：☆☆☆☆",
+      "imgs": []
+     },
+     {
+      "t": "听录音，判断下列句子的正(T) 误(F) 。 ( 听两遍) ( )1.Linda has a new bed.",
+      "imgs": []
+     },
+     {
+      "t": "( )2.Linda's bed is green.",
+      "imgs": []
+     },
+     {
+      "t": "( )3.There are two pictures on the wall.",
+      "imgs": []
+     },
+     {
+      "t": "( )4.There are two chairs in Linda's bedroom. ( )5.Linda can read books in her bedroom.",
+      "imgs": []
+     },
+     {
+      "t": "小学英语听力训练100篇 · 四年级",
+      "imgs": [
+       "assets/listen/t1/image131.jpeg"
+      ]
+     }
+    ]
+   }
+  ]
+ }
+]

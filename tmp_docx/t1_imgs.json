@@ -1,0 +1,260 @@
+{
+ "para_img": {
+  "227": [
+   "rId116"
+  ],
+  "232": [
+   "rId117"
+  ],
+  "240": [
+   "rId118"
+  ],
+  "241": [
+   "rId119"
+  ],
+  "252": [
+   "rId120",
+   "rId121",
+   "rId122",
+   "rId123"
+  ],
+  "255": [
+   "rId124"
+  ],
+  "263": [
+   "rId125"
+  ],
+  "264": [
+   "rId126"
+  ],
+  "282": [
+   "rId127"
+  ],
+  "295": [
+   "rId128"
+  ],
+  "303": [
+   "rId129"
+  ],
+  "312": [
+   "rId130"
+  ],
+  "318": [
+   "rId131"
+  ],
+  "322": [
+   "rId132"
+  ],
+  "327": [
+   "rId133"
+  ],
+  "332": [
+   "rId134"
+  ],
+  "337": [
+   "rId135"
+  ],
+  "350": [
+   "rId136"
+  ],
+  "361": [
+   "rId137"
+  ],
+  "365": [
+   "rId138"
+  ],
+  "368": [
+   "rId139"
+  ],
+  "371": [
+   "rId140"
+  ],
+  "372": [
+   "rId141"
+  ],
+  "379": [
+   "rId146"
+  ],
+  "381": [
+   "rId147",
+   "rId148"
+  ],
+  "382": [
+   "rId149",
+   "rId150",
+   "rId151"
+  ],
+  "387": [
+   "rId152",
+   "rId153",
+   "rId154"
+  ],
+  "391": [
+   "rId155"
+  ],
+  "423": [
+   "rId156"
+  ],
+  "425": [
+   "rId157"
+  ],
+  "433": [
+   "rId158"
+  ],
+  "435": [
+   "rId159"
+  ],
+  "443": [
+   "rId160"
+  ],
+  "445": [
+   "rId161",
+   "rId162"
+  ],
+  "449": [
+   "rId163"
+  ],
+  "454": [
+   "rId164"
+  ],
+  "465": [
+   "rId165"
+  ],
+  "469": [
+   "rId166"
+  ],
+  "470": [
+   "rId167"
+  ],
+  "479": [
+   "rId168"
+  ],
+  "484": [
+   "rId169"
+  ],
+  "489": [
+   "rId170"
+  ],
+  "494": [
+   "rId171"
+  ],
+  "497": [
+   "rId172"
+  ],
+  "539": [
+   "rId173"
+  ],
+  "555": [
+   "rId175"
+  ],
+  "561": [
+   "rId176"
+  ],
+  "567": [
+   "rId177"
+  ],
+  "570": [
+   "rId178"
+  ],
+  "574": [
+   "rId179"
+  ],
+  "579": [
+   "rId180"
+  ],
+  "583": [
+   "rId181",
+   "rId182"
+  ],
+  "584": [
+   "rId183",
+   "rId184"
+  ],
+  "585": [
+   "rId185",
+   "rId186"
+  ],
+  "586": [
+   "rId187",
+   "rId188"
+  ],
+  "587": [
+   "rId189"
+  ],
+  "594": [
+   "rId190"
+  ]
+ },
+ "rid2target": {
+  "rId116": "media/image57.jpeg",
+  "rId117": "media/image58.jpeg",
+  "rId118": "media/image59.jpeg",
+  "rId119": "media/image60.jpeg",
+  "rId120": "media/image61.jpeg",
+  "rId121": "media/image62.jpeg",
+  "rId122": "media/image63.jpeg",
+  "rId123": "media/image64.jpeg",
+  "rId124": "media/image65.jpeg",
+  "rId125": "media/image66.jpeg",
+  "rId126": "media/image67.jpeg",
+  "rId127": "media/image68.jpeg",
+  "rId128": "media/image69.jpeg",
+  "rId129": "media/image70.jpeg",
+  "rId130": "media/image71.jpeg",
+  "rId131": "media/image72.jpeg",
+  "rId132": "media/image73.jpeg",
+  "rId133": "media/image74.jpeg",
+  "rId134": "media/image75.jpeg",
+  "rId135": "media/image76.jpeg",
+  "rId136": "media/image77.jpeg",
+  "rId137": "media/image78.jpeg",
+  "rId138": "media/image79.jpeg",
+  "rId139": "media/image80.jpeg",
+  "rId140": "media/image81.jpeg",
+  "rId141": "media/image82.jpeg",
+  "rId146": "media/image87.jpeg",
+  "rId147": "media/image88.jpeg",
+  "rId148": "media/image89.jpeg",
+  "rId149": "media/image90.jpeg",
+  "rId150": "media/image91.jpeg",
+  "rId151": "media/image92.jpeg",
+  "rId152": "media/image93.jpeg",
+  "rId153": "media/image94.jpeg",
+  "rId154": "media/image95.jpeg",
+  "rId155": "media/image96.jpeg",
+  "rId156": "media/image97.jpeg",
+  "rId157": "media/image98.jpeg",
+  "rId158": "media/image99.jpeg",
+  "rId159": "media/image100.jpeg",
+  "rId160": "media/image101.jpeg",
+  "rId161": "media/image102.jpeg",
+  "rId162": "media/image103.jpeg",
+  "rId163": "media/image104.jpeg",
+  "rId164": "media/image105.jpeg",
+  "rId165": "media/image106.jpeg",
+  "rId166": "media/image107.jpeg",
+  "rId167": "media/image108.jpeg",
+  "rId168": "media/image109.jpeg",
+  "rId169": "media/image110.jpeg",
+  "rId170": "media/image111.jpeg",
+  "rId171": "media/image112.jpeg",
+  "rId172": "media/image113.jpeg",
+  "rId173": "media/image114.jpeg",
+  "rId175": "media/image116.jpeg",
+  "rId176": "media/image117.jpeg",
+  "rId177": "media/image118.jpeg",
+  "rId178": "media/image119.jpeg",
+  "rId179": "media/image120.jpeg",
+  "rId180": "media/image121.jpeg",
+  "rId181": "media/image122.jpeg",
+  "rId182": "media/image123.jpeg",
+  "rId183": "media/image124.jpeg",
+  "rId184": "media/image125.jpeg",
+  "rId185": "media/image126.jpeg",
+  "rId186": "media/image127.jpeg",
+  "rId187": "media/image128.jpeg",
+  "rId188": "media/image129.jpeg",
+  "rId189": "media/image130.jpeg",
+  "rId190": "media/image131.jpeg"
+ }
+}
