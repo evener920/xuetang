@@ -1481,6 +1481,29 @@
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
+  // 内容库分类明细：目标期内某「学科·类型」板块的具体内容（已学/未学，点击进卡片详情）
+  function openLibSection(subject,type){
+    const sec = weekGoalData().sections.find(s=>s.subject===subject&&s.type===type);
+    if(!sec){ toast("该板块不在本周目标内"); return; }
+    $("#modal-body").innerHTML = `
+      <div class="m-type">📚 ${esc(subject)} · ${esc(type)} <span style="font-size:12px;color:#475569">（目标期内 · 按当前年级「${esc(state.grade)}」统计）</span></div>
+      <div style="margin:6px 0 12px;font-size:14px;color:#475569">
+        共 <strong>${sec.total}</strong> 项 · 已学 <strong style="color:#15803d">${sec.done}</strong> · 未学 <strong style="color:#b91c1c">${sec.total-sec.done}</strong>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${sec.items.map(x=>`
+          <button class="tag" data-lib-key="${esc(x.it.key)}" title="${x.done?("已学："+x.at):"未学"}"
+            style="cursor:pointer;${x.done?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":"background:#fff1f2;border-color:#fecdd3;color:#be123c;"}">
+            ${esc(stripTags(x.it.title||x.it.name||x.it.key)).slice(0,20)}${x.done?" ✓":" ·"}
+          </button>`).join("")}
+      </div>
+      <p class="af-tip" style="margin-top:12px">统计随后台素材增删与周计划变化自动更新；绿色=已学（带完成日期），红色=未学，点击条目查看详情。</p>`;
+    $("#modal-body").querySelectorAll("[data-lib-key]").forEach(b=>{
+      b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.libKey]; if(it) openModal(it); });
+    });
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+  }
+
   function renderWeek(){
     const el = $("#view-week");
     const d = new Date();
@@ -1504,9 +1527,6 @@
     const weekDays=[];
     for(let i=6;i>=0;i--){ const dd=new Date(); dd.setDate(dd.getDate()-i); const ds=fmt(dd); weekDays.push({ds, c:learnedList.filter(it=>state.learned[it.key]===ds).length}); }
     const wkDates = weekDatesMondayStart();
-
-    const learnedCount = Object.keys(state.learned).length;
-    const favCount = Object.keys(state.fav).length;
     // 本周目标进度（周计划板块的内容池：总量/已学/未学，点击看明细）
     const goal = weekGoalData();
 
@@ -1537,15 +1557,15 @@
       ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
         :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
-      <div class="sec-title">📚 内容库 <small>按当前年级（${esc(state.grade)}）统计 · 无本年级内容的类型为 0</small></div>
+      <div class="sec-title">📚 内容库 <small>目标期内（本周计划板块）分类学习总量 · 点击查看具体内容 · 后台增删素材后自动更新</small></div>
       <div class="stat-strip">
-        <div class="stat"><div class="num">${poolFor("语文","诗词").length}</div><div class="lbl">诗词</div></div>
-        <div class="stat"><div class="num">${poolFor("语文","成语").length}</div><div class="lbl">成语</div></div>
-        <div class="stat"><div class="num">${poolFor("英语","单词").length}</div><div class="lbl">单词</div></div>
-        <div class="stat"><div class="num">${poolFor("语文","成语动画廊").length}</div><div class="lbl">动画</div></div>
-        <div class="stat"><div class="num">${CUSTOM.filter(gradeOk).length}</div><div class="lbl">后台素材</div></div>
-        <div class="stat"><div class="num">${learnedCount}</div><div class="lbl">已学会</div></div>
-        <div class="stat"><div class="num">${favCount}</div><div class="lbl">收藏</div></div>
+        ${goal.sections.map(s=>`
+          <div class="stat" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击查看「${esc(s.subject)}·${esc(s.type)}」的具体内容">
+            <div class="num">${s.total}</div>
+            <div class="lbl">${esc(s.subject)}·${esc(s.type)}</div>
+            <div style="font-size:11px;margin-top:2px;color:#15803d">已学 ${s.done}</div>
+          </div>`).join("")}
+        ${goal.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">本周计划暂无板块内容，去「🛠 后台 → 📅 学习板块排程」开启板块并勾选打卡范围。</div>`}
       </div>
 
       <div class="sec-title">📊 学习看板 <small>内容打卡概览（今日 / 本周）</small></div>
@@ -1605,6 +1625,10 @@
     `;
     const wgCard = $("#wkGoalCard");
     if(wgCard) wgCard.addEventListener("click", openWeekGoal);
+    el.querySelectorAll("[data-lib-sec]").forEach(b=>b.addEventListener("click", ()=>{
+      const i=b.dataset.libSec.indexOf("·");
+      openLibSection(b.dataset.libSec.slice(0,i), b.dataset.libSec.slice(i+1));
+    }));
     renderCalGrid();
   }
 
@@ -3185,7 +3209,7 @@
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
-      pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay
+      pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay, openLibSection
     };
   }
 })();
