@@ -16,8 +16,9 @@
  * 在控制台把 KV 绑定到变量名 SYNC_KV，再部署即可（站点静态文件仍由 site/ 提供）。
  */
 const JSON_HEAD = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
+const CORS_HEAD = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,PUT,POST,OPTIONS", "access-control-allow-headers": "content-type" };
 function json(obj, status) {
-  return new Response(JSON.stringify(obj), { status: status || 200, headers: JSON_HEAD });
+  return new Response(JSON.stringify(obj), { status: status || 200, headers: { ...JSON_HEAD, ...CORS_HEAD } });
 }
 
 export default {
@@ -27,17 +28,14 @@ export default {
     if (url.pathname === "/api/sync") {
       return handleSync(request, env);
     }
-    // 其余交给静态站点（site/ 目录，由 ASSETS 绑定提供）
-    if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
-    }
-    return new Response("ASSETS binding 未配置：请在 worker/wrangler.toml 设置 assets.directory=site", { status: 500 });
+    // 本站静态资源由 xuetang.201573.xyz（Pages）提供；此 Worker 仅负责云端同步接口
+    return new Response("xuetang sync worker：请用 xuetang.201573.xyz 打开站点", { status: 200 });
   }
 };
 
 async function handleSync(request, env) {
   const method = request.method.toUpperCase();
-  if (method === "OPTIONS") return new Response(null, { status: 204 });
+  if (method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEAD });
 
   const k = (new URL(request.url).searchParams.get("k") || "").trim();
   if (!/^[a-f0-9]{16,128}$/i.test(k)) return json({ error: "bad_key" }, 400);
@@ -49,7 +47,7 @@ async function handleSync(request, env) {
     if (method === "GET") {
       const v = await kv.get(k);
       if (v === null) return json({ updatedAt: 0, data: null });
-      return new Response(v, { status: 200, headers: JSON_HEAD });
+      return new Response(v, { status: 200, headers: { ...JSON_HEAD, ...CORS_HEAD } });
     }
     if (method === "PUT" || method === "POST") {
       const body = await request.text();

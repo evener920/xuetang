@@ -4,12 +4,13 @@
 name = "xuetang"
 main = "worker.js"
 compatibility_date = "2025-04-01"
+workers_dev = true
 
 # 你的 Cloudflare 账户 ID（已填好）
 account_id = "82129ffe005dfd5010505adf73de06cb"
 
-# 用 Workers Static Assets 直接托管 site/ 目录（无需单独构建）
-assets = { directory = "../site", binding = "ASSETS" }
+# 本 Worker 仅负责云端同步接口 /api/sync（静态站点由 xuetang.201573.xyz 的 Pages 提供）
+# 前端统一通过 https://xuetang.evener920.workers.dev/api/sync 调用，已开启 CORS 支持跨域。
 
 # 云端同步用的 KV（已建好 xuetang-sync）：变量名必须叫 SYNC_KV
 kv_namespaces = [

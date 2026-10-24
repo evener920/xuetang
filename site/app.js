@@ -778,12 +778,11 @@
     if(!_applyRemote) scheduleSyncPush(); // 云同步开启时，防抖推送（拉取落地阶段不触发，避免回环）
   }
 
-  /* ---------- 云端同步（统一走 xuetang.201573.xyz 的 Pages 同步后端；跨域名/设备共享同一份数据） ---------- */
+  /* ---------- 云端同步（统一走 xuetang.evener920.workers.dev 的 Worker 后端；跨域名/设备共享同一份数据） ---------- */
   // 关键：两个域名（xuetang.201573.xyz 与 xuetang.evener920.workers.dev）都加载同一份前端，
-  // 但同步请求统一打到 SYNC_BASE（201573.xyz 的 Pages /api/sync），这样无论从哪个域名打开、
-  // 哪台设备访问，都读写同一个 Cloudflare KV 命名空间 → 数据天然互通。
-  // （workers.dev 的 Worker 当前返回 502 不可用，故不同步走它；SYNC_BASE 可改为主用域名。）
-  var SYNC_BASE = "https://xuetang.201573.xyz";
+  // 但同步请求统一打到 SYNC_BASE（Worker 的 /api/sync，后端已开启 CORS 支持跨域），
+  // 这样无论从哪个域名打开、哪台设备访问，都读写同一个 Cloudflare KV 命名空间 → 数据天然互通。
+  var SYNC_BASE = "https://xuetang.evener920.workers.dev";
   // 同步密钥明文存本机（仅家长设备可见）；云端 key = SHA-256(密钥)；data 整包存取，last-write-wins 按 updatedAt 裁决
   var _pushTimer = null, _pushing = false, _applyRemote = false, _netFail = false;
   function cloudSyncEnabled(){ return !!(state.sync && state.sync.enabled && state.sync.pass); }
