@@ -1092,7 +1092,12 @@
   function setNav(name){
     renderNav();
     document.querySelectorAll("#mainNav .nav-btn").forEach(b=>{
-      b.classList.toggle("active", b.dataset.view===name || (name==="tag"&&b.dataset.view==="home") || (name==="search"&&b.dataset.view==="home") || (name==="admin"&&b.dataset.view==="admin"));
+      // 学科页（view.name==="subject"，param=学科名）也要高亮对应学科标签，与首页/本周/奖励一致
+      b.classList.toggle("active", b.dataset.view===name
+        || (name==="subject"&&b.dataset.view===view.param)
+        || (name==="tag"&&b.dataset.view==="home")
+        || (name==="search"&&b.dataset.view==="home")
+        || (name==="admin"&&b.dataset.view==="admin"));
     });
   }
 
