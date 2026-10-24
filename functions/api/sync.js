@@ -15,6 +15,7 @@
  * 安全说明：key = SHA-256(同步密钥)。任何人拿到密钥即可读写该家庭数据；适合家庭自用。
  * 如需云端不可读，可后续在客户端用密钥派生再做一层加密（本版未做）。
  */
+// redeploy trigger (ah): 确保 /api/sync 函数在本次发布中被正确发布
 const JSON_HEAD = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const CORS_HEAD = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,PUT,POST,OPTIONS", "access-control-allow-headers": "content-type" };
 
