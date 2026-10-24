@@ -2,7 +2,7 @@
 //   ① 正常启动：62 张 sci 卡注入 state.custom + flag 置位
 //   ② 每张卡：subject=科学 / type=地理动画 / 含"小学科学"标签 / videos 为 B 站播放器直链
 //   ③ 源码守卫：scienceGallery 种子 + 自愈分支 + SUBJECT_TYPES 含"地理动画" + 地理动画 badge 颜色 + 播放标签含地理动画
-//   ④ 版本号：10×bd、0×bc、0×ba
+//   ④ 版本号：10×bm、0×bl、0×bc、0×ba
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -118,11 +118,12 @@ safe('④ 版本号', ()=>{
   const bj=(html.match(/20261024bj/g)||[]).length;
   const bk=(html.match(/20261024bk/g)||[]).length;
   const bl=(html.match(/20261024bl/g)||[]).length;
+  const bm=(html.match(/20261024bm/g)||[]).length;
   ok('  0 处 ba', ba===0, 'ba='+ba);
   ok('  0 处 bc', bc===0, 'bc='+bc);
-  ok('  0 处 bd（已升级至 bl）', bd===0, 'bd='+bd);
-  ok('  0 处 bf/bg/bh/bi/bj/bk（已升级至 bl）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk);
-  ok('  10 处 bl（含 science_gallery.js）', bl===10, 'bl='+bl);
+  ok('  0 处 bd（已升级至 bm）', bd===0, 'bd='+bd);
+  ok('  0 处 bf/bg/bh/bi/bj/bk/bl（已升级至 bm）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl);
+  ok('  10 处 bm（含 science_gallery.js）', bm===10, 'bm='+bm);
   ok('  引入 science_gallery.js', html.includes('science_gallery.js'), '');
 });
 

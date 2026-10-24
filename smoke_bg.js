@@ -5,7 +5,7 @@
 // ④ 后台无「我的素材」（诉求4）
 // ⑤ 科目页添加按钮（诉求2）：subjectTypesOf/openSubjectAdd/renderSubject chips
 // ⑥ 资源页「历史」并入「人文」（诉求7）：biData subjOf 归一
-// ⑦ 版本号：10×bg
+// ⑦ 版本号：10×bm
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -235,6 +235,9 @@ safe('④ 后台移除我的素材', ()=>{
   ok('  源码无 goRes 残留处理器', !/id="goRes"|goRes\(/.test(code), '');
   ok('  全站无 data-checkin 元素（打卡范围改由加入学习决定）', !code.includes('data-checkin'), '');
   ok('  penaltyLogWeek 辅助函数存在', code.includes('function penaltyLogWeek()'), '');
+  // bm：后台添加表单示范文字中性化（与主题无关的示例会误导）
+  ok('  后台添加表单无语文向示范文字（春夜喜雨/杜甫/诗词正文）', !admin.includes('春夜喜雨') && !admin.includes('杜甫') && !admin.includes('诗词正文'), '');
+  ok('  后台添加表单占位符为中性提示', admin.includes('placeholder="必填"') && admin.includes('placeholder="可空"') && admin.includes('placeholder="请输入内容"') && admin.includes('placeholder="多个标签用逗号分隔，可空"'), '');
 });
 
 /* ---------- ⑤ 科目页「＋ 添加」（诉求2） ---------- */
@@ -255,6 +258,11 @@ safe('⑤ 科目页添加按钮', ()=>{
   S.renderSubject('英语');
   const gnHtml = ctx.window.document.getElementById('view-subject').innerHTML;
   ok('  通用科目页 chips 含「＋ 添加」', gnHtml.includes('data-gn-add'), '');
+  // bm：添加弹窗示范文字中性化（板块名/标题/正文 placeholder 不得带语文向示例）
+  S.openSubjectAdd('人文', '');
+  const saHtml = ctx.window.document.getElementById('modal-body').innerHTML;
+  ok('  添加弹窗无示范文字（春夜喜雨/诗词正文/成语解释/如 诗词）', !saHtml.includes('春夜喜雨') && !saHtml.includes('诗词正文') && !saHtml.includes('成语解释') && !saHtml.includes('如 诗词'), '');
+  ok('  添加弹窗占位符为中性提示', saHtml.includes('placeholder="必填"') && saHtml.includes('placeholder="可空"') && saHtml.includes('placeholder="请输入内容"') && saHtml.includes('placeholder="下拉选择已有板块，或输入新板块名"'), '');
 });
 
 /* ---------- ⑥ 资源页「历史」并入「人文」（诉求7） ---------- */
@@ -326,6 +334,7 @@ safe('⑦ 版本号', ()=>{
   const bj=(html.match(/20261024bj/g)||[]).length;
   const bk=(html.match(/20261024bk/g)||[]).length;
   const bl=(html.match(/20261024bl/g)||[]).length;
+  const bm=(html.match(/20261024bm/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -333,8 +342,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bl', bl===10, 'bl='+bl);
-  ok('  0 处 bk/bi/bh/bg/bf/be/bd/ba/bj', bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 bm', bm===10, 'bm='+bm);
+  ok('  0 处 bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;

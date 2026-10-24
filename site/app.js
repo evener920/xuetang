@@ -1973,16 +1973,16 @@
       <p class="af-tip" style="margin:4px 0 10px">板块名可下拉选择，也可直接输入新名字（自定义新板块）；添加的内容会归集到「📚 资源」页，并出现在「${esc(subject)}」科目页与类型筛选、首页、搜索中。</p>
       <div class="admin-form">
         <div class="af-row">
-          <label class="af-grow">板块名（类型）<input id="saType" list="saTypes" value="${esc(defType||"")}" placeholder="如 诗词 / 实验，或输入新板块名"/>
+          <label class="af-grow">板块名（类型）<input id="saType" list="saTypes" value="${esc(defType||"")}" placeholder="下拉选择已有板块，或输入新板块名"/>
             <datalist id="saTypes">${types.map(t=>`<option>${esc(t)}</option>`).join("")}</datalist>
           </label>
           <label>年级<select id="saGrade"><option>—</option>${GRADES.map(g=>`<option ${g===state.grade?"selected":""}>${g}</option>`).join("")}</select></label>
         </div>
         <div class="af-row">
-          <label class="af-grow">标题<input id="saTitle" placeholder="必填，如 春夜喜雨"/></label>
+          <label class="af-grow">标题<input id="saTitle" placeholder="必填"/></label>
           <label>作者 / 副标题<input id="saSub" placeholder="可空"/></label>
         </div>
-        <label class="af-block">正文 / 内容<textarea id="saBody" rows="4" placeholder="诗词正文、成语解释、题目或知识点内容…"></textarea></label>
+        <label class="af-block">正文 / 内容<textarea id="saBody" rows="4" placeholder="请输入内容"></textarea></label>
         <div class="af-actions">
           <button class="btn primary" id="saSubmit">＋ 添加</button>
           <button class="btn" id="saCancel">取消</button>
@@ -3135,15 +3135,15 @@
           <label>类型<select id="afType"></select></label>
           <label>年级<select id="afGrade"><option>—</option>${GRADES.map(g=>`<option>${g}</option>`).join("")}</select></label>
           <label>册<select id="afVolume"><option>—</option><option>上册</option><option>下册</option></select></label>
-          <label>单元<input id="afUnit" placeholder="如 Unit 1（可空）"/></label>
+          <label>单元<input id="afUnit" placeholder="可空"/></label>
         </div>
         <div class="af-row">
-          <label class="af-grow">标题<input id="afTitle" placeholder="如 春夜喜雨"/></label>
-          <label>作者 / 朝代<input id="afSub" placeholder="如 杜甫 · 唐（可空）"/></label>
+          <label class="af-grow">标题<input id="afTitle" placeholder="必填"/></label>
+          <label>作者 / 朝代<input id="afSub" placeholder="可空"/></label>
         </div>
-        <label class="af-block">正文 / 内容<textarea id="afBody" rows="3" placeholder="诗词正文、成语解释、题目或课文内容…"></textarea></label>
+        <label class="af-block">正文 / 内容<textarea id="afBody" rows="3" placeholder="请输入内容"></textarea></label>
         <div class="af-row">
-          <label class="af-grow">标签（逗号分隔）<input id="afTags" placeholder="如 春天,写景,励志"/></label>
+          <label class="af-grow">标签（逗号分隔）<input id="afTags" placeholder="多个标签用逗号分隔，可空"/></label>
           <label class="af-grow">视频链接（逗号 / 换行分隔，可空）<input id="afVideos" placeholder="B站 / 腾讯 / YouTube / 本地 videos/xxx.mp4"/></label>
         </div>
         <div class="af-actions">
