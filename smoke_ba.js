@@ -1,9 +1,10 @@
-// 冒烟测试：ba 版本 —— 四年级英语听力全量 100 篇导入
-//   ① 正常启动：100 张 ls4 卡注入 + flag 置位
+// 冒烟测试：be 版本 —— 四年级英语听力全量 100 篇导入 + 旧 5 卡迁移（v2 flag）
+//   ① 正常启动：100 张 ls4 卡注入 + englishListening4v2 flag 置位
 //   ② 每张卡含音频直链、至少 1 个可点选项（A-E / 判断 / 复选 / 图片选项）
 //   ③ 卡片引用的插图文件全部存在于磁盘
-//   ④ 源码守卫（空 src 不置位 flag / ls4 自愈）
-//   ⑤ 版本号：bd 当前版本、0×ba、0×az（听力卡仍在当前发布中）
+//   ④ 源码守卫（空 src 不置位 flag / ls4 自愈 / 旧 flag 迁移）
+//   ⑤ 迁移：云端旧包（englishListening4=true + 5 张旧卡）→ 清旧卡重注 100 张
+//   ⑥ 版本号：10×be、0×bd、0×ba、0×az（听力卡仍在当前发布中）
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -87,7 +88,8 @@ safe('① 正常启动（空 localStorage）：100 张 ls4 卡注入 + flag 置�
   ok('  __SITE__ 注入', !!S, '');
   const ls4 = (S.state.custom||[]).filter(x=>/^ls4:\d+$/.test(x.key));
   ok('  custom 含 100 张 ls4 卡', ls4.length===100, 'n='+ls4.length);
-  ok('  seeded.englishListening4=true', S.state.seeded && S.state.seeded.englishListening4===true, '');
+  ok('  seeded.englishListening4v2=true', S.state.seeded && S.state.seeded.englishListening4v2===true, '');
+  ok('  旧 flag englishListening4 不置位', S.state.seeded && S.state.seeded.englishListening4!==true, '');
   ok('  其他种子不受影响（rd4 仍在）', (S.state.custom||[]).some(x=>/^rd4:/.test(x.key)), '');
 });
 
@@ -126,20 +128,48 @@ safe('③ 卡片引用插图全部存在磁盘', ()=>{
 safe('④ 源码守卫', ()=>{
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
   ok('  含 if(!s.src.length) return; 守卫', code.includes('if(!s.src.length) return;'), '');
-  ok('  含 ls4 自愈分支', code.includes('englishListening4" && state.seeded[s.flag]'), '');
+  ok('  含 ls4 自愈分支（v2）', code.includes('englishListening4v2" && state.seeded[s.flag]'), '');
+  ok('  含旧 flag 迁移（v2 未置位时作废旧 flag）', code.includes('state.seeded.englishListening4 = false'), '');
   ok('  含选项点选委托（ls-opt）', code.includes('closest(".ls-opt")'), '');
   ok('  含图片选项点选委托（ls-opt-img）', code.includes('closest(".ls-opt-img")'), '');
   ok('  含对答案按钮委托（ls-check）', code.includes('closest(".ls-check")'), '');
 });
 
-safe('⑤ 版本号', ()=>{
+safe('⑤ 迁移：云端旧包（englishListening4=true + 5 张旧卡）→ 清旧卡重注 100 张', ()=>{
+  const oldCards = [];
+  for(let i=1;i<=5;i++) oldCards.push({key:'ls4:'+i, subject:'英语', type:'听力', grade:'四年级',
+    title:'Topic 1 · Exercise '+i, sub:'Family life(家庭生活)', html:false, body:'<p>旧版无选项卡</p>'});
+  const poisoned = {
+    grade:"四年级",
+    seeded:{ historyGuide:true, englishReading4v2:true, englishListening4:true },
+    custom:[...oldCards, {key:"custom:demo", subject:"英语", type:"单词", grade:"四年级", title:"演示", body:"x"}],
+    students:{ s1:{ name:"大宝", data:{} } },
+    currentStudent:"s1"
+  };
+  const lsStore = { "xuetang_site_v1": JSON.stringify(poisoned) };
+  const ctx = makeCtx(lsStore);
+  vm.createContext(ctx);
+  vm.runInContext(CODE, ctx, { filename:'bundle3.js' });
+  const S = ctx.window.__SITE__;
+  const ls4 = (S.state.custom||[]).filter(x=>/^ls4:\d+$/.test(x.key));
+  ok('  迁移后 custom 含 100 张 ls4 卡', ls4.length===100, 'n='+ls4.length);
+  ok('  全部为新版卡（html=true，旧 5 卡被替换）', ls4.filter(x=>x.html===true).length===100, '新='+ls4.filter(x=>x.html===true).length);
+  ok('  旧 flag englishListening4 已作废', S.state.seeded && S.state.seeded.englishListening4===false, '');
+  ok('  新 flag englishListening4v2 已置位', S.state.seeded && S.state.seeded.englishListening4v2===true, '');
+  ok('  原有 custom:demo 未丢失', (S.state.custom||[]).some(x=>x.key==='custom:demo'), '');
+  ok('  保存落盘（localStorage 100 张）', (()=>{ try{ const s=JSON.parse(lsStore["xuetang_site_v1"]); return (s.custom||[]).filter(x=>/^ls4:/.test(x.key)).length===100; }catch(e){ return false; } })(), '');
+});
+
+safe('⑥ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
   const az=(html.match(/20261024az/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
+  const be=(html.match(/20261024be/g)||[]).length;
   ok('  0 处 az', az===0, 'az='+az);
-  ok('  0 处 ba（已升级至 bd）', ba===0, 'ba='+ba);
-  ok('  10 处 bd（含听力卡脚本）', bd===10, 'bd='+bd);
+  ok('  0 处 ba', ba===0, 'ba='+ba);
+  ok('  0 处 bd（已升级至 be）', bd===0, 'bd='+bd);
+  ok('  10 处 be（含听力卡脚本）', be===10, 'be='+be);
   ok('  引入 english_listening_4.js', html.includes('english_listening_4.js'), '');
 });
 

@@ -1108,7 +1108,7 @@
     const seeds = [
       {flag:"historyGuide", src:(typeof window!=="undefined" && window.HISTORY_GUIDE_7)||[]},
       {flag:"englishReading4v2", src:(typeof window!=="undefined" && window.ENGLISH_READING_4)||[]},
-      {flag:"englishListening4", src:(typeof window!=="undefined" && window.ENGLISH_LISTENING_4)||[]},
+      {flag:"englishListening4v2", src:(typeof window!=="undefined" && window.ENGLISH_LISTENING_4)||[]},
       {flag:"scienceGallery", src:(typeof window!=="undefined" && window.SCIENCE_GALLERY)||[]}
     ];
     state.seeded = state.seeded || {};
@@ -1119,11 +1119,21 @@
       state.seeded.englishReading4 = false;   // 旧版标记作废
       state.seeded.englishReading4v2 = false;  // 确保重新注入新版
     }
+    // 迁移（be）：v2 之前注入的 ls4 卡（ax 时代 5 篇试点等旧版）整体替换为 v2 全量 100 篇。
+    // 背景：云端旧包带 englishListening4=true + 5 张旧卡 → seed 因 flag 跳过、自愈因"还有 ls4 卡"不触发，
+    // 听力永远卡在 5 条。key 不变（ls4:1..100），学习进度按 key 保留；旧 flag 作废防云端旧包回退。
+    if(!state.seeded.englishListening4v2){
+      const staleLs4 = (state.custom||[]).filter(x=>x.key && /^ls4:\d+$/.test(x.key));
+      if(staleLs4.length){
+        state.custom = (state.custom||[]).filter(x=>!(x.key && /^ls4:\d+$/.test(x.key)));
+      }
+      state.seeded.englishListening4 = false;   // 旧版标记作废（含被云端包带回的情形）
+    }
     const have = new Set((state.custom||[]).map(x=>x.key));
     seeds.forEach(s=>{
       // 自愈（ls4 专用）：旧版曾在听力脚本未加载时用空 src 置位 flag（污染），
       // 导致听力卡永远不再注入。flag 已置位但一张 ls4 卡都没有 → 清 flag 重新注入。
-      if(s.flag==="englishListening4" && state.seeded[s.flag]
+      if(s.flag==="englishListening4v2" && state.seeded[s.flag]
          && !((state.custom||[]).some(x=>x.key && /^ls4:\d+$/.test(x.key)))){
         state.seeded[s.flag] = false;
       }
