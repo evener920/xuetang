@@ -1783,13 +1783,15 @@
 
       <div class="sec-title">📖 学习库 <small>本学期全部学习内容（与科目页数字一致）· 点条目卡「管理」把内容「加入学习」后才计入上方目标 · 打卡开关控制该板块是否参与今日排课</small></div>
       <div class="stat-strip">
-        ${lib.sections.map(s=>`
+        ${lib.sections.map(s=>{
+          const ck = checkinOn(s.subject,s.type);
+          return `
           <div class="stat lib-sec" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
             <div class="num">${s.total}</div>
             <div class="lbl">${esc(s.subject)}·${esc(s.type)}</div>
-            <div style="font-size:11px;margin-top:2px;color:#15803d">已学 ${s.done}${s.joined?` · 目标内 ${s.joined}`:""}</div>
-            <button class="chip lib-ck ${checkinOn(s.subject,s.type)?"on":""}" data-checkin="${esc(checkinKey(s.subject,s.type))}" title="打卡开关：参与今日排课的板块" style="margin-top:4px;font-size:11px;padding:1px 8px">${checkinOn(s.subject,s.type)?"打卡中":"已暂停"}</button>
-          </div>`).join("")}
+            <div class="lib-meta">已学 ${s.done}${s.joined?` · 目标内 ${s.joined}`:""}</div>
+            <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" data-checkin="${esc(checkinKey(s.subject,s.type))}" title="打卡开关：${ck?"该板块正参与今日排课 · 再点一次退出":"该板块未参与今日排课 · 点击加入"}">${ck?"✓ 打卡中":"＋ 加入打卡"}</button>
+          </div>`;}).join("")}
         ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
       </div>
 

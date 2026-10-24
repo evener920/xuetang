@@ -157,9 +157,10 @@ safe('④ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bf=(html.match(/20261024bf/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
+  const bh=(html.match(/20261024bh/g)||[]).length;
   ok('  0 处 be', be===0, 'be='+be);
-  ok('  0 处 bf（已升级至 bg）', bf===0, 'bf='+bf);
-  ok('  10 处 bg', bg===10, 'bg='+bg);
+  ok('  0 处 bf/bg（已升级至 bh）', bf===0&&bg===0, 'bf='+bf+' bg='+bg);
+  ok('  10 处 bh', bh===10, 'bh='+bh);
 });
 
 let pass=0;

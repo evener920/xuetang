@@ -129,7 +129,21 @@ safe('① 学习库与学习目标', ()=>{
   ok('  本周页含「📖 学习库」', wk.includes('📖 学习库'), '');
   ok('  学习库板块卡含 data-lib-sec', wk.includes('data-lib-sec='), '');
   ok('  板块卡含打卡开关 chip', wk.includes('data-checkin='), '');
+  ok('  打卡开关用学科主题色（开=实色，同旧版打卡范围）', /<button class="chip lib-ck" style="background:#7c3aed;border-color:#7c3aed;color:#fff" data-checkin="语文/.test(wk), '');
+  ok('  打卡开/关状态文字明确', wk.includes('✓ 打卡中'), '');
   ok('  旧「打卡范围」chips 已移除', !wk.includes('打卡范围'), '');
+
+  // 打卡开关切换：点一下退出（浅底）、再点加入（实色）——同旧版打卡范围手感
+  const ckKey = sec0.subject+'·'+sec0.type;
+  S.state.checkin[ckKey] = false;
+  S.renderWeek();
+  const wkOff = ctx.window.document.getElementById('view-week').innerHTML;
+  ok('  退出后显示「＋ 加入打卡」浅底态', wkOff.includes('＋ 加入打卡') && /<button class="chip lib-ck" style="background:#f5f3ff/.test(wkOff), '');
+  S.state.checkin[ckKey] = true;
+  S.renderWeek();
+  const wkOn = ctx.window.document.getElementById('view-week').innerHTML;
+  ok('  再加入后显示「✓ 打卡中」实色态', wkOn.includes('✓ 打卡中'), '');
+  delete S.state.checkin[ckKey];
 
   // 源码守卫
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
@@ -246,13 +260,14 @@ safe('⑥ 资源页历史并入人文', ()=>{
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
+  const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
   const bf=(html.match(/20261024bf/g)||[]).length;
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bg', bg===10, 'bg='+bg);
-  ok('  0 处 bf/be/bd/ba', bf===0&&be===0&&bd===0&&ba===0, 'bf='+bf+' be='+be+' bd='+bd+' ba='+ba);
+  ok('  10 处 bh', bh===10, 'bh='+bh);
+  ok('  0 处 bg/bf/be/bd/ba', bg===0&&bf===0&&be===0&&bd===0&&ba===0, 'bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba);
 });
 
 let pass=0;
