@@ -7,7 +7,8 @@
 // ⑥ 资源页「历史」并入「人文」（诉求7）：biData subjOf 归一
 // ⑧ 全视图渲染回归（防 renderRes 白屏类事故）
 // ⑨ 学习库年级筛选（bo：扩大选择范围）：poolForAll/libPoolFor/年级 chips/跨年级加入
-// ⑦ 版本号：10×bo
+// ⑩ 语文页筛选空态与「↩ 返回」（bp：点已学筛选被待导入空态困住）
+// ⑦ 版本号：10×bp
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -407,6 +408,71 @@ safe('⑨ 学习库年级筛选', ()=>{
   ok('  弹窗头部提示「全部年级共 N」', mb.includes('（全部年级共 1）'), '');
 });
 
+/* ---------- ⑩ 语文页筛选空态与「↩ 返回」（bp：点「已学」筛选后被「待导入」空态困住） ---------- */
+safe('⑩ 语文页筛选空态与返回', ()=>{
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  const doc = ctx.window.document;
+  // 默认诗词页有内容
+  S.renderSubject('语文');
+  let cn = doc.getElementById('view-subject').innerHTML;
+  ok('  语文·诗词默认有内容列表', cn.includes('task-grid') && !cn.includes('待导入'), '');
+
+  // 点「已学」且没有已学内容 → 不得落入「待导入」，保留筛选行 + 空态 + 返回按钮
+  S.cnView.learn = 'done';
+  S.renderSubject('语文');
+  cn = doc.getElementById('view-subject').innerHTML;
+  ok('  已学筛选无结果不显示「待导入」', !cn.includes('待导入'), '');
+  ok('  保留状态筛选行（可点回全部）', cn.includes('data-cn-learn="all"') && cn.includes('data-cn-learn="done"'), '');
+  ok('  空态文案为「还没有已学的内容」', cn.includes('还没有已学的内容'), '');
+  ok('  空态带「↩ 返回（清除筛选）」按钮', cn.includes('data-cn-clear') && cn.includes('↩ 返回'), '');
+
+  // 「返回」= 清除筛选（与 data-cn-clear 处理器同行为）：reset + 重渲染恢复完整列表
+  S.cnView.grade='全部'; S.cnView.q=''; S.cnView.learn='all';
+  S.renderSubject('语文');
+  cn = doc.getElementById('view-subject').innerHTML;
+  ok('  清除筛选后恢复完整列表', cn.includes('task-grid') && !cn.includes('还没有已学'), '');
+
+  // 未学筛选清空 → 「全部已学完」空态 + 返回按钮
+  // 语文·诗词页默认展示全年级（年级筛选「全部」），要把整个池标记已学才能清空「未学」
+  const curPool = S.ALL.filter(x=>x.subject==='语文'&&x.type==='诗词');
+  curPool.forEach(it=>{ S.state.learned[it.key]='2026-10-24'; });
+  S.cnView.learn='todo';
+  S.renderSubject('语文');
+  cn = doc.getElementById('view-subject').innerHTML;
+  ok('  未学筛选无结果显示「全部已学完」', cn.includes('全部已学完') && !cn.includes('待导入'), '');
+  ok('  全部已学完空态也带返回按钮', cn.includes('data-cn-clear'), '');
+
+  // 搜索无结果 → 搜索空态 + 返回按钮
+  S.cnView.learn='all';
+  curPool.forEach(it=>{ delete S.state.learned[it.key]; });
+  S.cnView.q='zzzz不存在的关键词';
+  S.renderSubject('语文');
+  cn = doc.getElementById('view-subject').innerHTML;
+  ok('  搜索无结果不显示「待导入」', !cn.includes('待导入'), '');
+  ok('  搜索空态带返回按钮', cn.includes('没有找到') && cn.includes('data-cn-clear'), '');
+  S.cnView.q='';
+
+  // 类型本身无内容（文言，WENYAN=[]）→ 仍走「待导入」引导
+  S.cnView.type='文言';
+  S.renderSubject('语文');
+  cn = doc.getElementById('view-subject').innerHTML;
+  ok('  无内容类型（文言）仍显示待导入引导', cn.includes('待导入') && cn.includes('文言内容待导入'), '');
+  S.cnView.type='诗词'; S.cnView.grade='全部'; S.cnView.q=''; S.cnView.learn='all';
+
+  // renderGeneric：筛选无结果时文案诚实（不再说"后台添加"）
+  S.renderSubject('数学'); // 初始化 gnView['数学']
+  S.gnView['数学'].q='zzzz不存在的关键词';
+  S.renderSubject('数学');
+  const mt = doc.getElementById('view-subject').innerHTML;
+  ok('  数学页筛选无结果显示「没有匹配的内容」', mt.includes('没有匹配的内容') && !mt.includes('暂无内容'), '');
+  S.gnView['数学'].q='';
+
+  // 源码守卫：返回按钮处理器存在
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  ok('  源码含 data-cn-clear 处理器', code.includes('[data-cn-clear]'), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -416,6 +482,7 @@ safe('⑦ 版本号', ()=>{
   const bm=(html.match(/20261024bm/g)||[]).length;
   const bn=(html.match(/20261024bn/g)||[]).length;
   const bo=(html.match(/20261024bo/g)||[]).length;
+  const bp=(html.match(/20261024bp/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -423,8 +490,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bo', bo===10, 'bo='+bo);
-  ok('  0 处 bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 bp', bp===10, 'bp='+bp);
+  ok('  0 处 bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;

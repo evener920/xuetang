@@ -2001,7 +2001,9 @@
         <button class="game-card" data-word-game="quiz"><span class="gi">🎯</span><b>选义闯关</b><span class="gd">看单词 · 四选一挑释义</span></button>
       </div>`:""}
       ${pool.length?`<div class="task-grid">${pool.map(x=>cardHTML(x)).join("")}</div>`
-        :`<div class="placeholder"><div class="big">📥</div><h3>${esc(subject)} · ${esc(v.type)} 暂无内容</h3><p>在「🛠 后台」添加该类型素材，将自动归位于此。</p></div>`}
+        :(basePool.length
+          ? `<div class="placeholder"><div class="big">🔍</div><h3>没有匹配的内容</h3><p>当前筛选条件下没有内容，换个条件或清除上方筛选看看。</p></div>`
+          : `<div class="placeholder"><div class="big">📥</div><h3>${esc(subject)} · ${esc(v.type)} 暂无内容</h3><p>在「🛠 后台」添加该类型素材，将自动归位于此。</p></div>`)}
     `;
     el._gnRefresh = function(){
       const keep = document.activeElement && document.activeElement.id==="gnSearch";
@@ -2240,7 +2242,8 @@
   function renderChinese(el){
     if(!cnView) cnView = {type:"诗词", grade:"全部", q:"", learn:"all"};
     const cnTypes = subjectTypesOf("语文"); // 内置类型 + 后台自定义板块（动态）
-    let pool = cnPool(cnView.type);
+    const basePool = cnPool(cnView.type); // 未筛选池：用来区分「类型本身无内容（待导入）」与「筛选后无结果」
+    let pool = basePool;
     const isIdiom   = cnView.type==="成语";
     const isGallery = cnView.type==="成语动画廊";
     // 年级筛选：成语按数据年级；诗词用全年级表（当前为通用内容，分年级诗词导入后自动生效）
@@ -2274,8 +2277,9 @@
       return;
     }
 
-    // ② 待导入类型（文言 / 作文 / 故事 / 阅读 / 课文）
-    if(pool.length===0){
+    // ② 待导入类型（文言 / 作文 / 故事 / 阅读 / 课文）：仅当该类型本身没有任何内容时才提示导入
+    // （筛选后为空走 ③ 的正常列表 + 空态，保留全部筛选行与「↩ 返回」按钮，不会把用户困住）
+    if(basePool.length===0){
       el.innerHTML = `
         <div class="subj-head"><h2>语文 · ${esc(cnView.type)}</h2><span class="cnt">待导入</span></div>
         <p class="subj-desc">「${esc(cnView.type)}」是语文栏目规划的内容类型之一，入口已就绪。</p>
@@ -2291,10 +2295,15 @@
       return;
     }
 
-    // ③ 诗词 / 成语：内容列表
-    const emptyHint = (cnView.type==="诗词" && cnView.grade!=="全部")
-      ? `<div class="placeholder"><div class="big">📚</div>「${esc(cnView.grade)}」暂无诗词<p style="font-size:13px;margin-top:6px">已按部编版教材为可识别的诗词标注了年级；该年级暂无匹配到的诗词。</p></div>`
-      : '<div class="placeholder"><div class="big">🔍</div>没有匹配的内容</div>';
+    // ③ 诗词 / 成语：内容列表（筛选无结果时保留全部筛选行，空态带「↩ 返回」一键清除筛选）
+    const backBtn = `<p style="margin-top:10px"><button class="btn" data-cn-clear title="清除年级/状态/搜索等筛选条件，返回查看全部内容">↩ 返回（清除筛选）</button></p>`;
+    const emptyHint = (()=>{
+      if(cnView.learn==="done") return `<div class="placeholder"><div class="big">🌱</div><h3>还没有已学的内容</h3><p>学会几张卡片后就会出现在这里；也可以切到「未学」或「全部」看看。</p>${backBtn}</div>`;
+      if(cnView.learn==="todo") return `<div class="placeholder"><div class="big">🎉</div><h3>全部已学完</h3><p>当前筛选范围内的内容都已学会，太棒了！</p>${backBtn}</div>`;
+      if(cnView.q) return `<div class="placeholder"><div class="big">🔍</div><h3>没有找到「${esc(cnView.q)}」</h3><p>换个关键词试试。</p>${backBtn}</div>`;
+      if(cnView.grade!=="全部") return `<div class="placeholder"><div class="big">📚</div><h3>「${esc(cnView.grade)}」暂无${esc(cnView.type)}</h3><p style="font-size:13px;margin-top:6px">已按部编版教材为可识别的内容标注了年级；该年级暂无匹配到的${esc(cnView.type)}。</p>${backBtn}</div>`;
+      return `<div class="placeholder"><div class="big">🔍</div><h3>没有匹配的内容</h3>${backBtn}</div>`;
+    })();
     el.innerHTML = `
       <div class="subj-head"><h2>语文 · ${esc(cnView.type)}</h2><span class="cnt">${pool.length} 条</span></div>
       <p class="subj-desc">${isIdiom?"成语已按年级自动匹配。":"诗词已按部编版教材标注年级，可筛选查看对应年级的篇目。"}点击卡片查看全文与解析。</p>
@@ -3639,6 +3648,8 @@
     if(cnG){ cnView.grade=cnG.dataset.cnGrade; renderSubject("语文"); return; }
     const cnL=e.target.closest("[data-cn-learn]");
     if(cnL){ cnView.learn=cnL.dataset.cnLearn||"all"; renderSubject("语文"); return; }
+    const cnClr=e.target.closest("[data-cn-clear]");
+    if(cnClr){ cnView.grade="全部"; cnView.q=""; cnView.learn="all"; renderSubject("语文"); toast("已清除筛选，返回全部内容 ↩️"); return; }
     const cnAdd=e.target.closest("[data-cn-add]");
     if(cnAdd){ openSubjectAdd("语文", cnView?cnView.type:""); return; }
     const gnAdd=e.target.closest("[data-gn-add]");
@@ -3719,6 +3730,7 @@
       archiveCreate, archiveRestore, loadArchives, renderWeek, renderHome, refreshView,
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, pointTodayNet, pointWeekNet, POINT_RULES, DEFAULT_REWARDS,
+      get cnView(){ return cnView; }, get gnView(){ return gnView; },
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, penaltyLogWeek, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, poolForAll, libPoolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, renderLibModal, go, get biView(){ return biView; },
