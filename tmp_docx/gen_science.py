@@ -29,14 +29,14 @@ for x in data:
     cards.append({
         "key": f"sci:{page}",
         "subject": "科学",
-        "type": "动画",
+        "type": "地理动画",
         "title": title,
         "sub": f"地理大百科 · 第{page}集",
         "body": body,
         "grade": "",
         "volume": "",
         "unit": "",
-        "tags": ["小学科学", "地理", "动画画廊"],
+        "tags": ["小学科学", "地理"],
         "videos": [player],
         "html": False,
     })
@@ -46,7 +46,7 @@ assert len(cards) == len(data)
 
 header = ("// 小学科学 · 地理大百科启蒙动画画廊（62 集，源自 B 站 BV1jK7DzAERo；每集一卡，内嵌 B 站播放器）\n"
          "// 用法：site/app.js 的 seedDefaultContent 以 scienceGallery 标记注入到 state.custom\n"
-         "//       subject=科学 / type=动画 / tag=小学科学，可在「资源 → 科学」按 小学科学 标签筛选。\n")
+         "//       subject=科学 / type=地理动画 / tag=小学科学，可在「资源 → 科学」按 小学科学 标签筛选。\n")
 open(OUT, "w", encoding="utf-8").write(
     header + "window.SCIENCE_GALLERY = " + json.dumps(cards, ensure_ascii=False) + ";\n")
 print("写出:", OUT)

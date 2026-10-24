@@ -206,7 +206,7 @@
     "语文":["诗词","成语","文言","成语动画廊","作文","故事","阅读","课文"],
     "数学":["公式","计算题","应用题","每日一练","思维母题"],
     "英语":["单词","听力","短语","句子","阅读","课文背诵"],
-    "科学":["实验","知识","动画"],
+    "科学":["实验","知识","地理动画"],
     "人文":["史实","人物","阅读"],
     // 初中「小四门 + 理化」：切到七/八/九年级时，导航与打卡范围自动换成这些科目
     "生物":["知识","练习"],
@@ -926,6 +926,7 @@
         state = clean;
         applyStateDefaults();        // 补齐缺省字段，防止旧包缺字段
         ensureStudents();            // 远端包可能缺 students，必须补齐，否则 save→syncPerStudent 会崩
+        seedDefaultContent();        // 旧云端包可能早于新内置种子（如科学动画画廊）：拉取后重注入（按 key 幂等）
         state.adminAuthed = false;   // 拉取后回到未登录，需家长重新进后台
         state.sync = { enabled: localSync.enabled, pass: localSync.pass, at: j.updatedAt };
         rebuildAll();
@@ -984,7 +985,7 @@
       "文言":["#fff7ed","#ea580c"],"成语动画廊":["#fef3c7","#d97706"],"作文":["#ecfeff","#0891b2"],
       "故事":["#f0fdf4","#16a34a"],"阅读":["#eef2ff","#4f46e5"],
       "单词":["#ecfdf5","#0d9488"],"应用题":["#fdf2f8","#db2777"],"计算题":["#ecfdf5","#0d9488"],
-      "知识":["#ecfdf5","#059669"],"动画":["#fff7ed","#d97706"],"练习":["#fff7ed","#ea580c"],
+      "知识":["#ecfdf5","#059669"],"地理动画":["#fff7ed","#d97706"],"练习":["#fff7ed","#ea580c"],
       "史实":["#faf5ff","#9333ea"],"人物":["#fef2f2","#dc2626"]
     };
     const [bg,fg]=map[type]||["#f1f5f9","#475569"];
@@ -1263,7 +1264,7 @@
         ${it.unit?`<span>#${esc(it.unit)}</span>`:""}
         ${extraMeta||""}
         ${it.html?`<span class="play">📖 图文</span>`:""}
-        ${vids.length?`<span class="play">▶ ${it.type==="成语动画廊"||it.type==="动画"?"动画":"视频"}</span>`:""}
+        ${vids.length?`<span class="play">▶ ${it.type==="成语动画廊"||it.type==="地理动画"?"动画":"视频"}</span>`:""}
       </div>
       <div class="c-stars">${starHTML}</div>
       <h4>${esc(it.title)}</h4>

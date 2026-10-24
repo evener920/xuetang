@@ -3,7 +3,7 @@
 //   ② 每张卡含音频直链、至少 1 个可点选项（A-E / 判断 / 复选 / 图片选项）
 //   ③ 卡片引用的插图文件全部存在于磁盘
 //   ④ 源码守卫（空 src 不置位 flag / ls4 自愈）
-//   ⑤ 版本号：9×ba、0×az
+//   ⑤ 版本号：bd 当前版本、0×ba、0×az（听力卡仍在当前发布中）
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -136,8 +136,10 @@ safe('⑤ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
   const az=(html.match(/20261024az/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
+  const bd=(html.match(/20261024bd/g)||[]).length;
   ok('  0 处 az', az===0, 'az='+az);
-  ok('  9 处 ba', ba===9, 'ba='+ba);
+  ok('  0 处 ba（已升级至 bd）', ba===0, 'ba='+ba);
+  ok('  10 处 bd（含听力卡脚本）', bd===10, 'bd='+bd);
   ok('  引入 english_listening_4.js', html.includes('english_listening_4.js'), '');
 });
 

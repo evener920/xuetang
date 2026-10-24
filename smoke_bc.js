@@ -1,8 +1,8 @@
-// 冒烟测试：bc 版本 —— 小学科学 · 地理大百科动画画廊（62 集 B 站视频卡）导入
+// 冒烟测试：bd 版本 —— 小学科学 · 地理大百科动画画廊（62 集 B 站视频卡）导入
 //   ① 正常启动：62 张 sci 卡注入 state.custom + flag 置位
-//   ② 每张卡：subject=科学 / type=动画 / 含"小学科学"标签 / videos 为 B 站播放器直链
-//   ③ 源码守卫：scienceGallery 种子 + 自愈分支 + SUBJECT_TYPES 含"动画" + 动画 badge 颜色 + 播放标签含动画
-//   ④ 版本号：10×bc、0×ba
+//   ② 每张卡：subject=科学 / type=地理动画 / 含"小学科学"标签 / videos 为 B 站播放器直链
+//   ③ 源码守卫：scienceGallery 种子 + 自愈分支 + SUBJECT_TYPES 含"地理动画" + 地理动画 badge 颜色 + 播放标签含地理动画
+//   ④ 版本号：10×bd、0×bc、0×ba
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -80,7 +80,7 @@ safe('② 每张卡：学科/类型/标签/视频直链', ()=>{
   let badSubj=0, badType=0, badTag=0, badVid=0, badPage=0;
   for(const c of sciSrc){
     if(c.subject!=="科学") badSubj++;
-    if(c.type!=="动画") badType++;
+    if(c.type!=="地理动画") badType++;
     if(!Array.isArray(c.tags) || !c.tags.includes("小学科学")) badTag++;
     if(!Array.isArray(c.videos) || c.videos.length!==1) badVid++;
     else {
@@ -91,7 +91,7 @@ safe('② 每张卡：学科/类型/标签/视频直链', ()=>{
     }
   }
   ok('  全部 subject=科学', badSubj===0, '缺='+badSubj);
-  ok('  全部 type=动画', badType===0, '缺='+badType);
+  ok('  全部 type=地理动画', badType===0, '缺='+badType);
   ok('  全部含 小学科学 标签', badTag===0, '缺='+badTag);
   ok('  全部含 1 条 B 站播放器直链', badVid===0, '缺='+badVid);
   ok('  播放器 page 与卡片序号一致', badPage===0, '错='+badPage);
@@ -101,17 +101,19 @@ safe('③ 源码守卫', ()=>{
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
   ok('  seed 含 scienceGallery', code.includes('flag:"scienceGallery"'), '');
   ok('  seed 含 sci: 自愈分支', code.includes('scienceGallery" && state.seeded[s.flag]'), '');
-  ok('  SUBJECT_TYPES[\"科学\"] 含 动画', /"科学":\[[^\]]*"动画"/.test(code), '');
-  ok('  badge 颜色含 动画', code.includes('"动画":['), '');
-  ok('  播放标签含 动画 分支', code.includes('it.type==="成语动画廊"||it.type==="动画"'), '');
+  ok('  SUBJECT_TYPES[\"科学\"] 含 地理动画', /"科学":\[[^\]]*"地理动画"/.test(code), '');
+  ok('  badge 颜色含 地理动画', code.includes('"地理动画":['), '');
+  ok('  播放标签含 地理动画 分支', code.includes('it.type==="成语动画廊"||it.type==="地理动画"'), '');
 });
 
 safe('④ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
   const ba=(html.match(/20261024ba/g)||[]).length;
   const bc=(html.match(/20261024bc/g)||[]).length;
+  const bd=(html.match(/20261024bd/g)||[]).length;
   ok('  0 处 ba', ba===0, 'ba='+ba);
-  ok('  10 处 bc（含 science_gallery.js）', bc===10, 'bc='+bc);
+  ok('  0 处 bc', bc===0, 'bc='+bc);
+  ok('  10 处 bd（含 science_gallery.js）', bd===10, 'bd='+bd);
   ok('  引入 science_gallery.js', html.includes('science_gallery.js'), '');
 });
 
