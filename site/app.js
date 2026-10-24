@@ -1030,11 +1030,51 @@
     s = s.replace(/(href|src)\s*=\s*("|')\s*(javascript|vbscript|data)\s*:[^"']*\2/gi, "");
     return s;
   }
+  // 听力卡音频槽：默认显示「待上传」占位；若对应 mp3 已存在则升级为真实播放器（渐进增强）
+  const _audioChecked = {};
+  function upgradeListeningAudio(){
+    const nodes = document.querySelectorAll("#modal-body .ls-audio[data-src]");
+    nodes.forEach(node=>{
+      const src = node.getAttribute("data-src");
+      if(_audioChecked[src]===true){
+        if(!node.querySelector("audio")) node.innerHTML = `<audio controls preload="none" src="${src}"></audio>`;
+        return;
+      }
+      if(_audioChecked[src]===false){ return; }
+      // 探测文件是否存在（静态资源；缺失返回 404）
+      fetch(src, {method:"HEAD"})
+        .then(r=>{
+          _audioChecked[src] = r.ok;
+          if(r.ok){ node.innerHTML = `<audio controls preload="none" src="${src}"></audio>`; node.classList.add("ls-audio-on"); }
+          else { node.classList.add("ls-audio-missing"); }
+        })
+        .catch(()=>{ _audioChecked[src] = false; node.classList.add("ls-audio-missing"); });
+    });
+  }
+  // 听力插图点击放大（一次性全局委托）
+  if(!window.__lsZoomBound){
+    document.addEventListener("click", e=>{
+      const img = e.target.closest && e.target.closest(".ls-figs img");
+      if(img){
+        e.preventDefault();
+        const ov = document.createElement("div");
+        ov.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.82);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;";
+        const big = document.createElement("img");
+        big.src = img.getAttribute("src");
+        big.style.cssText = "max-width:92vw;max-height:92vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);";
+        ov.appendChild(big);
+        ov.addEventListener("click", ()=>ov.remove());
+        document.body.appendChild(ov);
+      }
+    });
+    window.__lsZoomBound = true;
+  }
   // 首次启动：把内置指南/练习作为后台素材注入（按 grade 限定年级，可在后台删除；删除后不再重生）
   function seedDefaultContent(){
     const seeds = [
       {flag:"historyGuide", src:(typeof window!=="undefined" && window.HISTORY_GUIDE_7)||[]},
-      {flag:"englishReading4v2", src:(typeof window!=="undefined" && window.ENGLISH_READING_4)||[]}
+      {flag:"englishReading4v2", src:(typeof window!=="undefined" && window.ENGLISH_READING_4)||[]},
+      {flag:"englishListening4", src:(typeof window!=="undefined" && window.ENGLISH_LISTENING_4)||[]}
     ];
     state.seeded = state.seeded || {};
     // 迁移：清理旧版「一页两篇」英语阅读卡（rd4:p*），避免用户本地新旧重复、新版不显示
@@ -2285,6 +2325,7 @@
       </div>
     `;
     $("#modal").hidden=false;
+    upgradeListeningAudio();
     document.body.style.overflow="hidden";
     state.lastKey = it.key; save();
 
