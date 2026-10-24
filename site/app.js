@@ -1404,6 +1404,83 @@
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
+  /* ---------- 学习日历（月历视图：每天格子显示学会条数，点击看当天学习内容） ---------- */
+  let calY=null, calM=null; // 当前日历展示的年月（默认进入本周页时为当月）
+  function renderCalGrid(){
+    const box = $("#calBox"); if(!box) return;
+    if(calY===null){ const t=new Date(); calY=t.getFullYear(); calM=t.getMonth(); }
+    const startDow = (new Date(calY, calM, 1).getDay()+6)%7; // 周一=0
+    const daysInMonth = new Date(calY, calM+1, 0).getDate();
+    const byDate = {};
+    Object.keys(state.learned||{}).forEach(k=>{ const dt=state.learned[k]; if(dt){ (byDate[dt]=byDate[dt]||[]).push(k); } });
+    const todayStr = fmt(new Date());
+    let cells = "";
+    for(let i=0;i<startDow;i++) cells += `<div class="cal-cell empty"></div>`;
+    for(let dn=1; dn<=daysInMonth; dn++){
+      const ds = calY+"-"+String(calM+1).padStart(2,"0")+"-"+String(dn).padStart(2,"0");
+      const c = (byDate[ds]||[]).length;
+      cells += `<button class="cal-cell ${ds===todayStr?"today":""} ${c?"has":""}" data-cal-day="${ds}" title="${ds}${c?(" · 学会 "+c+" 条"):""}">
+        <span class="cal-d">${dn}</span>${c?`<span class="cal-c">${c}</span>`:""}</button>`;
+    }
+    box.innerHTML = `
+      <div class="cal-head">
+        <button class="btn" id="calPrev" title="上个月">‹</button>
+        <b>${calY} 年 ${calM+1} 月</b>
+        <button class="btn" id="calNext" title="下个月">›</button>
+        <span style="flex:1"></span>
+        <button class="btn" id="calToday">回到本月</button>
+      </div>
+      <div class="cal-grid">
+        ${["一","二","三","四","五","六","日"].map(x=>`<div class="cal-dow">周${x}</div>`).join("")}
+        ${cells}
+      </div>`;
+    const p=$("#calPrev"), n=$("#calNext"), t=$("#calToday");
+    if(p) p.onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCalGrid(); };
+    if(n) n.onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCalGrid(); };
+    if(t) t.onclick=()=>{ const dt=new Date(); calY=dt.getFullYear(); calM=dt.getMonth(); renderCalGrid(); };
+    box.querySelectorAll("[data-cal-day]").forEach(b=>b.addEventListener("click",()=>openCalDay(b.dataset.calDay)));
+  }
+  // 某天的学习内容明细：当天学会的条目（可点进卡片）+ 习惯完成 + 当天计划板块
+  function openCalDay(ds){
+    const items = Object.keys(state.learned||{}).filter(k=>state.learned[k]===ds).map(k=>INDEX[k]).filter(Boolean);
+    const habits = state.habits||[];
+    const hdone = habits.filter(h=>state.habitLog[ds]&&state.habitLog[ds][h]);
+    const p=ds.split("-").map(Number), dow=new Date(p[0],p[1]-1,p[2]).getDay();
+    const plan = weekPlan()[dow]||[];
+    $("#modal-body").innerHTML = `
+      <div class="m-type">📅 ${esc(ds)} 学习内容</div>
+      <div style="margin:6px 0 12px;font-size:14px;color:#475569">
+        当天学会 <strong style="color:#15803d">${items.length}</strong> 条 · 习惯完成 <strong>${hdone.length}/${habits.length}</strong>
+        ${plan.length?` · 计划板块：${plan.map(s=>esc(s.subject)+"·"+esc(s.type)).join("、")}`:""}
+      </div>
+      ${items.length?`
+        <div style="font-weight:700;margin-bottom:8px">✅ 当天学会</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+          ${items.map(it=>`
+            <button class="tag" data-cal-key="${esc(it.key)}" title="点击查看详情"
+              style="cursor:pointer;background:#ecfdf5;border-color:#a7f3d0;color:#15803d;">
+              ${esc(stripTags(it.title||it.name||it.key)).slice(0,20)}
+            </button>`).join("")}
+        </div>`
+        :`<div class="placeholder" style="padding:14px 16px;margin-bottom:16px">当天没有打卡记录</div>`}
+      ${habits.length?`
+        <div style="font-weight:700;margin-bottom:8px">⏰ 习惯完成（${hdone.length}/${habits.length}）</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+          ${habits.map(h=>`<span class="tag" style="cursor:default;${(state.habitLog[ds]&&state.habitLog[ds][h])?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":"background:#f8fafc;border-color:#e2e8f0;color:#94a3b8;"}">${(state.habitLog[ds]&&state.habitLog[ds][h])?"✓ ":"○ "}${esc(h)}</span>`).join("")}
+        </div>`:""}
+      ${plan.length?`
+        <div style="font-weight:700;margin-bottom:8px">📋 当天计划板块</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${plan.map(s=>{ const c=SUBJECT_COLORS[s.subject]||["#f1f5f9","#475569"];
+            return `<span class="tag" style="cursor:default;background:${c[0]};color:${c[1]};border:1px solid ${c[0]}">${esc(s.subject)}·${esc(s.type)}</span>`; }).join("")}
+        </div>`:""}
+    `;
+    $("#modal-body").querySelectorAll("[data-cal-key]").forEach(b=>{
+      b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.calKey]; if(it) openModal(it); });
+    });
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+  }
+
   function renderWeek(){
     const el = $("#view-week");
     const d = new Date();
@@ -1480,6 +1557,9 @@
       <div class="sec-title">📅 本周学习 <small>近 7 天打卡分布 · 今天高亮</small></div>
       <div class="week-bar">${weekDays.map(w=>`<div class="wk ${w.ds===todayStr?"today":""}"><div class="wk-bar" style="height:${w.c*16+4}px"></div><div class="wk-c">${w.c}</div><div class="wk-d">${w.ds===todayStr?"今天":w.ds.slice(5)}</div></div>`).join("")}</div>
 
+      <div class="sec-title">🗓 学习日历 <small>按月查看每天的学习内容 · 格子数字=当天学会条数 · 点击日期看当天明细</small></div>
+      <div class="cal-wrap" id="calBox"></div>
+
       <div class="sec-title">✅ 习惯周跟踪 <small>本周（周一~周日）完成情况 ${habitDoneCnt}/${habits.length} 已完成今天 · 每日勾选在「首页」</small></div>
       ${habits.length?`<div class="habit-dash">
         <div class="hd-head">
@@ -1525,6 +1605,7 @@
     `;
     const wgCard = $("#wkGoalCard");
     if(wgCard) wgCard.addEventListener("click", openWeekGoal);
+    renderCalGrid();
   }
 
   /* ---------- 学科栏目页 ---------- */
@@ -3104,7 +3185,7 @@
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
-      pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor
+      pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay
     };
   }
 })();
