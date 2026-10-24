@@ -4,7 +4,7 @@
 //   ③ 卡片引用的插图文件全部存在于磁盘
 //   ④ 源码守卫（空 src 不置位 flag / ls4 自愈 / 旧 flag 迁移）
 //   ⑤ 迁移：云端旧包（englishListening4=true + 5 张旧卡）→ 清旧卡重注 100 张
-//   ⑥ 版本号：10×bn、0×bm、0×bl、0×bk、0×ba、0×az（听力卡仍在当前发布中）
+//   ⑥ 版本号：10×bo、0×bn、0×bm、0×bl、0×bk、0×ba、0×az（听力卡仍在当前发布中）
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -174,11 +174,12 @@ safe('⑥ 版本号', ()=>{
   const bl=(html.match(/20261024bl/g)||[]).length;
   const bm=(html.match(/20261024bm/g)||[]).length;
   const bn=(html.match(/20261024bn/g)||[]).length;
+  const bo=(html.match(/20261024bo/g)||[]).length;
   ok('  0 处 az', az===0, 'az='+az);
   ok('  0 处 ba', ba===0, 'ba='+ba);
-  ok('  0 处 bd（已升级至 bn）', bd===0, 'bd='+bd);
-  ok('  0 处 bf/bg/bh/bi/bj/bk/bl/bm（已升级至 bn）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0&&bm===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl+' bm='+bm);
-  ok('  10 处 bn（含听力卡脚本）', bn===10, 'bn='+bn);
+  ok('  0 处 bd（已升级至 bo）', bd===0, 'bd='+bd);
+  ok('  0 处 bf/bg/bh/bi/bj/bk/bl/bm/bn（已升级至 bo）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0&&bm===0&&bn===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl+' bm='+bm+' bn='+bn);
+  ok('  10 处 bo（含听力卡脚本）', bo===10, 'bo='+bo);
   ok('  引入 english_listening_4.js', html.includes('english_listening_4.js'), '');
 });
 

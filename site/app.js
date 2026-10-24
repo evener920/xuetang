@@ -358,7 +358,7 @@
   }
   // 普通板块：按「卡片顺序」偏好推进
   function sectionItems(subject, type, quota){
-    const pool = poolFor(subject, type);
+    const pool = libPoolFor(subject, type); // 本年级 + 已加入学习的其他年级（年级筛选扩大选择范围后生效）
     if(!pool.length) return [];
     const semDay = Math.max(0, dayDiff(state.semesterStart));
     // 智能模式（默认关闭）：顺序前沿 + 掌握度加权（弱项优先），但显示时保持相对顺序
@@ -1348,6 +1348,25 @@
     // 其余类型：后台自定义（已按年级过滤）+ 内置教材素材（按当前年级过滤）
     return [...cus, ...EXTRA.filter(c=>c.subject===subject && c.type===type && gradeOk(c))];
   }
+  // 全年级池（不按 state.grade 过滤）：学习库弹窗的「年级筛选」用——默认当前年级，可切到其他年级扩大选择范围
+  function poolForAll(subject, type){
+    const cus = CUSTOM.filter(c=>c.subject===subject && c.type===type);
+    if(subject==="语文" && type==="诗词")  return [...POEMS, ...cus];
+    if(subject==="语文" && type==="成语")  return [...IDIOMS, ...cus];
+    if(subject==="语文" && type==="文言")  return [...WENYAN, ...cus];
+    if(subject==="语文" && type==="成语动画廊") return [...GALLERY, ...cus];
+    if(subject==="英语" && type==="单词")  return [...WORDS, ...cus];
+    if(subject==="数学" && (type==="公式"||type==="每日一练")) return ALL.filter(c=>c.subject===subject && c.type===type);
+    return [...cus, ...EXTRA.filter(c=>c.subject===subject && c.type===type)];
+  }
+  // 今日任务池 = 本年级内容 + 用户在学习库显式「加入学习」的其他年级内容（年级筛选扩大选择范围后，加入的要能排进今日）
+  function libPoolFor(subject, type){
+    const pool = poolFor(subject, type);
+    const has = new Set(pool.map(x=>x.key));
+    const ss = state.studySet||{};
+    const extra = poolForAll(subject, type).filter(it=>!has.has(it.key) && ss[it.key]);
+    return extra.length ? pool.concat(extra) : pool;
+  }
   /* ---------- 首页：今日学习 ---------- */
   // 今日任务：只包含今天（按周计划）排到的「学科·类型」，每类型按配额取条目（控制每日总量）
   function todayTasks(){
@@ -1360,7 +1379,7 @@
       const q = typeQuota(type);
       // 数学·每日一练：按天顺序轮转取 N 小节（循序渐进），跳过全会(5★)条目
       if(type==="每日一练"){
-        const dp = poolFor(subject,type);
+        const dp = libPoolFor(subject,type);
         if(!dp.length){ tasks[key]=[]; return; }
         const off = (Math.max(0, dayDiff(state.semesterStart)) * q) % dp.length;
         tasks[key] = seqSkipMastered(dp, off, q);
@@ -1560,9 +1579,12 @@
     const out = secs.map(sec=>{
       let pool=[]; try{ pool=poolFor(sec.subject, sec.type); }catch(e){ pool=[]; }
       const items = pool.map(it=>({ it, done: isDone(it.key), at: state.learned[it.key]||"", joined: !!(state.studySet&&state.studySet[it.key]) }));
+      // joined 按全年级口径：学习库弹窗可切年级扩大选择范围，加入的其他年级内容也要计入「目标内」与打卡 pill
+      let poolAll=[]; try{ poolAll=poolForAll(sec.subject, sec.type); }catch(e){ poolAll=pool; }
+      const joinedAll = poolAll.filter(it=>state.studySet&&state.studySet[it.key]).length;
       return { subject:sec.subject, type:sec.type, items,
         done: items.filter(x=>x.done).length, total: items.length,
-        joined: items.filter(x=>x.joined).length };
+        joined: joinedAll };
     }).filter(s=>s.total>0);
     // 排序：主课（语数英）在前，其余按名称；与科目导航顺序观感一致
     const order = ["语文","数学","英语"];
@@ -1581,7 +1603,7 @@
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
         共 <strong>${data.total}</strong> 项目标 · 已学 <strong style="color:#15803d">${data.done}</strong> · 未学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
         ${data.total?"":"· 还没有加入任何学习内容，去下方「📖 学习库」把要学的内容「加入学习」"}
-        （按当前年级「${esc(state.grade)}」统计；只有在学习库点过「加入学习」的内容才计入目标进度）
+        （统计已「加入学习」的内容，可含其他年级——在学习库板块弹窗里切换年级即可扩大选择范围）
       </div>
       ${data.sections.map(s=>`
         <div style="margin-bottom:16px">
@@ -1605,17 +1627,35 @@
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
-  // 学习库板块管理弹窗：该「学科·类型」本学期全部内容（与科目页同源），逐条「加入学习/移出」
+  // 学习库板块管理弹窗：该「学科·类型」的内容，按年级筛选查看/「加入学习/移出」
+  // 默认只列当前年级（与科目页数字一致）；可切换到其他年级扩大选择范围，加入后计入学习目标并排进今日学习
+  // gradeSel：null/undefined=当前年级；"__all"=全部年级；其余=具体年级名
   function openLibSection(subject,type){
     const sec = studyLibData().sections.find(s=>s.subject===subject&&s.type===type);
     if(!sec){ toast("该板块暂无内容"); return; }
-    renderLibModal(sec);
+    renderLibModal(subject, type, null); // 每次打开重置为当前年级
   }
-  function renderLibModal(sec){
+  function renderLibModal(subject, type, gradeSel){
+    const all = poolForAll(subject, type);
+    const g = gradeSel || state.grade;
+    const shown = (g==="__all") ? all : all.filter(it=>!it.grade || it.grade===g);
+    const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
+    const items = shown.map(it=>({ it, done:isDone(it.key), joined:!!(state.studySet&&state.studySet[it.key]) }));
+    const joinedAll = all.filter(it=>state.studySet&&state.studySet[it.key]).length;
+    // 年级 chips：本年级（默认）→ 其他有内容的年级 → 全部年级
+    const otherGrades = GRADES.filter(x=>x!==state.grade && all.some(it=>it.grade===x));
+    const cntCur = all.filter(it=>!it.grade || it.grade===state.grade).length;
+    const gLabel = (g==="__all") ? "全部年级" : esc(g);
     $("#modal-body").innerHTML = `
-      <div class="m-type">📖 ${esc(sec.subject)} · ${esc(sec.type)} <span style="font-size:12px;color:#475569">（学习库 · 按当前年级「${esc(state.grade)}」· 与科目页数字一致）</span></div>
+      <div class="m-type">📖 ${esc(subject)} · ${esc(type)} <span style="font-size:12px;color:#475569">（学习库 · 默认当前年级「${esc(state.grade)}」与科目页数字一致 · 可切换年级扩大选择范围）</span></div>
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
-        共 <strong>${sec.total}</strong> 项 · 已学 <strong style="color:#15803d">${sec.done}</strong> · 已加入学习目标 <strong style="color:#4f46e5">${sec.joined}</strong>
+        <span style="font-size:13px;color:#334155">年级筛选：</span>
+        <button class="chip ${g===state.grade?"on":""}" data-lib-grade="${esc(state.grade)}" title="当前年级的内容（与科目页一致）">${esc(state.grade)}（本年级）${cntCur}</button>
+        ${otherGrades.map(x=>`<button class="chip ${g===x?"on":""}" data-lib-grade="${esc(x)}" title="查看${esc(x)}的内容，可加入学习扩大范围">${esc(x)} ${all.filter(it=>it.grade===x).length}</button>`).join("")}
+        ${otherGrades.length?`<button class="chip ${g==="__all"?"on":""}" data-lib-grade="__all" title="查看全部年级的内容">全部年级 ${all.length}</button>`:""}
+      </div>
+      <div style="margin:0 0 12px;font-size:14px;color:#475569">
+        共 <strong>${items.length}</strong> 项（${gLabel}）· 已学 <strong style="color:#15803d">${items.filter(x=>x.done).length}</strong> · 已加入学习目标 <strong style="color:#4f46e5">${items.filter(x=>x.joined).length}</strong>${joinedAll>items.filter(x=>x.joined).length?`（全部年级共 ${joinedAll}）`:""}
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <button class="btn primary" data-study-all="1">＋ 全部加入学习</button>
@@ -1623,38 +1663,40 @@
         <span class="af-tip" style="align-self:center">只有「加入学习」的内容才计入「🎯 学习目标」进度</span>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${sec.items.map(x=>`
+        ${items.map(x=>`
           <span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;${x.done?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":(x.joined?"background:#eef2ff;border-color:#c7d2fe;color:#3730a3;":"background:#f8fafc;border-color:#e2e8f0;color:#475569;")}">
-            <button class="tag-btn" data-lib-key="${esc(x.it.key)}" title="点击查看详情" style="all:unset;cursor:pointer;${x.done?"color:#15803d;":""}">${esc(stripTags(x.it.title||x.it.name||x.it.key)).slice(0,18)}${x.done?" ✓":""}</button>
+            <button class="tag-btn" data-lib-key="${esc(x.it.key)}" title="点击查看详情" style="all:unset;cursor:pointer;${x.done?"color:#15803d;":""}">${x.it.grade && x.it.grade!==state.grade?`<span style="opacity:.65;font-size:11px;margin-right:2px">${esc(x.it.grade)}</span>`:""}${esc(stripTags(x.it.title||x.it.name||x.it.key)).slice(0,18)}${x.done?" ✓":""}</button>
             <button class="tag-btn" data-study-toggle="${esc(x.it.key)}" title="${x.joined?"移出学习目标":"加入学习目标"}" style="all:unset;cursor:pointer;font-weight:700">${x.joined?"✓":"＋"}</button>
           </span>`).join("")}
       </div>
-      <p class="af-tip" style="margin-top:12px">绿色=已学（带完成日期）· 蓝色=已加入学习目标 · 灰=未加入；点击条目名查看详情，点右侧 ＋/✓ 加入或移出。</p>
+      <p class="af-tip" style="margin-top:12px">绿色=已学（带完成日期）· 蓝色=已加入学习目标 · 灰=未加入；点条目名查看详情，点右侧 ＋/✓ 加入或移出。切换到其他年级即可扩大选择范围，加入的其他年级内容会计入学习目标，并排进该板块的今日学习。</p>
     `;
     const mb=$("#modal-body");
     mb.querySelectorAll("[data-lib-key]").forEach(b=>{
       b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.libKey]; if(it) openModal(it); });
     });
+    mb.querySelectorAll("[data-lib-grade]").forEach(b=>b.addEventListener("click", ()=>{
+      renderLibModal(subject, type, b.dataset.libGrade);
+    }));
     mb.querySelectorAll("[data-study-toggle]").forEach(b=>b.addEventListener("click", ()=>{
       const k=b.dataset.studyToggle;
       state.studySet = state.studySet || {};
       if(state.studySet[k]) delete state.studySet[k]; else state.studySet[k]=true;
       save();
-      const sec2 = studyLibData().sections.find(s=>s.subject===sec.subject&&s.type===sec.type);
-      renderLibModal(sec2);
+      renderLibModal(subject, type, g);
       refreshView();
     }));
     const allBtn = mb.querySelector('[data-study-all="1"]'), noneBtn = mb.querySelector('[data-study-all="0"]');
     if(allBtn) allBtn.addEventListener("click", ()=>{
       state.studySet = state.studySet || {};
-      sec.items.forEach(x=>{ state.studySet[x.it.key]=true; });
-      save(); renderLibModal(studyLibData().sections.find(s=>s.subject===sec.subject&&s.type===sec.type)); refreshView();
-      toast("已全部加入学习目标 🎯");
+      items.forEach(x=>{ state.studySet[x.it.key]=true; });
+      save(); renderLibModal(subject, type, g); refreshView();
+      toast(`已把「${gLabel}」的 ${items.length} 项加入学习目标 🎯`);
     });
     if(noneBtn) noneBtn.addEventListener("click", ()=>{
       state.studySet = state.studySet || {};
-      sec.items.forEach(x=>{ delete state.studySet[x.it.key]; });
-      save(); renderLibModal(studyLibData().sections.find(s=>s.subject===sec.subject&&s.type===sec.type)); refreshView();
+      items.forEach(x=>{ delete state.studySet[x.it.key]; });
+      save(); renderLibModal(subject, type, g); refreshView();
       toast("已全部移出学习目标");
     });
     $("#modal").hidden=false; document.body.style.overflow="hidden";
@@ -3678,8 +3720,8 @@
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, pointTodayNet, pointWeekNet, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, penaltyLogWeek, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
-      todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
-      cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
+      todayTasks, poolFor, poolForAll, libPoolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
+      cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, renderLibModal, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
       openFlashcards, fcFlip, fcNav, fcShuffle, fcKnown, get fcState(){ return fcState; },
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,

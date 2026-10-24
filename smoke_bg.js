@@ -5,7 +5,9 @@
 // ④ 后台无「我的素材」（诉求4）
 // ⑤ 科目页添加按钮（诉求2）：subjectTypesOf/openSubjectAdd/renderSubject chips
 // ⑥ 资源页「历史」并入「人文」（诉求7）：biData subjOf 归一
-// ⑦ 版本号：10×bn
+// ⑧ 全视图渲染回归（防 renderRes 白屏类事故）
+// ⑨ 学习库年级筛选（bo：扩大选择范围）：poolForAll/libPoolFor/年级 chips/跨年级加入
+// ⑦ 版本号：10×bo
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -348,6 +350,63 @@ safe('⑧ 全视图渲染回归', ()=>{
   ok('  go() 路由切换无异常', goErr==='', goErr);
 });
 
+/* ---------- ⑨ 学习库年级筛选（诉求：扩大选择范围） ---------- */
+safe('⑨ 学习库年级筛选', ()=>{
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  const doc = ctx.window.document;
+  const sub="语文", tp="诗词";
+  const g0 = S.state.grade;
+  const all = S.poolForAll(sub, tp), cur = S.poolFor(sub, tp);
+  ok('  poolForAll 覆盖全年级（多于当前年级池）', all.length>cur.length, 'all='+all.length+' cur='+cur.length);
+  const grades = S.GRADES.filter(g=>g!==g0 && all.some(it=>it.grade===g));
+  ok('  存在其他年级内容可筛选', grades.length>0, JSON.stringify(grades));
+
+  // 默认打开 = 当前年级（与科目页一致）
+  S.openLibSection(sub, tp);
+  let mb = doc.getElementById('modal-body').innerHTML;
+  ok('  弹窗含年级筛选 chips（data-lib-grade）', (mb.match(/data-lib-grade=/g)||[]).length>=2, 'n='+(mb.match(/data-lib-grade=/g)||[]).length);
+  ok('  默认选中当前年级（本年级 chip 带 on）', mb.includes('data-lib-grade="'+g0+'"') && /chip on" data-lib-grade="/.test(mb), '');
+  ok('  有「全部年级」chip', mb.includes('data-lib-grade="__all"'), '');
+  ok('  默认只列当前年级条目', (mb.match(/data-study-toggle=/g)||[]).length===cur.length, 'n='+(mb.match(/data-study-toggle=/g)||[]).length+' cur='+cur.length);
+  ok('  弹窗说明可切换年级扩大选择范围', mb.includes('扩大选择范围'), '');
+
+  // 切到具体年级（显式传参，等价点 chip）
+  const g2 = grades[0];
+  S.renderLibModal(sub, tp, g2);
+  mb = doc.getElementById('modal-body').innerHTML;
+  const cur2 = all.filter(it=>!it.grade || it.grade===g2);
+  ok('  切到其他年级后按该年级筛选', (mb.match(/data-study-toggle=/g)||[]).length===cur2.length, 'n='+(mb.match(/data-study-toggle=/g)||[]).length+' exp='+cur2.length);
+  ok('  该年级 chip 选中（on）', mb.includes('chip on" data-lib-grade="'+g2+'"'), '');
+  ok('  非当前年级条目标注年级名前缀', cur2.some(it=>it.grade===g2) && mb.includes('>'+g2+'</span>'), '');
+
+  // 全部年级视图
+  S.renderLibModal(sub, tp, "__all");
+  mb = doc.getElementById('modal-body').innerHTML;
+  ok('  全部年级视图列出所有条目', (mb.match(/data-study-toggle=/g)||[]).length===all.length, 'n='+(mb.match(/data-study-toggle=/g)||[]).length+' all='+all.length);
+  ok('  全部年级 chip 选中（on）', mb.includes('chip on" data-lib-grade="__all"'), '');
+
+  // 跨年级加入：joined 全年级口径 + 计入学习目标 + 排进今日任务池 + 卡片 pill
+  const xg = all.find(it=>it.grade && it.grade!==g0);
+  ok('  找到一条其他年级内容', !!xg, '');
+  const lpBefore = S.libPoolFor(sub, tp);
+  ok('  加入前 libPoolFor 不含跨年级条目', !lpBefore.some(it=>it.key===xg.key), '');
+  S.state.studySet = S.state.studySet || {};
+  S.state.studySet[xg.key] = true;
+  const sec = S.studyLibData().sections.find(s=>s.subject===sub&&s.type===tp);
+  ok('  跨年级加入后板块 joined 计入（全年级口径）', sec.joined===1, 'joined='+sec.joined);
+  ok('  跨年级加入计入学习目标总量', S.weekGoalData().total===1, 'total='+S.weekGoalData().total);
+  const lpAfter = S.libPoolFor(sub, tp);
+  ok('  加入后 libPoolFor 含跨年级条目（排进今日轮换）', lpAfter.some(it=>it.key===xg.key) && lpAfter.length===cur.length+1, 'len='+lpAfter.length);
+  S.renderWeek();
+  const wk = doc.getElementById('view-week').innerHTML;
+  ok('  跨年级加入后板块卡显示「✓ 打卡中」', wk.includes('✓ 打卡中'), '');
+  // 弹窗头部提示全部年级已加入数
+  S.openLibSection(sub, tp);
+  mb = doc.getElementById('modal-body').innerHTML;
+  ok('  弹窗头部提示「全部年级共 N」', mb.includes('（全部年级共 1）'), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -356,6 +415,7 @@ safe('⑦ 版本号', ()=>{
   const bl=(html.match(/20261024bl/g)||[]).length;
   const bm=(html.match(/20261024bm/g)||[]).length;
   const bn=(html.match(/20261024bn/g)||[]).length;
+  const bo=(html.match(/20261024bo/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -363,8 +423,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bn', bn===10, 'bn='+bn);
-  ok('  0 处 bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 bo', bo===10, 'bo='+bo);
+  ok('  0 处 bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;
