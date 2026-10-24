@@ -10,7 +10,11 @@ workers_dev = true
 account_id = "82129ffe005dfd5010505adf73de06cb"
 
 # 本 Worker 仅负责云端同步接口 /api/sync（静态站点由 xuetang.201573.xyz 的 Pages 提供）
-# 前端统一通过 https://xuetang.evener920.workers.dev/api/sync 调用，已开启 CORS 支持跨域。
+# 前端同源调用 xuetang.201573.xyz/api/sync（SYNC_BASE=""），由下方 zone 路由把 /api/* 拦到本 Worker。
+# 不用 *.workers.dev：该域名在国内网络无法访问（用户实测）。
+routes = [
+  { pattern = "xuetang.201573.xyz/api/*", zone_name = "201573.xyz" }
+]
 
 # 云端同步用的 KV（已建好 xuetang-sync）：变量名必须叫 SYNC_KV
 kv_namespaces = [
