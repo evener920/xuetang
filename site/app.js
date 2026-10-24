@@ -815,6 +815,20 @@
   }else{
     applyPerStudent(state.currentStudent || Object.keys(state.students)[0]);
   }
+  // 一次性迁移：2026秋新教材更换四年级上册单词表（word:182..264 槽位内容已完全不同，旧学习记录作废）
+  // 其余年级索引未变（三年级下止于181、四年级下起于265），学习状态不受影响；新增27词落在数组末尾（word:1266..1292）。
+  if(!state.migG4Words2026){
+    const purgeKeys=(o)=>{ if(o&&typeof o==="object") for(let i=182;i<=264;i++) delete o["word:"+i]; };
+    Object.keys(state.students||{}).forEach(id=>{
+      const dd=(state.students[id]||{}).data; if(!dd) return;
+      purgeKeys(dd.learned); purgeKeys(dd.fav); purgeKeys(dd.mastery);
+      if(dd.reviewed&&typeof dd.reviewed==="object") Object.keys(dd.reviewed).forEach(t=>purgeKeys(dd.reviewed[t]));
+    });
+    purgeKeys(state.learned); purgeKeys(state.fav); purgeKeys(state.mastery);
+    if(state.reviewed&&typeof state.reviewed==="object") Object.keys(state.reviewed).forEach(t=>purgeKeys(state.reviewed[t]));
+    purgeKeys(state.overrides); purgeKeys(state.videos);
+    state.migG4Words2026=true;
+  }
   save(); // 首次即持久化多学生结构（含迁移）
   seedDefaultContent(); // 七年级历史第一单元学习指南（后台素材，可删除）
   rebuildAll(); // 用主数据 + 后台素材填充 ALL / INDEX
