@@ -128,22 +128,23 @@ safe('① 学习库与学习目标', ()=>{
   ok('  本周页含「🎯 学习目标」', wk.includes('🎯 学习目标'), '');
   ok('  本周页含「📖 学习库」', wk.includes('📖 学习库'), '');
   ok('  学习库板块卡含 data-lib-sec', wk.includes('data-lib-sec='), '');
-  ok('  板块卡含打卡开关 chip', wk.includes('data-checkin='), '');
-  ok('  打卡开关用学科主题色（开=实色，同旧版打卡范围）', /<button class="chip lib-ck" style="background:#7c3aed;border-color:#7c3aed;color:#fff" data-checkin="语文/.test(wk), '');
-  ok('  打卡开/关状态文字明确', wk.includes('✓ 打卡中'), '');
-  ok('  旧「打卡范围」chips 已移除', !wk.includes('打卡范围'), '');
+  ok('  板块卡含打卡状态 pill（chip lib-ck）', wk.includes('class="chip lib-ck"'), '');
+  ok('  板块卡 pill 不再挂 data-checkin（打卡范围由「加入学习」决定）', !wk.includes('data-checkin='), '');
+  ok('  旧「打卡范围：」chips 标签已移除', !wk.includes('打卡范围：'), '');
 
-  // 打卡开关切换：点一下退出（浅底）、再点加入（实色）——同旧版打卡范围手感
-  const ckKey = sec0.subject+'·'+sec0.type;
-  S.state.checkin[ckKey] = false;
+  // 打卡范围 = 已「加入学习」的内容：sec0 已全部加入 → 实色「✓ 打卡中」；未加入的板块 → 浅底「＋ 加入打卡」
+  ok('  已加入学习的板块显示「✓ 打卡中」实色（学科主题色）', /<button class="chip lib-ck" style="background:#7c3aed;border-color:#7c3aed;color:#fff"[^>]*>✓ 打卡中/.test(wk), '');
+  ok('  未加入学习的板块显示「＋ 加入打卡」浅底', wk.includes('＋ 加入打卡') && /<button class="chip lib-ck" style="background:#f5f3ff/.test(wk), '');
+
+  // 全部移出 → 回到浅底；重新加入 → 恢复实色
+  sec0.items.forEach(x=>{ delete S.state.studySet[x.it.key]; });
   S.renderWeek();
   const wkOff = ctx.window.document.getElementById('view-week').innerHTML;
-  ok('  退出后显示「＋ 加入打卡」浅底态', wkOff.includes('＋ 加入打卡') && /<button class="chip lib-ck" style="background:#f5f3ff/.test(wkOff), '');
-  S.state.checkin[ckKey] = true;
+  ok('  全部移出后回到「＋ 加入打卡」浅底态', wkOff.includes('＋ 加入打卡'), '');
+  sec0.items.forEach(x=>{ S.state.studySet[x.it.key]=true; });
   S.renderWeek();
   const wkOn = ctx.window.document.getElementById('view-week').innerHTML;
-  ok('  再加入后显示「✓ 打卡中」实色态', wkOn.includes('✓ 打卡中'), '');
-  delete S.state.checkin[ckKey];
+  ok('  重新加入后恢复「✓ 打卡中」实色态', wkOn.includes('✓ 打卡中'), '');
 
   // 源码守卫
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
@@ -191,6 +192,21 @@ safe('② 首页行为扣分', ()=>{
   const wkPts = ctx.window.document.getElementById('view-week').innerHTML;
   ok('  本周页 hero 显示 今日/本周/累计 积分', /今日 <b style="color:#15803d">\+\d+<\/b> <b style="color:#b91c1c">-\d+<\/b> · 本周 \+\d+ · 累计 <b>-?\d+<\/b> 分/.test(wkPts), '');
   ok('  本周页学习看板含「🏆 积分」卡', wkPts.includes('🏆 积分'), '');
+
+  // 行为扣分记录搬到本周页、与习惯放一起（诉求：后台里的扣分记录移到本周页签）
+  ok('  本周页含「🚨 行为扣分记录」区', wkPts.includes('🚨 行为扣分记录'), '');
+  ok('  扣分记录与习惯周跟踪同页相邻', wkPts.indexOf('习惯周跟踪')>=0 && wkPts.indexOf('习惯周跟踪')<wkPts.indexOf('🚨 行为扣分记录'), '');
+  ok('  本周扣分流水可查（penaltyLogWeek）', S.penaltyLogWeek().length===1 && S.penaltyLogWeek()[0].note.includes('不讲卫生'), 'n='+S.penaltyLogWeek().length);
+  ok('  本周页扣分记录带撤销按钮（data-pen-undo）', wkPts.includes('data-pen-undo="pen:p1:'), '');
+  ok('  本周页显示本周共扣与今日上限', wkPts.includes('本周共扣 -') && wkPts.includes('上限'), '');
+  // 撤销返还积分
+  const hook = S.penaltyLogWeek()[0].hook;
+  const backPts = S.state.points;
+  const got = S.undoPenalty(hook);
+  ok('  本周页撤销返还积分', got===5 && S.state.points===backPts+5, 'got='+got);
+  S.renderWeek();
+  const wkAfter = ctx.window.document.getElementById('view-week').innerHTML;
+  ok('  撤销后本周页显示空态文案', wkAfter.includes('本周还没有行为扣分'), '');
 });
 
 /* ---------- ③ 今日完成默认折叠（诉求6） ---------- */
@@ -213,8 +229,12 @@ safe('④ 后台移除我的素材', ()=>{
   const admin = ctx.window.document.getElementById('view-admin').innerHTML;
   ok('  后台页不含「我的素材」区', !admin.includes('我的素材'), '');
   ok('  后台仍含批量导入/添加表单', admin.includes('admin-form'), '');
+  ok('  后台不再含「行为扣分记录」区（已移至本周页）', !admin.includes('行为扣分记录'), '');
+  ok('  后台保留「扣分项设置」表单', admin.includes('扣分项设置') && admin.includes('pnAdd'), '');
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
   ok('  源码无 goRes 残留处理器', !/id="goRes"|goRes\(/.test(code), '');
+  ok('  全站无 data-checkin 元素（打卡范围改由加入学习决定）', !code.includes('data-checkin'), '');
+  ok('  penaltyLogWeek 辅助函数存在', code.includes('function penaltyLogWeek()'), '');
 });
 
 /* ---------- ⑤ 科目页「＋ 添加」（诉求2） ---------- */
@@ -305,6 +325,7 @@ safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
   const bj=(html.match(/20261024bj/g)||[]).length;
   const bk=(html.match(/20261024bk/g)||[]).length;
+  const bl=(html.match(/20261024bl/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -312,8 +333,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bk', bk===10, 'bk='+bk);
-  ok('  0 处 bi/bh/bg/bf/be/bd/ba/bj', bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 bl', bl===10, 'bl='+bl);
+  ok('  0 处 bk/bi/bh/bg/bf/be/bd/ba/bj', bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;

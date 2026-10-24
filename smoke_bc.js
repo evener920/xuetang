@@ -117,11 +117,12 @@ safe('④ 版本号', ()=>{
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bj=(html.match(/20261024bj/g)||[]).length;
   const bk=(html.match(/20261024bk/g)||[]).length;
+  const bl=(html.match(/20261024bl/g)||[]).length;
   ok('  0 处 ba', ba===0, 'ba='+ba);
   ok('  0 处 bc', bc===0, 'bc='+bc);
-  ok('  0 处 bd（已升级至 bk）', bd===0, 'bd='+bd);
-  ok('  0 处 bf/bg/bh/bi（已升级至 bk）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi);
-  ok('  10 处 bk（含 science_gallery.js）', bk===10, 'bk='+bk);
+  ok('  0 处 bd（已升级至 bl）', bd===0, 'bd='+bd);
+  ok('  0 处 bf/bg/bh/bi/bj/bk（已升级至 bl）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk);
+  ok('  10 处 bl（含 science_gallery.js）', bl===10, 'bl='+bl);
   ok('  引入 science_gallery.js', html.includes('science_gallery.js'), '');
 });
 

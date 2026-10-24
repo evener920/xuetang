@@ -622,6 +622,8 @@
   function penaltyList(){ return (Array.isArray(state.penalties)&&state.penalties.length) ? state.penalties : DEFAULT_PENALTIES; }
   function penaltyToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n<0).reduce((a,b)=>a-b.n,0); }
   function penaltyLogToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n<0); }
+  // 本周扣分记录（本周页展示用，与习惯周跟踪放一起）
+  function penaltyLogWeek(){ const ws=weekDatesMondayStart(); return (state.pointLog||[]).filter(x=>x.n<0 && ws.indexOf(x.t)>=0); }
   // 扣分：返回实际扣掉的分数（0 表示未扣成）
   function penalize(id){
     const p = penaltyList().find(x=>x.id===id); if(!p) return 0;
@@ -1755,6 +1757,8 @@
     // 学习目标进度（只统计学习库里「加入学习」的条目）
     const goal = weekGoalData();
     const lib = studyLibData();
+    // 本周行为扣分记录（与习惯周跟踪放一起）
+    const penWeek = penaltyLogWeek();
 
     el.innerHTML = `
       <div class="hero">
@@ -1783,16 +1787,16 @@
       ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
         :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
-      <div class="sec-title">📖 学习库 <small>本学期全部学习内容（与科目页数字一致）· 点条目卡「管理」把内容「加入学习」后才计入上方目标 · 打卡开关控制该板块是否参与今日排课</small></div>
+      <div class="sec-title">📖 学习库 <small>本学期全部学习内容（与科目页数字一致）· 只有进去把内容「加入学习」后才计入上方目标、并进入打卡范围 · 点卡片进去选择</small></div>
       <div class="stat-strip">
         ${lib.sections.map(s=>{
-          const ck = checkinOn(s.subject,s.type);
+          const ck = s.joined>0; // 打卡范围 = 已「加入学习」的内容；没选中就不算打卡中
           return `
           <div class="stat lib-sec" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
             <div class="num">${s.total}</div>
             <div class="lbl">${esc(s.subject)}·${esc(s.type)}</div>
             <div class="lib-meta">已学 ${s.done}${s.joined?` · 目标内 ${s.joined}`:""}</div>
-            <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" data-checkin="${esc(checkinKey(s.subject,s.type))}" title="打卡开关：${ck?"该板块正参与今日排课 · 再点一次退出":"该板块未参与今日排课 · 点击加入"}">${ck?"✓ 打卡中":"＋ 加入打卡"}</button>
+            <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${ck?`已加入学习 ${s.joined} 条 · 正处打卡范围 · 点击进去管理`:"还没有加入学习的内容 · 点击进去选择（加入后才进入打卡范围）"}">${ck?"✓ 打卡中":"＋ 加入打卡"}</button>
           </div>`;}).join("")}
         ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
       </div>
@@ -1834,6 +1838,20 @@
       </div>`
       :`<div class="placeholder" style="padding:14px 16px">还没有任何习惯，去「首页」的「今日习惯」添加。</div>`}
 
+      <div class="sec-title">🚨 行为扣分记录 <small>与习惯放一起看 · 只扣行为不扣学习 · 每日上限 ${penaltyCapDay()} 分 · 欠分下限 -${penaltyFloor()} 分 · 当天改正可撤销返还 · 记录在「首页」</small></div>
+      <div class="chips" style="margin:6px 0 10px">
+        <span class="badge" style="background:#fee2e2;color:#b91c1c">本周共扣 -${penWeek.reduce((a,b)=>a-b.n,0)} 分</span>
+        <span class="badge" style="background:#f1f5f9;color:#475569">今日 -${penaltyToday()} / 上限 ${penaltyCapDay()}</span>
+        <span class="badge" style="background:#eef2ff;color:#3730a3">当前积分 ${state.points}</span>
+      </div>
+      <div class="admin-list">
+        ${penWeek.length? penWeek.map(e=>`<div class="admin-item">
+            <div class="ai-main"><span class="badge" style="background:#fef2f2;color:#b91c1c">-${-e.n} 分</span> <b>${esc((e.note||"").replace("行为扣分 · ",""))}</b> <span style="font-size:12px;color:var(--muted)">${esc(e.t)}</span></div>
+            <button class="btn" data-pen-undo="${esc(e.hook)}" title="孩子已改正 → 返还积分">✅ 已改正 · 撤销</button>
+          </div>`).join("")
+        : '<div class="placeholder" style="padding:14px 16px"><div class="big">🌟</div>本周还没有行为扣分，表现不错 👍</div>'}
+      </div>
+
       <div class="sec-title">🗓 本周计划 <small>以周为单位均匀安排 · 主课多、副课少 · 周一至周日 · 今天已高亮</small></div>
       <div class="week-plan">
         ${[1,2,3,4,5,6,0].map(i=>{ const dayArr=weekPlan()[i]; return `<div class="wp-day ${i===todayDow?"today":""}">
@@ -1847,10 +1865,16 @@
     `;
     const wgCard = $("#wkGoalCard");
     if(wgCard) wgCard.addEventListener("click", openWeekGoal);
+    // 板块卡（含「打卡中」pill）点击都进管理弹窗——进去把内容「加入学习」后才进入打卡范围
     el.querySelectorAll("[data-lib-sec]").forEach(b=>b.addEventListener("click", (e)=>{
-      if(e.target.closest("[data-checkin]")) return; // 打卡开关不触发打开管理
       const i=b.dataset.libSec.indexOf("·");
       openLibSection(b.dataset.libSec.slice(0,i), b.dataset.libSec.slice(i+1));
+    }));
+    // 行为扣分记录：改正撤销（返还积分）
+    el.querySelectorAll("[data-pen-undo]").forEach(b=>b.addEventListener("click", ()=>{
+      const got=undoPenalty(b.dataset.penUndo);
+      if(got) toast("已改正，返还 +"+got+" 分 👍");
+      renderWeek(); if(view.name==="reward") renderReward();
     }));
     renderCalGrid();
   }
@@ -3154,19 +3178,7 @@
         <p class="af-tip">当前生效目录：${rewardList().map(r=>esc(r.icon||"🎁")+r.name+"("+r.cost+")").join(" · ")}</p>
       </div>
 
-      <div class="sec-title">⚠️ 行为扣分记录 <small>只扣行为不扣学习 · 每日上限 ${penaltyCapDay()} 分 · 欠分下限 -${penaltyFloor()} 分 · 当天改正可撤销返还</small></div>
-      <div class="chips">
-        ${penaltyList().map(p=>`<button class="chip" data-pen="${esc(p.id)}" title="${esc(p.tip||"")}">${esc(p.icon||"⚠️")} ${esc(p.name)} -${p.cost}</button>`).join("")}
-        <span style="flex:1"></span>
-        <span class="lbl" style="align-self:center">今日已扣 <b style="color:${penaltyToday()?"#b91c1c":"var(--muted)"}">-${penaltyToday()}</b> / ${penaltyCapDay()}</span>
-      </div>
-      <div class="admin-list">
-        ${penaltyLogToday().length? penaltyLogToday().map(e=>`<div class="admin-item">
-            <div class="ai-main"><span class="badge" style="background:#fef2f2;color:#b91c1c">-${-e.n} 分</span> <b>${esc((e.note||"").replace("行为扣分 · ",""))}</b> <span style="font-size:12px;color:var(--muted)">${esc(e.t)}</span></div>
-            <button class="btn" data-pen-undo="${esc(e.hook)}" title="孩子已改正 → 返还积分">✅ 已改正 · 撤销</button>
-          </div>`).join("")
-        : '<div class="placeholder"><div class="big">🌟</div>今天还没有行为扣分，表现不错</div>'}
-      </div>
+      <div class="sec-title">⚙️ 扣分项设置 <small>自定义扣分项目与分值 · 记录入口在「首页 → ⚠️ 今日行为扣分」，记录与撤销在「📊 本周」页</small></div>
       <div class="admin-form" style="margin-top:10px">
         <div class="af-row">
           <label>图标<input id="pnIcon" style="width:70px" value="⚠️" /></label>
@@ -3313,21 +3325,7 @@
       if(!confirm("恢复为系统默认奖励目录？自定义奖励将被清除。")) return;
       state.rewards=null; save(); toast("已恢复默认目录"); renderAdmin();
     });
-    // 行为扣分：记录 / 改正撤销 / 自定义扣分项
-    el.querySelectorAll("[data-pen]").forEach(b=>b.addEventListener("click", ()=>{
-      const id=b.dataset.pen, p=penaltyList().find(x=>x.id===id); if(!p) return;
-      const r=penalize(id);
-      if(r===-1){ toast("「"+p.name+"」今天已经记过啦"); return; }
-      if(r===-2){ toast("今日扣分已达上限 "+penaltyCapDay()+" 分，明天再说"); return; }
-      if(r===-3){ toast("已到欠分下限 -"+penaltyFloor()+" 分，先努力挣回来吧"); return; }
-      toast("行为扣分 · "+p.name+" -"+r+" 分");
-      renderAdmin(); if(view.name==="reward") renderReward();
-    }));
-    el.querySelectorAll("[data-pen-undo]").forEach(b=>b.addEventListener("click", ()=>{
-      const got=undoPenalty(b.dataset.penUndo);
-      if(got) toast("已改正，返还 +"+got+" 分 👍");
-      renderAdmin(); if(view.name==="reward") renderReward();
-    }));
+    // 扣分项自定义（记录入口在首页，记录/撤销在本周页）
     const pnAdd=$("#pnAdd");
     if(pnAdd) pnAdd.addEventListener("click", ()=>{
       const name=($("#pnName").value||"").trim(), cost=parseInt($("#pnCost").value,10);
@@ -3610,8 +3608,6 @@
     if(cnF){ const pe=$("#view-subject"); openFlashcards((pe&&pe._cnPool)||[], "语文 · "+(cnView?cnView.type:"语文")); return; }
     const sg=e.target.closest("[data-switch-grade]");
     if(sg){ state.grade=sg.dataset.switchGrade; gs.value=state.grade; save(); render(); toast("已切换到 "+state.grade); }
-    const ci=e.target.closest("[data-checkin]");
-    if(ci){ const k=ci.dataset.checkin; state.checkin[k] = !checkinOn(k.split("·")[0], k.split("·")[1]); save(); refreshView(); return; }
     const hdel=e.target.closest("[data-habit-del]");
     if(hdel){ const h=hdel.dataset.habitDel; state.habits=state.habits.filter(x=>x!==h); save(); toast("已删除习惯："+h); refreshView(); return; }
     const penB=e.target.closest("[data-pen]");
@@ -3672,7 +3668,7 @@
       archiveCreate, archiveRestore, loadArchives, renderWeek, renderHome, refreshView,
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
       get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
-      penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
+      penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, penaltyLogWeek, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
