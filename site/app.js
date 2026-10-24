@@ -2164,7 +2164,7 @@
 
   /* ---------- 后台：资源库（内置教材按 学科×年级×类型 交叉分类，可直接修改） ---------- */
   const RES_STEP = 30;
-  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", src:"全部", limit:RES_STEP };
+  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", limit:RES_STEP };
   function openAdminEdit(key){
     const it = INDEX[key] || EXTRA.find(e=>e.key===key);
     if(!it){ toast("没找到这条内容"); return; }
@@ -2229,13 +2229,12 @@
     // 按 学科 × 年级 × 类型 交叉归类；后台只是管理入口（增删改），内容主展示位就在这里。
     const customSet = new Set((CUSTOM||[]).map(x=>x.key));
     const builtins = ALL.filter(x=>x.key!=="practice:maththought" && !/^mtq:/.test(x.key));
-    const srcOk = x => biView.src==="全部" || (biView.src==="我的素材" ? customSet.has(x.key) : !customSet.has(x.key));
+    // 来源（我的素材/内置）已合并进学科板块，不再按来源过滤；来源只在卡片标签上区分
     // 联动筛选：每个维度的候选与计数，都在「另外两个维度已选条件」的范围内计算
     const matchExcept = except => builtins.filter(x=>{
       if(except!=="subj"  && biView.subj !=="全部" && x.subject!==biView.subj)  return false;
       if(except!=="grade" && biView.grade!=="全部" && x.grade !==biView.grade) return false;
       if(except!=="type"  && biView.type !=="全部" && x.type  !==biView.type)  return false;
-      if(except!=="src"   && !srcOk(x)) return false;
       return true;
     });
     const cntBy=(arr,fn)=>{ const m=new Map(); arr.forEach(x=>{ const k=fn(x)||""; m.set(k,(m.get(k)||0)+1); }); return m; };
@@ -2255,7 +2254,6 @@
       if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
       if(biView.grade!=="全部" && x.grade!==biView.grade) return false;
       if(biView.type!=="全部" && x.type!==biView.type) return false;
-      if(!srcOk(x)) return false;
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
     });
@@ -2266,34 +2264,24 @@
       if(ca && cb) return custIdx.get(b.key) - custIdx.get(a.key); // 最近添加在前
       return (cb?1:0) - (ca?1:0);
     });
-    const cntCustom = matchExcept("src").filter(x=>customSet.has(x.key)).length;
     return {
       builtins, filtered, show: filtered.slice(0, biView.limit),
       customCnt: builtins.filter(x=>customSet.has(x.key)).length,
       subjChips: [["全部", matchExcept("subj").length], ...chipsFor(subjM, biView.subj, ["语文","数学","英语","科学","人文"])],
       gradeChips:[["全部", matchExcept("grade").length], ...chipsFor(gradeM, biView.grade, GRADES)],
       typeChips: [["全部", matchExcept("type").length], ...chipsFor(typeM, biView.type)],
-      srcChips: [["全部", matchExcept("src").length],["我的素材", cntCustom],["内置", matchExcept("src").length - cntCustom]],
-      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||biView.src!=="全部"||!!biView.q
+      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||!!biView.q
     };
   }
   function renderRes(){
     const el = $("#view-res");
     const D = biData();
     const ovCnt = Object.keys(state.overrides||{}).length;
-    const builtinCnt = D.builtins.length - D.customCnt;
-    const subjects = D.subjChips.slice(1); // 学科概览（去掉「全部」）
+    const subjects = D.subjChips.slice(1); // 学科板块（去掉「全部」），我的素材+内置已合并计数
     el.innerHTML = `
-      <div class="subj-head"><h2>📚 资源中心</h2><span class="cnt">站内全部内容 · 按 学科 × 年级 × 类型 归类的资源库</span></div>
+      <div class="subj-head"><h2>📚 资源中心</h2><span class="cnt">站内全部内容 · 按 学科 板块合并 · 再按 年级 × 类型 细分</span></div>
 
-      <div class="res-overview">
-        <div class="ov-card"><div class="ov-num">${D.builtins.length}</div><div class="ov-lbl">全部内容</div></div>
-        <div class="ov-card"><div class="ov-num">${builtinCnt}</div><div class="ov-lbl">内置资源</div></div>
-        <div class="ov-card hl"><div class="ov-num">${D.customCnt}</div><div class="ov-lbl">我的素材</div></div>
-        <div class="ov-card"><div class="ov-num">${ovCnt}</div><div class="ov-lbl">已修改</div></div>
-      </div>
-
-      <p class="subj-desc">这里汇总站内所有内容：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在最前，其后是内置的诗词 / 成语 / 单词 / 动画 / 数学教材。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
+      <p class="subj-desc">这里汇总站内所有内容，<b>全部合并进下方学科板块</b>（不再区分「我的素材 / 内置」两套清单）：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在各板块最前，卡片用「我的素材 / 内置」标签区分来源。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
 
       <details class="res-import" ${D.customCnt?"":"open"}>
         <summary>📥 批量导入素材（粘贴 JSON）<small>从「后台」移来 · 整批添加内容</small></summary>
@@ -2301,7 +2289,7 @@
           <textarea id="biBulk" class="af-block" rows="4" placeholder='粘贴 JSON 数组，例如 [{"subject":"语文","type":"文言","grade":"四年级","title":"xx","body":"..."}]'></textarea>
           <div class="af-actions">
             <button class="btn primary" id="biBulkBtn">批量导入</button>
-            <span class="af-tip">支持整年级内容的数组（自动归类到 学科 / 类型 / 年级）；也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。导入的内容会出现在「我的素材」并排在资源最前。单条逐条添加请到「🛠 后台」。</span>
+            <span class="af-tip">支持整年级内容的数组（自动归类到 学科 / 类型 / 年级）；也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。导入的内容会带上「我的素材」标签、并入对应学科板块且排在最前。单条逐条添加请到「🛠 后台」。</span>
           </div>
         </div>
       </details>
@@ -2310,10 +2298,6 @@
         ${subjects.map(([s,c])=>`<button class="res-tile ${biView.subj===s?"on":""}" data-bi-subj="${esc(s)}"><span class="rt-num">${c}</span><span class="rt-lbl">${esc(s)}</span></button>`).join("")}
       </div>
 
-      <div class="chips">
-        <span class="lbl">来源：</span>
-        ${D.srcChips.map(([s,c])=>`<button class="chip ${biView.src===s?"on":""}" data-bi-src="${esc(s)}">${esc(s)} ${c}</button>`).join("")}
-      </div>
       <div class="chips">
         <span class="lbl">年级：</span>
         ${D.gradeChips.map(([g,c])=>`<button class="chip ${biView.grade===g?"on":""}" data-bi-grade="${esc(g)}">${esc(g)} ${c}</button>`).join("")}
@@ -2384,7 +2368,6 @@
       if(it) openModal(it);
     }));
     el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{ biView.type=b.dataset.biType; renderRes(); }));
-    el.querySelectorAll("[data-bi-src]").forEach(b=>b.addEventListener("click", ()=>{ biView.src=b.dataset.biSrc; renderRes(); }));
     el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{ biView.subj=b.dataset.biSubj; renderRes(); }));
     el.querySelectorAll("[data-bi-grade]").forEach(b=>b.addEventListener("click", ()=>{ biView.grade=b.dataset.biGrade; renderRes(); }));
     el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
@@ -2402,7 +2385,7 @@
     }));
     const biReset=$("#biReset");
     if(biReset) biReset.addEventListener("click", ()=>{
-      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.src="全部"; biView.q=""; biView.limit=RES_STEP;
+      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.q=""; biView.limit=RES_STEP;
       renderRes();
     });
     const biMore=$("#biMore");
@@ -2446,7 +2429,7 @@
 
       <div class="sec-title">🗂 我的素材（${CUSTOM.length}）<small>添加后直接归位到「📚 资源」页展示 · 查看 / 修改 / 删除都在资源页进行，后台不再留存列表</small></div>
       <div class="chips">
-        <span class="lbl" style="align-self:center">共 ${CUSTOM.length} 条素材已自动归位到资源页（「来源 → 我的素材」可快速筛选）</span>
+        <span class="lbl" style="align-self:center">共 ${CUSTOM.length} 条素材已自动归位到资源页（与内置内容合并进各学科板块，卡片带「我的素材」标签）</span>
         <button class="btn primary" id="goRes">📚 打开资源页管理</button>
       </div>
 
