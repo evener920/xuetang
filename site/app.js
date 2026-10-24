@@ -562,8 +562,38 @@
      ④ 欠分有下限 —— 余额最多扣到 -PENALTY_FLOOR，之后仍需记录但不再扣分，欠的靠之后挣回来
      ⑤ 可挽回 —— 当天改正了，家长点「已改正」即全额返还，鼓励改进行为而非单纯惩罚
      ⑥ 同一事项当天只记一次 —— 避免重复扣分变成情绪发泄                                */
-  const PENALTY_CAP_DAY = 30;   // 每日扣分上限
-  const PENALTY_FLOOR   = 50;   // 欠分下限（总积分最低可到 -50）
+  const PENALTY_CAP_DAY = 30;   // 每日扣分上限（默认值）
+  const PENALTY_FLOOR   = 50;   // 欠分下限（默认值）
+
+  /* ---------- 自定义积分规则（后台「🏆 自定义积分规则」可改；存 state.rules，按学生独立） ---------- */
+  function _ruleNum(v, def, min, max){
+    if(v===undefined||v===null||v==="") return def;
+    const n=Number(v);
+    if(!Number.isFinite(n)||n<min||n>max) return def;
+    return n;
+  }
+  // 加分四项：学会/复习/习惯/小测答对
+  function pointRules(){
+    const r=state.rules||{};
+    return {
+      learn:     _ruleNum(r.learn,     POINT_RULES.learn,     0, 100000),
+      review:    _ruleNum(r.review,    POINT_RULES.review,    0, 100000),
+      habit:     _ruleNum(r.habit,     POINT_RULES.habit,     0, 100000),
+      quizRight: _ruleNum(r.quizRight, POINT_RULES.quizRight, 0, 100000)
+    };
+  }
+  function quizCapDay(){ return _ruleNum((state.rules||{}).quizCapDay, QUIZ_CAP_DAY, 0, 1000000); }
+  function streakMilestones(){
+    const m=(state.rules||{}).streakMilestones;
+    if(Array.isArray(m)){
+      const ok=m.filter(x=>Array.isArray(x)&&Number.isFinite(+x[0])&&+x[0]>=1&&Number.isFinite(+x[1])&&+x[1]>=0)
+                .map(x=>[+x[0],+x[1]]).sort((a,b)=>a[0]-b[0]);
+      if(ok.length) return ok;
+    }
+    return STREAK_MILESTONES;
+  }
+  function penaltyCapDay(){ return _ruleNum((state.rules||{}).penaltyCapDay, PENALTY_CAP_DAY, 1, 1000000); }
+  function penaltyFloor(){ return _ruleNum((state.rules||{}).penaltyFloor, PENALTY_FLOOR, 0, 1000000); }
   const DEFAULT_PENALTIES = [
     {id:"p1", icon:"🧼", name:"不讲卫生", cost:5,  tip:"不洗手、不刷牙、不洗澡、衣物乱丢等"},
     {id:"p2", icon:"🧹", name:"房间凌乱", cost:5,  tip:"玩具、书桌、床铺用完不收拾"},
@@ -581,8 +611,8 @@
     const p = penaltyList().find(x=>x.id===id); if(!p) return 0;
     const t = todayStrNow(), hook = "pen:"+id+":"+t;
     if(hasAwardHook(hook)) return -1;                       // 同一事项当天已记过
-    if(penaltyToday() + p.cost > PENALTY_CAP_DAY) return -2; // 撞到每日上限
-    const real = Math.min(p.cost, Math.max(0, state.points + PENALTY_FLOOR));
+    if(penaltyToday() + p.cost > penaltyCapDay()) return -2; // 撞到每日上限
+    const real = Math.min(p.cost, Math.max(0, state.points + penaltyFloor()));
     if(real<=0) return -3;                                   // 已到欠分下限
     state.points -= real;
     state.pointLog.unshift({ t, n:-real, note:"行为扣分 · "+p.name, hook });
@@ -635,7 +665,7 @@
   // （不设「今日全勤」加奖：打卡各项已各自计分，全勤再奖一份属于重复计酬）
   function settleBonuses(){
     const n=currentStreak();
-    STREAK_MILESTONES.forEach(([d,p])=>{
+    streakMilestones().forEach(([d,p])=>{
       if(n>=d) awardQuiet(p, "连续学习 "+d+" 天达成奖励", "streak:"+d+":"+todayStrNow());
     });
   }
@@ -742,11 +772,11 @@
   }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules"];
   function defaultPerStudent(){
     return { grade:"四年级", learned:{}, fav:{}, checkin:{},
       habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{},
-      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{} };
+      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{}, rules:{} };
   }
   function capturePerStudent(){
     const d={}; PER_STUDENT_FIELDS.forEach(f=>{ const v=state[f]; d[f]=(v===undefined?null:JSON.parse(JSON.stringify(v))); });
@@ -1910,7 +1940,7 @@
           toast("答对了 🎉 "+it.title);
           // 答对给分（每日小测积分上限）
           const got=(state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n>0 && x.note.indexOf("小测答对")===0).reduce((a,c)=>a+c.n,0);
-          if(got < QUIZ_CAP_DAY) awardQuiet(POINT_RULES.quizRight, "小测答对 "+it.title, "", true);
+          if(got < quizCapDay()) awardQuiet(pointRules().quizRight, "小测答对 "+it.title, "", true);
         }else{
           b.classList.add("no"); st2.wrong++;
           opts.forEach((x,i)=>{ if(x.ok) all[i].classList.add("ok"); });
@@ -2018,7 +2048,7 @@
           if(state.reviewed[t][it.key]){ delete state.reviewed[t][it.key]; toast("已取消复习打卡"); }
           else {
             state.reviewed[t][it.key]=true; toast("复习完成 🔁 记忆效果最好的一步！");
-            awardQuiet(POINT_RULES.review, "复习《"+it.title+"》", "review:"+t+":"+it.key, true);
+            awardQuiet(pointRules().review, "复习《"+it.title+"》", "review:"+t+":"+it.key, true);
           }
           save(); openModal(it); refreshIfVisible(); return;
         }else if(act==="learn"){
@@ -2032,7 +2062,7 @@
             state.learned[it.key]=fmt(new Date());
             if(getMastery(it.key)===null) setMastery(it.key, 5); // 新学会默认 5 星（全会），可手动下调
             toast("已标记为学会，明天将按遗忘曲线安排复习 🔁");
-            awardQuiet(POINT_RULES.learn, "学会《"+it.title+"》", "learn:"+it.key, true);
+            awardQuiet(pointRules().learn, "学会《"+it.title+"》", "learn:"+it.key, true);
             settleBonuses();
           }
         }else if(act==="star"){
@@ -2196,14 +2226,16 @@
     const tg = todayTasks();
     const tasks = Object.keys(tg).reduce((a,k)=>a.concat(tg[k]||[]),[]);
     const hs = state.habits||[];
-    const taskMax = tasks.length*POINT_RULES.learn + hs.length*POINT_RULES.habit;
+    const PRw = pointRules();
+    const taskMax = tasks.length*PRw.learn + hs.length*PRw.habit;
     // 最近 7 天日均（用于「预计还需多少天」）
     const last7=[]; for(let i=0;i<7;i++){ const d=new Date(); d.setDate(d.getDate()-i); last7.push(fmt(d)); }
     const got7=(state.pointLog||[]).filter(x=>x.n>0 && last7.indexOf(x.t)>=0).reduce((a,b)=>a+b.n,0);
     const days7=Math.max(1, new Set((state.pointLog||[]).filter(x=>x.n>0&&last7.indexOf(x.t)>=0).map(x=>x.t)).size);
     const avg=Math.max(1, Math.round(got7/days7));
     const streak=currentStreak();
-    const nextMile=STREAK_MILESTONES.find(([d])=>d>streak)||null;
+    const nextMile=streakMilestones().find(([d])=>d>streak)||null;
+    const PR = pointRules();
 
     el.innerHTML = `
       <div class="hero">
@@ -2230,14 +2262,14 @@
 
       <div class="sec-title">🏅 加分规则 <small>只加不减 · 复习比学新更值钱 · 连续性额外加权</small></div>
       <div class="task-grid">
-        <div class="rule-card"><div class="rl-name">学会 / 打卡内容</div><div class="rl-val">+${POINT_RULES.learn} 分</div><div class="rl-tip">每学会或打卡一条内容记一次；同一条内容重复标记，不重复计分。</div></div>
-        <div class="rule-card"><div class="rl-name">完成到期复习</div><div class="rl-val">+${POINT_RULES.review} 分</div><div class="rl-tip">每完成一次艾宾浩斯到期复习；间隔重复最能形成长期记忆，所以比学新更值钱。</div></div>
-        <div class="rule-card"><div class="rl-name">习惯打卡</div><div class="rl-val">+${POINT_RULES.habit} 分</div><div class="rl-tip">每完成一个当日习惯；今天共有 ${hs.length} 个习惯。</div></div>
-        <div class="rule-card"><div class="rl-name">小测答对</div><div class="rl-val">+${POINT_RULES.quizRight} 分</div><div class="rl-tip">单词小测答对一题；每日上限 ${QUIZ_CAP_DAY} 分，防止刷分。</div></div>
-        <div class="rule-card"><div class="rl-name">连续学习奖励</div><div class="rl-val">已连续 ${streak} 天</div><div class="rl-tip">里程碑一次性发放：${STREAK_MILESTONES.map(([d,p])=>d+" 天 +"+p).join(" / ")}。断签只重置连续天数，已得积分不清零。</div></div>
+        <div class="rule-card"><div class="rl-name">学会 / 打卡内容</div><div class="rl-val">+${PR.learn} 分</div><div class="rl-tip">每学会或打卡一条内容记一次；同一条内容重复标记，不重复计分。</div></div>
+        <div class="rule-card"><div class="rl-name">完成到期复习</div><div class="rl-val">+${PR.review} 分</div><div class="rl-tip">每完成一次艾宾浩斯到期复习；间隔重复最能形成长期记忆，所以比学新更值钱。</div></div>
+        <div class="rule-card"><div class="rl-name">习惯打卡</div><div class="rl-val">+${PR.habit} 分</div><div class="rl-tip">每完成一个当日习惯；今天共有 ${hs.length} 个习惯。</div></div>
+        <div class="rule-card"><div class="rl-name">小测答对</div><div class="rl-val">+${PR.quizRight} 分</div><div class="rl-tip">单词小测答对一题；每日上限 ${quizCapDay()} 分，防止刷分。</div></div>
+        <div class="rule-card"><div class="rl-name">连续学习奖励</div><div class="rl-val">已连续 ${streak} 天</div><div class="rl-tip">里程碑一次性发放：${streakMilestones().map(([d,p])=>d+" 天 +"+p).join(" / ")}。断签只重置连续天数，已得积分不清零。</div></div>
       </div>
 
-      <div class="sec-title">⚠️ 行为扣分规则 <small>只扣行为，不扣学习 · 每日上限 ${PENALTY_CAP_DAY} 分 · 欠分下限 -${PENALTY_FLOOR} 分 · 当天改正可撤销返还 · 由家长在「🛠 后台」记录</small></div>
+      <div class="sec-title">⚠️ 行为扣分规则 <small>只扣行为，不扣学习 · 每日上限 ${penaltyCapDay()} 分 · 欠分下限 -${penaltyFloor()} 分 · 当天改正可撤销返还 · 由家长在「🛠 后台」记录</small></div>
       <div class="task-grid">
         ${penaltyList().map(p=>`
         <div class="rule-card pen">
@@ -2576,11 +2608,11 @@
         <p class="af-tip">当前生效目录：${rewardList().map(r=>esc(r.icon||"🎁")+r.name+"("+r.cost+")").join(" · ")}</p>
       </div>
 
-      <div class="sec-title">⚠️ 行为扣分记录 <small>只扣行为不扣学习 · 每日上限 ${PENALTY_CAP_DAY} 分 · 欠分下限 -${PENALTY_FLOOR} 分 · 当天改正可撤销返还</small></div>
+      <div class="sec-title">⚠️ 行为扣分记录 <small>只扣行为不扣学习 · 每日上限 ${penaltyCapDay()} 分 · 欠分下限 -${penaltyFloor()} 分 · 当天改正可撤销返还</small></div>
       <div class="chips">
         ${penaltyList().map(p=>`<button class="chip" data-pen="${esc(p.id)}" title="${esc(p.tip||"")}">${esc(p.icon||"⚠️")} ${esc(p.name)} -${p.cost}</button>`).join("")}
         <span style="flex:1"></span>
-        <span class="lbl" style="align-self:center">今日已扣 <b style="color:${penaltyToday()?"#b91c1c":"var(--muted)"}">-${penaltyToday()}</b> / ${PENALTY_CAP_DAY}</span>
+        <span class="lbl" style="align-self:center">今日已扣 <b style="color:${penaltyToday()?"#b91c1c":"var(--muted)"}">-${penaltyToday()}</b> / ${penaltyCapDay()}</span>
       </div>
       <div class="admin-list">
         ${penaltyLogToday().length? penaltyLogToday().map(e=>`<div class="admin-item">
@@ -2648,6 +2680,29 @@
       <div class="chips"><button class="btn primary" id="schedSave">💾 保存排程</button></div>
       <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>
 
+      <div class="sec-title">🏆 自定义积分规则<small>当前学生（${esc(curStudentName())}）独立生效 · 留空即恢复内置默认值</small></div>
+      <div class="admin-form">
+        <div class="af-row" style="flex-wrap:wrap;gap:10px">
+          <label>学会/打卡 +<input type="number" min="0" id="ruleLearn" value="${pointRules().learn}" style="width:80px"/> 分</label>
+          <label>到期复习 +<input type="number" min="0" id="ruleReview" value="${pointRules().review}" style="width:80px"/> 分</label>
+          <label>习惯打卡 +<input type="number" min="0" id="ruleHabit" value="${pointRules().habit}" style="width:80px"/> 分</label>
+          <label>小测答对 +<input type="number" min="0" id="ruleQuiz" value="${pointRules().quizRight}" style="width:80px"/> 分</label>
+          <label>小测每日上限 <input type="number" min="0" id="ruleQuizCap" value="${quizCapDay()}" style="width:80px"/> 分</label>
+        </div>
+        <div class="af-row" style="flex-wrap:wrap;gap:10px">
+          <label>每日扣分上限 <input type="number" min="1" id="rulePenCap" value="${penaltyCapDay()}" style="width:80px"/> 分</label>
+          <label>欠分下限 -<input type="number" min="0" id="rulePenFloor" value="${penaltyFloor()}" style="width:80px"/> 分</label>
+          <label class="af-grow">连续里程碑（格式 天数:分数，逗号分隔）
+            <input id="ruleStreak" value="${streakMilestones().map(([d,p])=>d+":"+p).join(",")}" placeholder="3:20,7:50,14:100,21:150,30:200,60:500,100:1000"/>
+          </label>
+        </div>
+        <div class="af-actions">
+          <button class="btn primary" id="rulesSave">💾 保存积分规则</button>
+          <button class="btn" id="rulesReset">↩ 恢复默认</button>
+        </div>
+        <p class="af-tip">改动只影响之后的计分，已发放的积分不变。连续里程碑一次性发放（达成即给），断签只重置天数、不清积分。规则随学生档案独立保存，并会随云同步到其他设备。</p>
+      </div>
+
       <div class="sec-title">☁️ 云端同步（跨域名 / 跨设备）<small>绑定同一个 Cloudflare KV 后，两个域名、不同设备共享同一份数据；靠「同步密钥」作为云端存储键，无需注册</small></div>
       <div class="admin-form">
         <div class="af-row">
@@ -2703,8 +2758,8 @@
       const id=b.dataset.pen, p=penaltyList().find(x=>x.id===id); if(!p) return;
       const r=penalize(id);
       if(r===-1){ toast("「"+p.name+"」今天已经记过啦"); return; }
-      if(r===-2){ toast("今日扣分已达上限 "+PENALTY_CAP_DAY+" 分，明天再说"); return; }
-      if(r===-3){ toast("已到欠分下限 -"+PENALTY_FLOOR+" 分，先努力挣回来吧"); return; }
+      if(r===-2){ toast("今日扣分已达上限 "+penaltyCapDay()+" 分，明天再说"); return; }
+      if(r===-3){ toast("已到欠分下限 -"+penaltyFloor()+" 分，先努力挣回来吧"); return; }
       toast("行为扣分 · "+p.name+" -"+r+" 分");
       renderAdmin(); if(view.name==="reward") renderReward();
     }));
@@ -2764,6 +2819,28 @@
         }; }
       });
       save(); toast("已保存学习板块排程 📅"); renderAdmin(); renderHome(); if(view.name==="week") renderWeek();
+    };
+    // 自定义积分规则：保存 / 恢复默认
+    const rulesSave=$("#rulesSave");
+    if(rulesSave) rulesSave.onclick=()=>{
+      const v=id=>{ const e=$(id); return e?e.value.trim():""; };
+      const R = state.rules = state.rules || {};
+      R.learn=v("#ruleLearn"); R.review=v("#ruleReview"); R.habit=v("#ruleHabit"); R.quizRight=v("#ruleQuiz");
+      R.quizCapDay=v("#ruleQuizCap"); R.penaltyCapDay=v("#rulePenCap"); R.penaltyFloor=v("#rulePenFloor");
+      const st=v("#ruleStreak");
+      if(st===""){ R.streakMilestones=""; }
+      else{
+        const pairs = st.split(/[,，]/).map(x=>x.trim()).filter(Boolean).map(x=>{
+          const m=x.match(/^(\d+)\s*[:：]\s*(\d+)$/); return m?[+m[1],+m[2]]:null;
+        });
+        if(pairs.some(x=>!x)){ toast("里程碑格式不对：应为 天数:分数，如 3:20,7:50"); return; }
+        R.streakMilestones = pairs.sort((a,b)=>a[0]-b[0]);
+      }
+      save(); toast("积分规则已保存 ✅"); renderAdmin(); if(view.name==="reward") renderReward();
+    };
+    const rulesReset=$("#rulesReset");
+    if(rulesReset) rulesReset.onclick=()=>{
+      state.rules={}; save(); toast("已恢复默认积分规则"); renderAdmin(); if(view.name==="reward") renderReward();
     };
     // 云端同步：配置变更 / 立即同步
     const syncOn=$("#syncOn"), syncPass=$("#syncPass"), btnSyncNow=$("#syncNow"), syncStatus=$("#syncStatus");
@@ -2971,7 +3048,7 @@
     const wgb=e.target.closest("[data-word-game]");
     if(wgb){ openWordGame(wgb.dataset.wordGame); return; }
     const hb=e.target.closest("[data-habit]");
-    if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else { state.habitLog[t][h]=true; awardQuiet(POINT_RULES.habit, "习惯打卡 · "+h, "habit:"+t+":"+h, true); settleBonuses(); } save(); refreshView(); return; }
+    if(hb){ const h=hb.dataset.habit; const t=fmt(new Date()); state.habitLog[t]=state.habitLog[t]||{}; if(state.habitLog[t][h]) delete state.habitLog[t][h]; else { state.habitLog[t][h]=true; awardQuiet(pointRules().habit, "习惯打卡 · "+h, "habit:"+t+":"+h, true); settleBonuses(); } save(); refreshView(); return; }
   });
   // 学科内搜索（input 事件需单独绑定以保持焦点）
   document.querySelector("main").addEventListener("input", e=>{
@@ -3012,7 +3089,8 @@
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
-      cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal
+      cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
+      pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor
     };
   }
 })();
