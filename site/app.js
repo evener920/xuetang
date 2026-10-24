@@ -662,6 +662,21 @@
     if(okd && !silent) toast("＋"+n+" 分 · "+note);
     return okd;
   }
+  // 撤销一次「学会」积分（加错时用）：退回积分 + 删流水 + 取消该卡已学/星级。返回退回的分数（0=没有可撤的）
+  function undoLearn(key){
+    const hook = "learn:"+key;
+    const e = (state.pointLog||[]).find(x=>x.hook===hook && x.n>0);
+    if(!e) return 0;
+    state.points -= e.n;
+    state.pointLog = (state.pointLog||[]).filter(x=>!(x.hook===hook && x.n>0));
+    delete state.learned[key];
+    delete state.mastery[key];
+    const t=fmt(new Date());
+    if(state.reviewed[t]) delete state.reviewed[t][key];
+    if(state.pointLog.length>600) state.pointLog.length=600;
+    save();
+    return e.n;
+  }
   // 学习日期集合（已打卡的日期）与连续天数
   function studyDates(){
     const s=new Set();
@@ -971,6 +986,8 @@
   // 年级匹配：带 grade 的条目严格按当前年级显示；无 grade 的共享内容（未分级诗词 / 动画廊等）对所有年级可见。
   // 即：某年级没有该类型的分级内容时，这一栏就空着（不回退其他年级的内容）。
   function gradeOk(it){ return !it.grade || it.grade === state.grade; }
+  // 是否已学（已打卡或已有星级评定）——供「已学/未学」筛选与进度统计复用
+  function isLearnedKey(k){ return !!state.learned[k] || !!(state.mastery && state.mastery[k]!==undefined); }
   const WEEK = ["日","一","二","三","四","五","六"];
   function dayDiff(dateStr){ try{ return Math.floor((Date.now()-new Date(dateStr+"T00:00:00"))/86400000); }catch(e){ return 999; } }
   function pick(arr, n, seed){
@@ -1352,6 +1369,15 @@
       tasks[key] = sectionItems(subject, type, q);
     });
     return tasks;
+  }
+  // 今日目标集合：今日学习计划排到的条目（只有完成「目标内」的学会才计积分；
+  // 在资源/语文页里随手标记学会只记录学习状态，不加分，防止刷分）
+  function inTodayGoal(key){
+    const tg = todayTasks();
+    for(const k of Object.keys(tg)){
+      if((tg[k]||[]).some(x=>x.key===key)) return true;
+    }
+    return false;
   }
   /* ---------- 首页：今日学习 + 看板 ---------- */
   function renderHome(){
@@ -2029,13 +2055,16 @@
     return [...cus, ...EXTRA.filter(c=>c.subject==="语文"&&c.type===type)]; // 作文 / 故事 / 阅读 / 课文：后台添加或内置教材后上线
   }
   function renderChinese(el){
-    if(!cnView) cnView = {type:"诗词", grade:"全部", q:""};
+    if(!cnView) cnView = {type:"诗词", grade:"全部", q:"", learn:"all"};
     let pool = cnPool(cnView.type);
     const isIdiom   = cnView.type==="成语";
     const isGallery = cnView.type==="成语动画廊";
     // 年级筛选：成语按数据年级；诗词用全年级表（当前为通用内容，分年级诗词导入后自动生效）
     const grades = isIdiom ? IDIOM_GRADES : (cnView.type==="诗词" ? POEM_GRADE_PRESENT : []);
     if(grades.length && cnView.grade!=="全部") pool = pool.filter(x=>x.grade===cnView.grade);
+    // 学习状态筛选：已学（已打卡或有星级）/ 未学
+    if(cnView.learn==="done") pool = pool.filter(x=>isLearnedKey(x.key));
+    else if(cnView.learn==="todo") pool = pool.filter(x=>!isLearnedKey(x.key));
     if(cnView.q){
       const q=cnView.q.toLowerCase();
       pool = pool.filter(x=>(x.title+x.sub+x.body+(x.tags||[]).join("")).toLowerCase().includes(q));
@@ -2096,6 +2125,11 @@
         <button class="chip ${cnView.grade==="全部"?"on":""}" data-cn-grade="全部">全部</button>
         ${grades.map(g=>`<button class="chip ${cnView.grade===g?"on":""}" data-cn-grade="${esc(g)}">${esc(g)}</button>`).join("")}
       </div>`:""}
+      <div class="chips"><span class="lbl">状态：</span>
+        <button class="chip ${cnView.learn==="all"?"on":""}" data-cn-learn="all">全部</button>
+        <button class="chip ${cnView.learn==="done"?"on":""}" data-cn-learn="done">已学</button>
+        <button class="chip ${cnView.learn==="todo"?"on":""}" data-cn-learn="todo">未学</button>
+      </div>
       ${cnView.type==="诗词"?`
       <div class="chips"><span class="lbl">热门主题：</span>
         ${topTags.map(t=>`<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join("")}
@@ -2138,14 +2172,18 @@
   function fcFlip(){ if(!fcState.deck.length) return; fcState.flipped=!fcState.flipped; fcRender(); }
   function fcNav(d){ if(!fcState.deck.length) return; const n=fcState.deck.length; fcState.idx=(fcState.idx+d+n)%n; fcState.flipped=false; fcRender(); }
   function fcShuffle(){ if(!fcState.deck.length) return; fcState.shuffle=!fcState.shuffle; fcBuildOrder(); fcState.idx=0; fcState.flipped=false; fcRender(); toast(fcState.shuffle?"已乱序 🔀":"已恢复原顺序"); }
-  function fcKnown(){ // 与弹窗「标记为学会」同一套语义：learned + 默认5星 + 学会积分（同一 hook 防重复计分）
+  function fcKnown(){ // 与弹窗「标记为学会」同一套语义：learned + 默认5星；只有今日目标内的才计学会积分
     const it=fcCur(); if(!it) return;
     if(!state.learned[it.key]){
       state.learned[it.key]=fmt(new Date());
       if(getMastery(it.key)===null) setMastery(it.key, 5);
-      awardQuiet(pointRules().learn, "学会《"+it.title+"》", "learn:"+it.key, true);
+      if(inTodayGoal(it.key)){
+        awardQuiet(pointRules().learn, "学会《"+it.title+"》", "learn:"+it.key, true);
+        toast("已记为学会 +"+pointRules().learn+" 分（今日目标）✅《"+it.title+"》");
+      }else{
+        toast("已记为学会（不在今日目标内，不计积分）✅《"+it.title+"》");
+      }
       settleBonuses();
-      toast("已记为学会 ✅《"+it.title+"》");
     }else{ toast("这张已经在学会列表里了"); }
     save(); refreshIfVisible(); fcNav(1);
   }
@@ -2361,6 +2399,7 @@
         ${it.key.indexOf("mtq:")===0?`<button class="btn pa" data-act="hint">💡 答案提示</button>`:""}
         ${dueReview(it.key)?`<button class="btn primary" data-act="review">🔁 完成复习（艾宾浩斯）</button>`:""}
         <button class="btn ${learned?"done":"primary"}" data-act="learn">${learned?"✓ 已学会（点击取消）":"标记为学会 📅"}</button>
+        ${learned?`<button class="btn" data-act="unlearn" title="加错时用：退回该卡的学会积分，并取消已学标记">↩️ 撤销学会</button>`:""}
         <button class="btn" data-act="fav">${fav?"★ 已收藏":"☆ 收藏"}</button>
         <button class="btn" data-act="speak">🔊 朗读</button>
         ${isWord?`<button class="btn" data-act="togglecn">🙈 遮住释义</button><button class="btn pa" data-act="quiz">🎯 考考我</button>`:""}
@@ -2412,10 +2451,25 @@
           else {
             state.learned[it.key]=fmt(new Date());
             if(getMastery(it.key)===null) setMastery(it.key, 5); // 新学会默认 5 星（全会），可手动下调
-            toast("已标记为学会，明天将按遗忘曲线安排复习 🔁");
-            awardQuiet(pointRules().learn, "学会《"+it.title+"》", "learn:"+it.key, true);
+            if(inTodayGoal(it.key)){
+              awardQuiet(pointRules().learn, "学会《"+it.title+"》", "learn:"+it.key, true);
+              toast("已标记为学会 +"+pointRules().learn+" 分（今日目标）🔁 明天将按遗忘曲线安排复习");
+            }else{
+              toast("已标记为学会（不在今日目标内，不计积分）🔁 明天将按遗忘曲线安排复习");
+            }
             settleBonuses();
           }
+        }else if(act==="unlearn"){
+          // 撤销学会：加错积分时用 —— 退分 + 删流水 + 取消已学/星级
+          const back=undoLearn(it.key);
+          if(back>0) toast("已撤销学会：退回 "+back+" 分，取消已学标记 ↩️");
+          else {
+            delete state.learned[it.key];
+            const t=fmt(new Date());
+            if(state.reviewed[t]) delete state.reviewed[t][it.key];
+            toast("已取消学会标记（该卡未产生积分）");
+          }
+          save(); openModal(it); refreshIfVisible(); return;
         }else if(act==="star"){
           setMastery(it.key, parseInt(btn.dataset.n,10)||5);
           toast("掌握度已设为 "+ (getMastery(it.key)) +" 星");
@@ -2647,9 +2701,9 @@
         }).join("")}
       </div>
 
-      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 学习所得不会因漏打卡被扣回 · 行为扣分由家长记录，改正后可撤销</small></div>
+      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 学习所得不会因漏打卡被扣回 · 行为扣分由家长记录，改正后可撤销 · 学会积分加错了可「撤销」（退分并取消该卡已学）</small></div>
       ${(state.pointLog||[]).length?`<div class="admin-list">
-        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${x.n<0?`<span class="badge" style="background:#fef2f2;color:#b91c1c">行为扣分</span>`:""}${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div></div>`).join("")}
+        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${x.n<0?`<span class="badge" style="background:#fef2f2;color:#b91c1c">行为扣分</span>`:""}${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div>${/^learn:/.test(x.hook)?`<button class="btn" style="font-size:12px;padding:2px 8px" data-undo-learn="${esc(x.hook.slice(6))}" title="退回这 +${x.n} 分，并取消该卡的已学标记（加错时用）">撤销</button>`:""}</div>`).join("")}
       </div>`:'<div class="placeholder" style="padding:16px">还没有积分记录，去首页完成今天的任务吧 🚀</div>'}
 
       <div class="sec-title">📦 兑换记录 <small>兑换后需家长在「🛠 后台」确认兑现</small></div>
@@ -2660,11 +2714,16 @@
       </div>`:'<div class="placeholder" style="padding:16px">还没有兑换过奖励</div>'}
     `;
     el.querySelectorAll("[data-redeem]").forEach(b=>b.addEventListener("click", ()=>redeemReward(b.dataset.redeem)));
+    el.querySelectorAll("[data-undo-learn]").forEach(b=>b.addEventListener("click", ()=>{
+      const back=undoLearn(b.dataset.undoLearn);
+      toast(back>0 ? ("已撤销学会：退回 "+back+" 分 ↩️") : "该记录已撤销过");
+      renderReward();
+    }));
   }
 
   /* ---------- 后台：资源库（内置教材按 学科×年级×类型 交叉分类，可直接修改） ---------- */
   const RES_STEP = 30;
-  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", volume:"全部", tag:"", limit:RES_STEP };
+  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", volume:"全部", tag:"", learn:"全部", limit:RES_STEP };
   function openAdminEdit(key){
     const it = INDEX[key] || EXTRA.find(e=>e.key===key);
     if(!it){ toast("没找到这条内容"); return; }
@@ -2738,6 +2797,7 @@
       if(except!=="type"   && biView.type   !=="全部" && x.type   !==biView.type)   return false;
       if(except!=="volume" && biView.volume !=="全部" && x.volume !==biView.volume) return false;
       if(except!=="tag"    && biView.tag && !(x.tags||[]).includes(biView.tag))     return false;
+      if(except!=="learn"  && biView.learn!=="全部" && isLearnedKey(x.key) !== (biView.learn==="已学")) return false;
       return true;
     });
     const cntBy=(arr,fn)=>{ const m=new Map(); arr.forEach(x=>{ const k=fn(x)||""; m.set(k,(m.get(k)||0)+1); }); return m; };
@@ -2766,6 +2826,7 @@
       if(biView.type!=="全部" && x.type!==biView.type) return false;
       if(biView.volume!=="全部" && x.volume!==biView.volume) return false;
       if(biView.tag && !(x.tags||[]).includes(biView.tag)) return false;
+      if(biView.learn!=="全部" && isLearnedKey(x.key) !== (biView.learn==="已学")) return false;
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
     });
@@ -2784,7 +2845,8 @@
       typeChips: [["全部", matchExcept("type").length], ...chipsFor(typeM, biView.type)],
       volumeChips:[["全部", matchExcept("volume").length], ...chipsFor(volumeM, biView.volume)],
       tagChips: [["全部", matchExcept("tag").length], ...tagEntries],
-      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||biView.volume!=="全部"||!!biView.tag||!!biView.q
+      learnChips:[["全部", matchExcept("learn").length], ...chipsFor(cntBy(matchExcept("learn"), x=> isLearnedKey(x.key) ? "已学" : "未学"), biView.learn, ["已学","未学"])],
+      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||biView.volume!=="全部"||!!biView.tag||biView.learn!=="全部"||!!biView.q
     };
   }
   function renderRes(){
@@ -2827,6 +2889,10 @@
       <div class="chips">
         <span class="lbl">标签：</span>
         ${D.tagChips.map(([t,c])=>`<button class="chip ${biView.tag===t?"on":""}" data-bi-tag="${esc(t)}">${biView.tag===t?"#":""}${esc(t)} ${c}</button>`).join("")}
+      </div>
+      <div class="chips">
+        <span class="lbl">状态：</span>
+        ${D.learnChips.map(([t,c])=>`<button class="chip ${biView.learn===t?"on":""}" data-bi-learn="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
       </div>
       <div class="chips">
         ${D.active?`<button class="btn" id="biReset" title="清空全部筛选条件">✕ 清空筛选</button>`:""}
@@ -2892,6 +2958,7 @@
     el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{ biView.type=b.dataset.biType; renderRes(); }));
     el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{ biView.subj=b.dataset.biSubj; renderRes(); }));
     el.querySelectorAll("[data-bi-grade]").forEach(b=>b.addEventListener("click", ()=>{ biView.grade=b.dataset.biGrade; renderRes(); }));
+    el.querySelectorAll("[data-bi-learn]").forEach(b=>b.addEventListener("click", ()=>{ biView.learn=b.dataset.biLearn; renderRes(); }));
     el.querySelectorAll("[data-bi-volume]").forEach(b=>b.addEventListener("click", ()=>{ biView.volume=b.dataset.biVolume; renderRes(); }));
     el.querySelectorAll("[data-bi-tag]").forEach(b=>b.addEventListener("click", ()=>{ biView.tag=b.dataset.biTag; renderRes(); }));
     el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
@@ -2909,7 +2976,7 @@
     }));
     const biReset=$("#biReset");
     if(biReset) biReset.addEventListener("click", ()=>{
-      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.volume="全部"; biView.tag=""; biView.q=""; biView.limit=RES_STEP;
+      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.volume="全部"; biView.tag=""; biView.learn="全部"; biView.q=""; biView.limit=RES_STEP;
       renderRes();
     });
     const biMore=$("#biMore");
@@ -3416,9 +3483,11 @@
     const gsub=e.target.closest("[data-goto-subject]");
     if(gsub){ go("subject", gsub.dataset.gotoSubject); return; }
     const cnT=e.target.closest("[data-cn-type]");
-    if(cnT){ cnView.type=cnT.dataset.cnType; cnView.grade="全部"; cnView.q=""; renderSubject("语文"); return; }
+    if(cnT){ cnView.type=cnT.dataset.cnType; cnView.grade="全部"; cnView.q=""; cnView.learn="all"; renderSubject("语文"); return; }
     const cnG=e.target.closest("[data-cn-grade]");
     if(cnG){ cnView.grade=cnG.dataset.cnGrade; renderSubject("语文"); return; }
+    const cnL=e.target.closest("[data-cn-learn]");
+    if(cnL){ cnView.learn=cnL.dataset.cnLearn||"all"; renderSubject("语文"); return; }
     const gnT=e.target.closest("[data-gn-type]");
     if(gnT){ const s=view.param; gnView[s]=gnView[s]||{}; gnView[s].type=gnT.dataset.gnType; gnView[s].grade="全部"; gnView[s].q=""; gnView[s].unit="全部"; gnView[s].tag=""; renderSubject(s); return; }
     const gnG=e.target.closest("[data-gn-grade]");
@@ -3495,7 +3564,8 @@
       openFlashcards, fcFlip, fcNav, fcShuffle, fcKnown, get fcState(){ return fcState; },
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
-      pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay, openLibSection
+      pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay, openLibSection,
+      inTodayGoal, undoLearn, isLearnedKey
     };
   }
 })();

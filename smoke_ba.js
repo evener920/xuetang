@@ -165,11 +165,11 @@ safe('⑥ 版本号', ()=>{
   const az=(html.match(/20261024az/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
-  const be=(html.match(/20261024be/g)||[]).length;
+  const bf=(html.match(/20261024bf/g)||[]).length;
   ok('  0 处 az', az===0, 'az='+az);
   ok('  0 处 ba', ba===0, 'ba='+ba);
-  ok('  0 处 bd（已升级至 be）', bd===0, 'bd='+bd);
-  ok('  10 处 be（含听力卡脚本）', be===10, 'be='+be);
+  ok('  0 处 bd（已升级至 bf）', bd===0, 'bd='+bd);
+  ok('  10 处 bf（含听力卡脚本）', bf===10, 'bf='+bf);
   ok('  引入 english_listening_4.js', html.includes('english_listening_4.js'), '');
 });
 

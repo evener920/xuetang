@@ -111,11 +111,11 @@ safe('④ 版本号', ()=>{
   const ba=(html.match(/20261024ba/g)||[]).length;
   const bc=(html.match(/20261024bc/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
-  const be=(html.match(/20261024be/g)||[]).length;
+  const bf=(html.match(/20261024bf/g)||[]).length;
   ok('  0 处 ba', ba===0, 'ba='+ba);
   ok('  0 处 bc', bc===0, 'bc='+bc);
-  ok('  0 处 bd（已升级至 be）', bd===0, 'bd='+bd);
-  ok('  10 处 be（含 science_gallery.js）', be===10, 'be='+be);
+  ok('  0 处 bd（已升级至 bf）', bd===0, 'bd='+bd);
+  ok('  10 处 bf（含 science_gallery.js）', bf===10, 'bf='+bf);
   ok('  引入 science_gallery.js', html.includes('science_gallery.js'), '');
 });
 
