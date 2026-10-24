@@ -2431,7 +2431,7 @@
     el.innerHTML = `
       <div class="subj-head"><h2>📚 资源中心</h2><span class="cnt">站内全部内容 · 按 学科 板块合并 · 再按 年级 × 类型 细分</span></div>
 
-      <p class="subj-desc">这里汇总站内所有内容，<b>全部合并进下方学科板块</b>（不再区分「我的素材 / 内置」两套清单）：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在各板块最前，卡片用「我的素材 / 内置」标签区分来源。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
+      <p class="subj-desc">这里汇总站内所有内容，<b>全部合并进下方学科板块</b>：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在各板块最前，卡片会<b>自动打上内容标签</b>（如「英语阅读」「历史知识」，紫色即本机添加，可删除；蓝色「内置」为站内自带）。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
 
       <details class="res-import" ${D.customCnt?"":"open"}>
         <summary>📥 批量导入素材（粘贴 JSON）<small>从「后台」移来 · 整批添加内容</small></summary>
@@ -2439,7 +2439,7 @@
           <textarea id="biBulk" class="af-block" rows="4" placeholder='粘贴 JSON 数组，例如 [{"subject":"语文","type":"文言","grade":"四年级","title":"xx","body":"..."}]'></textarea>
           <div class="af-actions">
             <button class="btn primary" id="biBulkBtn">批量导入</button>
-            <span class="af-tip">支持整年级内容的数组（自动归类到 学科 / 类型 / 年级）；也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。导入的内容会带上「我的素材」标签、并入对应学科板块且排在最前。单条逐条添加请到「🛠 后台」。</span>
+            <span class="af-tip">支持整年级内容的数组（自动归类到 学科 / 类型 / 年级）；也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。导入的内容会自动按内容打上标签（如「英语阅读」「语文诗词」）、并入对应学科板块且排在最前。单条逐条添加请到「🛠 后台」。</span>
           </div>
         </div>
       </details>
@@ -2462,7 +2462,7 @@
         <input id="biSearch" class="search-input" style="width:220px" placeholder="搜标题 / 拼音 / 类型…" value="${esc(biView.q)}" />
       </div>
 
-      <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}${D.customCnt?` · 我的素材 ${D.customCnt} 条排在最前`:""}</span></div>
+      <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}${D.customCnt?` · 本机添加 ${D.customCnt} 条排在最前`:""}</span></div>
 
       <div class="res-grid" id="biGrid">
         ${D.show.length?D.show.map(x=>{
@@ -2471,7 +2471,7 @@
           return `<div class="res-card" data-bi-row data-bi-text="${esc((x.title+" "+(x.sub||"")+" "+x.type).toLowerCase())}">
             <div class="rc-top">
               ${badge(x.type)}
-              <span class="tag ${isCustom?"tag-custom":"tag-built"}">${isCustom?"我的素材":"内置"}</span>
+              <span class="tag ${isCustom?"tag-custom":"tag-built"}" title="${isCustom?"本机添加的素材":"内置素材"}">${isCustom?esc([x.subject,x.type].filter(Boolean).join("")||"自定义"):"内置"}</span>
             </div>
             <div class="rc-title">${esc(x.title)}</div>
             ${x.sub?`<div class="rc-sub">${esc(x.sub.slice(0,40))}</div>`:""}
@@ -2492,7 +2492,7 @@
         : '<div class="placeholder"><div class="big">🔍</div>没有匹配的资源，换个筛选条件试试</div>'}
       </div>
       ${D.filtered.length>biView.limit?`<div style="margin-top:12px"><button class="btn" id="biMore">显示更多（当前 ${D.show.length} / ${D.filtered.length}）</button></div>`:""}
-      <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 想新增素材可展开上方「📥 批量导入」，单条添加请到「🛠 后台」—— 添加后都会<b>直接归位到本页</b>（「我的素材」标签 + 删除按钮也在这里）。</p>
+      <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 想新增素材可展开上方「📥 批量导入」，单条添加请到「🛠 后台」—— 添加后都会<b>直接归位到本页</b>（自动内容标签 + 删除按钮也在这里）。</p>
     `;
     bindResEvents(el);
   }
@@ -2579,7 +2579,7 @@
 
       <div class="sec-title">🗂 我的素材（${CUSTOM.length}）<small>添加后直接归位到「📚 资源」页展示 · 查看 / 修改 / 删除都在资源页进行，后台不再留存列表</small></div>
       <div class="chips">
-        <span class="lbl" style="align-self:center">共 ${CUSTOM.length} 条素材已自动归位到资源页（与内置内容合并进各学科板块，卡片带「我的素材」标签）</span>
+        <span class="lbl" style="align-self:center">共 ${CUSTOM.length} 条素材已自动归位到资源页（与内置内容合并进各学科板块，卡片自动带内容标签，如「英语阅读」）</span>
         <button class="btn primary" id="goRes">📚 打开资源页管理</button>
       </div>
 
