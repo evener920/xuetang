@@ -1,6 +1,6 @@
 // 冒烟测试：bg 版本 —— 诉求 E 收尾（7 项）
 // ① 学习库/学习目标（诉求5）：studyLibData 板块 total 与 poolFor 同源、joined 计数、weekGoalData 只算 studySet、renderWeek 新结构
-// ② 首页扣分（诉求3）：penalize 扣分/同日一次/每日上限/欠分下限、首页不可撤销
+// ② 首页扣分（诉求3）：penalize 扣分/同日一次/每日上限/欠分下限、首页不可自行撤销；br：扣分卡片网格+习惯分值
 // ③ 今日完成默认折叠（诉求6）
 // ④ 后台无「我的素材」（诉求4）
 // ⑤ 科目页添加按钮（诉求2）：subjectTypesOf/openSubjectAdd/renderSubject chips
@@ -9,7 +9,7 @@
 // ⑨ 学习库年级筛选（bo：扩大选择范围）：poolForAll/libPoolFor/年级 chips/跨年级加入
 // ⑩ 语文页筛选空态与「↩ 返回」（bp：点已学筛选被待导入空态困住）
 // ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框）
-// ⑦ 版本号：10×bq
+// ⑦ 版本号：10×br
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -180,14 +180,18 @@ safe('② 首页行为扣分', ()=>{
   ok('  已到欠分下限返回 -3', r4===-3, 'r='+r4);
   ok('  下限时不再扣分', S.state.points===-S.penaltyFloor(), 'p='+S.state.points);
 
-  // 首页渲染：扣分 chips + 不可撤销（无撤销入口）
+  // 首页渲染：扣分卡片网格 + 习惯分值 + 孩子不可自行撤销（家长撤销入口在本周页）
   S.state.points = p0; S.state.pointLog = (S.state.pointLog||[]).filter(x=>x.n>=0);
-  S.penalize('p1'); // 制造一条今日扣分用于徽章断言
+  S.penalize('p1'); // 制造一条今日扣分用于徽章/卡片断言
   S.renderHome();
   const home = ctx.window.document.getElementById('view-home').innerHTML;
-  ok('  首页含扣分 chips（data-pen）', home.includes('data-pen="p1"'), '');
-  ok('  首页扣分区标注「不可撤销」', home.includes('不可撤销'), '');
+  ok('  首页扣分改为卡片网格（data-pen 保留）', home.includes('data-pen="p1"') && home.includes('pen-card'), '');
+  ok('  已扣项卡片置灰显示「今日已记 ✓」', home.includes('pen-card recorded') && home.includes('今日已记 ✓'), '');
+  ok('  扣分卡片含名称与分值', home.includes('pc-nm') && home.includes('pc-cost'), '');
+  ok('  扣分区有汇总行（今日共扣）', home.includes('今日共扣'), '');
   ok('  首页无扣分撤销按钮（data-pen-undo）', !home.includes('data-pen-undo'), '');
+  ok('  首页扣分区说明孩子不可自行撤销', home.includes('不可自行撤销'), '');
+  ok('  今日习惯标明每项分值', home.includes('每个 +'+S.pointRules().habit+' 分') && home.includes('class="hp"'), '');
   ok('  首页 hero 显示红色「今日扣分」徽章', home.includes('今日扣分 -') && home.includes('background:#fee2e2'), '');
   ok('  首页「今日」徽章按净分展示（无正分时 -5）', home.includes('🏆 今日 -5 分'), '');
   ok('  首页累计积分已扣减', home.includes('累计 '+(p0-5)+' 分'), '累计='+((home.match(/累计 (\d+) 分/)||[])[1]));
@@ -554,6 +558,7 @@ safe('⑦ 版本号', ()=>{
   const bo=(html.match(/20261024bo/g)||[]).length;
   const bp=(html.match(/20261024bp/g)||[]).length;
   const bq=(html.match(/20261024bq/g)||[]).length;
+  const br=(html.match(/20261024br/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -561,8 +566,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bq', bq===10, 'bq='+bq);
-  ok('  0 处 bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 br', br===10, 'br='+br);
+  ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;

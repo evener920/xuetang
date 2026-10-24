@@ -1498,6 +1498,7 @@
     const reviews = dueReviews();
     const habits = state.habits || [];
     const habitDoneCnt = habits.filter(habitDone).length;
+    const PR = pointRules(); // 习惯每项分值（首页习惯卡片展示用）
     const allTasks = Object.keys(tg).reduce((acc,k)=>acc.concat(tg[k]||[]), []);
     const studyDone = allTasks.filter(t=>state.learned[t.key]).length;
     const done = studyDone + habitDoneCnt;
@@ -1549,6 +1550,9 @@
     if(!taskBlocks) taskBlocks = `<div class="placeholder" style="padding:20px 16px">当前未勾选任何打卡内容，去「📊 本周 → 📖 学习库」开启板块的打卡开关。</div>`;
 
     const last = state.lastKey ? INDEX[state.lastKey] : null;
+    // 今日已记的扣分项 id → 次数（卡片网格里置灰显示「今日已记」，不再单列流水占行）
+    const penTodayMap = {};
+    penaltyLogToday().forEach(e=>{ const id=String(e.hook||"").split(":")[1]; if(id) penTodayMap[id]=(penTodayMap[id]||0)+1; });
 
     el.innerHTML = `
       <div class="hero">
@@ -1569,31 +1573,26 @@
         </div>
       </div>
 
-      <div class="sec-title">⏰ 今日习惯 <small>${habitDoneCnt}/${habits.length} · 点击勾选，每天养成一点点 · 周跟踪在「📊 本周」页</small></div>
+      <div class="sec-title">⏰ 今日习惯 <small>${habitDoneCnt}/${habits.length} · 每个 +${PR.habit} 分 · 点击勾选，每天养成一点点 · 周跟踪在「📊 本周」页</small></div>
       <div class="habit-list">
-        ${habits.map(h=>`<div class="habit ${habitDone(h)?"on":""}" data-habit="${esc(h)}"><span class="hk">${habitDone(h)?"✓":"○"}</span><span class="hn">${esc(h)}</span><button class="hx" data-habit-del="${esc(h)}" title="删除该习惯">✕</button></div>`).join("")}
+        ${habits.map(h=>`<div class="habit ${habitDone(h)?"on":""}" data-habit="${esc(h)}"><span class="hk">${habitDone(h)?"✓":"○"}</span><span class="hn">${esc(h)}</span><span class="hp" title="完成这个习惯 +${PR.habit} 分">+${PR.habit}</span><button class="hx" data-habit-del="${esc(h)}" title="删除该习惯">✕</button></div>`).join("")}
         <span style="flex:1"></span>
         <input id="habitNew" class="search-input" style="width:150px" placeholder="添加习惯…" />
         <button class="chip" data-habit-add>＋ 添加</button>
       </div>
 
-      <div class="sec-title">⚠️ 今日行为扣分 <small>点击即扣 · 不可撤销 · 只扣行为不扣学习 · 同一项每天只记一次 · 每日上限 ${penaltyCapDay()} 分</small></div>
-      <div class="chips pen-chips">
-        ${penaltyList().map(p=>`<button class="chip pen-chip" data-pen="${esc(p.id)}" title="${esc(p.tip||"")}（-${p.cost} 分）">${esc(p.icon||"⚠️")} ${esc(p.name)} <b>-${p.cost}</b></button>`).join("")}
-      </div>
-      ${penaltyLogToday().length?`
-      <div class="pen-home-list">
-        ${penaltyLogToday().map(e=>{
-          const pid=String(e.hook||"").split(":")[1];
-          const p=(state.penalties||[]).find(x=>x.id===pid) || DEFAULT_PENALTIES.find(x=>x.id===pid);
-          return `<div class="pen-home-item">
-            <span class="pen-ic">${esc((p&&p.icon)||"⚠️")}</span>
-            <span class="pen-nm">${esc((e.note||"").replace("行为扣分 · ",""))}</span>
-            <span class="pen-val">-${ -e.n }</span>
-          </div>`;
+      <div class="sec-title">⚠️ 今日行为扣分 <small>点卡片即扣 · 只扣行为不扣学习 · 同一项每天只记一次 · 每日上限 ${penaltyCapDay()} 分 · 孩子不可自行撤销，改正后由家长在「📊 本周」撤销返还</small></div>
+      <div class="pen-grid">
+        ${penaltyList().map(p=>{
+          const rec=penTodayMap[p.id];
+          return `<button class="pen-card${rec?" recorded":""}" data-pen="${esc(p.id)}" title="${esc(p.tip||"")}${rec?"（今天已记过）":""}">
+            <span class="pc-top"><span class="pc-ic">${esc(p.icon||"⚠️")}</span><span class="pc-cost">-${p.cost}</span></span>
+            <span class="pc-nm">${esc(p.name)}</span>
+            <span class="pc-st">${rec?"今日已记 ✓":"点此扣分"}</span>
+          </button>`;
         }).join("")}
-      </div>`
-      :`<p class="af-tip" style="margin-top:2px">今天还没有扣分记录 · 表现不错 👍</p>`}
+      </div>
+      <div class="pen-sum">${penaltyToday()?`今日共扣 <b style="color:#b91c1c">-${penaltyToday()}</b> 分 · 每日上限 ${penaltyCapDay()} 分 · 当前积分 <b>${state.points}</b>`:`今天还没有扣分记录 · 表现不错 👍`}</div>
 
       <div class="sec-title">📌 今日任务（按周计划） <small>周${WEEK[todayDow]} · 共 ${dayPlan.length} 类 · 点击卡片开始学习</small></div>
       ${taskBlocks}

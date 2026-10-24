@@ -167,9 +167,10 @@ safe('④ 版本号', ()=>{
   const bo=(html.match(/20261024bo/g)||[]).length;
   const bp=(html.match(/20261024bp/g)||[]).length;
   const bq=(html.match(/20261024bq/g)||[]).length;
+  const br=(html.match(/20261024br/g)||[]).length;
   ok('  0 处 be', be===0, 'be='+be);
-  ok('  0 处 bf/bg/bh/bi/bj/bk/bl/bm/bn/bo/bp（已升级至 bq）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0&&bm===0&&bn===0&&bo===0&&bp===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl+' bm='+bm+' bn='+bn+' bo='+bo+' bp='+bp);
-  ok('  10 处 bq', bq===10, 'bq='+bq);
+  ok('  0 处 bf/bg/bh/bi/bj/bk/bl/bm/bn/bo/bp/bq（已升级至 br）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0&&bm===0&&bn===0&&bo===0&&bp===0&&bq===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl+' bm='+bm+' bn='+bn+' bo='+bo+' bp='+bp+' bq='+bq);
+  ok('  10 处 br', br===10, 'br='+br);
 });
 
 let pass=0;
