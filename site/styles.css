@@ -401,6 +401,20 @@ label.af-block textarea:focus,label.af-block input:focus{border-color:var(--acce
 .lib-ck:active{transform:scale(.96);}
 
 /* ===== 本周计划总览 ===== */
+/* 计划板块胶囊：学科主题色，点名字进学习库，× 移出计划 */
+.plan-caps{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px;align-items:center;}
+.plan-cap{
+  display:inline-flex;align-items:center;gap:2px;border:1px solid;border-radius:999px;
+  padding:3px 4px 3px 11px;font-size:13px;font-weight:600;line-height:1.5;
+}
+.plan-cap-nm{all:unset;cursor:pointer;font-weight:600;}
+.plan-cap-nm:hover{text-decoration:underline;}
+.plan-cap-x{
+  all:unset;cursor:pointer;width:18px;height:18px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:13px;line-height:1;opacity:.55;
+}
+.plan-cap-x:hover{opacity:1;background:rgba(0,0,0,.12);}
+.plan-cap-x:active{transform:scale(.92);}
 .week-plan{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:6px;}
 .wp-day{
   background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 8px;min-height:86px;

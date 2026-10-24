@@ -9,7 +9,8 @@
 // ⑨ 学习库年级筛选（bo：扩大选择范围）：poolForAll/libPoolFor/年级 chips/跨年级加入
 // ⑩ 语文页筛选空态与「↩ 返回」（bp：点已学筛选被待导入空态困住）
 // ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框）
-// ⑦ 版本号：10×br
+// ⑫ 本周计划板块胶囊（bs：WB 推荐+用户增删 delta，与学习目标/学习库联动，计划移至学习目标下）
+// ⑦ 版本号：10×bs
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -547,6 +548,109 @@ safe('⑪ 积分撤销权限闸门', ()=>{
   ok('  撤销按钮均走 requireAdmin（含定义≥5 处）', (code.match(/requireAdmin\(/g)||[]).length>=5, 'n='+(code.match(/requireAdmin\(/g)||[]).length);
 });
 
+/* ---------- ⑫ 本周计划板块胶囊（bs：与学习目标/学习库联动，WB 推荐+可增删） ---------- */
+safe('⑫ 本周计划板块胶囊', ()=>{
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  const doc = ctx.window.document;
+
+  // 默认 = WB 推荐（与旧周计划口径一致：有内容、打卡开、起止日内）
+  const rec = S.planRecommended();
+  ok('  推荐集合非空', rec.length>0, 'n='+rec.length);
+  ok('  默认计划=推荐集合（保留 WB 推荐版本）', JSON.stringify(S.planSecs())===JSON.stringify(rec), '');
+
+  // 移除一个板块 → 计划 / 周分布 / 今日任务同步去掉（联动不孤立）
+  const vA = rec[0];
+  const kA = vA.subject+'·'+vA.type;
+  S.planToggle(vA.subject, vA.type);
+  ok('  移除后不在计划内', !S.planHas(vA.subject, vA.type) && !S.planSecs().some(s=>s.subject===vA.subject&&s.type===vA.type), '');
+  ok('  移除后周计划不再排该板块', !S.weekPlan().some(d=>d.some(x=>x.subject===vA.subject&&x.type===vA.type)), '');
+  const tg1 = S.todayTasks();
+  ok('  移除后今日任务不含该板块', !tg1[kA] || tg1[kA].length===0, '');
+
+  // 加回 → 恢复；加回后再移除也必须生效（不能只清 add 残留推荐里）
+  S.planToggle(vA.subject, vA.type);
+  ok('  加回后计划与周计划恢复', S.planHas(vA.subject, vA.type) && S.weekPlan().some(d=>d.some(x=>x.subject===vA.subject&&x.type===vA.type)), '');
+  S.planToggle(vA.subject, vA.type);
+  ok('  加回后再移除生效（不残留 add）', !S.planHas(vA.subject, vA.type) && !(S.state.planSecs.add||{})[kA], JSON.stringify(S.state.planSecs));
+
+  // 恢复推荐
+  S.planReset();
+  ok('  恢复推荐=清空全部增删', Object.keys(S.state.planSecs.add||{}).length===0 && Object.keys(S.state.planSecs.del||{}).length===0, JSON.stringify(S.state.planSecs));
+  ok('  恢复后计划=推荐集合', JSON.stringify(S.planSecs())===JSON.stringify(rec), '');
+
+  // 全部移除 → 空计划（周计划无槽位）
+  rec.forEach(s=>S.planToggle(s.subject, s.type));
+  ok('  全部移除后计划为空', S.planSecs().length===0, '');
+  ok('  空计划时周计划无槽位', S.weekPlan().reduce((a,d)=>a+d.length,0)===0, '');
+  S.planReset();
+
+  // 未开始板块：显式加入有标记但不排入（到期自动恢复）；选择器里未加入的禁用、已加入的可移除
+  const vB = rec[1];
+  const kB = vB.subject+'·'+vB.type;
+  S.state.sectionPlan = S.state.sectionPlan || {};
+  S.state.sectionPlan[kA] = { start:'2099-01-01' };
+  S.state.sectionPlan[kB] = { start:'2099-01-01' };
+  S.planToggle(vA.subject, vA.type);
+  ok('  未开始板块显式加入：有标记但不排入', S.planHas(vA.subject, vA.type) && !S.planSecs().some(s=>s.subject===vA.subject&&s.type===vA.type), '');
+  S.openPlanPicker();
+  let mbPick = doc.getElementById('modal-body').innerHTML;
+  const tagB0 = mbPick.indexOf('data-plan-toggle="'+kB+'"');
+  let segB = mbPick.slice(tagB0, mbPick.indexOf('</button>', tagB0));
+  ok('  选择器：未加入的未开始板块禁用', segB.includes('disabled') && segB.includes('＋ 加入本周计划'), '');
+  const tagA0 = mbPick.indexOf('data-plan-toggle="'+kA+'"');
+  let segA = mbPick.slice(tagA0, mbPick.indexOf('</button>', tagA0));
+  ok('  选择器：已加入的未开始板块可移除', segA.includes('title="移出本周计划') && !segA.includes('disabled') && segA.includes('✓ 移出本周计划'), '');
+  S.planReset();
+  delete S.state.sectionPlan[kA]; delete S.state.sectionPlan[kB];
+
+  // 本周页结构：计划在学习目标正下方；胶囊可增删；与学习库卡联动
+  S.renderWeek();
+  let wk = doc.getElementById('view-week').innerHTML;
+  const iGoal = wk.indexOf('🎯 学习目标'), iPlan = wk.indexOf('sec-title">🗓 本周计划'), iEb = wk.indexOf('🔁 艾宾浩斯复习');
+  ok('  本周计划位于学习目标正下方', iGoal>=0 && iPlan>iGoal && iPlan<iEb, 'g='+iGoal+' p='+iPlan+' eb='+iEb);
+  ok('  底部旧「本周计划」区块已移除（全页仅一处）', wk.indexOf('sec-title">🗓 本周计划')===wk.lastIndexOf('sec-title">🗓 本周计划'), '');
+  ok('  计划胶囊渲染（plan-cap + × 移除 + 点名字进学习库）', wk.includes('class="plan-caps"') && wk.includes('data-plan-cap=') && wk.includes('data-plan-del=') && wk.includes('data-plan-open='), '');
+  ok('  添加板块 / 恢复推荐按钮', wk.includes('planAddBtn') && wk.includes('planResetBtn'), '');
+  ok('  学习库卡显示「🗓 计划中」联动标识', wk.includes('🗓 计划中'), '');
+
+  // 移除诗词 → 胶囊与学习库卡同步消失
+  S.planToggle('语文','诗词');
+  S.renderWeek();
+  wk = doc.getElementById('view-week').innerHTML;
+  ok('  移除后计划胶囊消失', !wk.includes('data-plan-cap="语文·诗词"'), '');
+  const ci = wk.indexOf('data-lib-sec="语文·诗词"'), cj = wk.indexOf('data-lib-sec="', ci+10);
+  ok('  移除后学习库卡去掉「🗓 计划中」', !wk.slice(ci, cj>0?cj:wk.length).includes('🗓 计划中'), '');
+  S.planToggle('语文','诗词');
+  S.renderWeek();
+  ok('  加回后胶囊与网格恢复', doc.getElementById('view-week').innerHTML.includes('data-plan-cap="语文·诗词"'), '');
+
+  // 学习库弹窗：计划开关 + 联动说明
+  const sec0 = S.studyLibData().sections[0];
+  S.openLibSection(sec0.subject, sec0.type);
+  const mbLib = doc.getElementById('modal-body').innerHTML;
+  ok('  学习库弹窗含计划开关', mbLib.includes('data-plan-toggle='), '');
+  ok('  学习库弹窗说明计划联动', mbLib.includes('「加入本周计划」后进入每周排程与今日任务'), '');
+
+  // 学习目标明细：板块计划状态 + 切换入口 + 联动说明
+  if(sec0.items[0]) S.state.studySet[sec0.items[0].it.key]=true;
+  S.openWeekGoal();
+  const mbGoal = doc.getElementById('modal-body').innerHTML;
+  ok('  目标明细含板块计划状态 chip', mbGoal.includes('data-wg-plan=') && mbGoal.includes('🗓 计划中'), '');
+  ok('  目标明细说明与本周计划联动', mbGoal.includes('与「🗓 本周计划」联动'), '');
+
+  // 板块管理弹窗可开、含恢复推荐
+  S.openPlanPicker();
+  mbPick = doc.getElementById('modal-body').innerHTML;
+  ok('  板块管理弹窗可打开', mbPick.includes('🗓 本周计划 · 板块管理') && mbPick.includes('data-plan-reset="1"'), '');
+
+  // 源码守卫
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  ok('  weekPlan 槽位源为 planSecs()', /function weekPlan\(\)\{[\s\S]{0,120}planSecs\(\)/.test(code), '');
+  ok('  PER_STUDENT_FIELDS 含 planSecs', code.includes('"planSecs"'), '');
+  ok('  applyStateDefaults 补 planSecs 缺省（旧包兼容）', /state\.planSecs = state\.planSecs \|\| \{add:\{\},del:\{\}/.test(code), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -559,6 +663,7 @@ safe('⑦ 版本号', ()=>{
   const bp=(html.match(/20261024bp/g)||[]).length;
   const bq=(html.match(/20261024bq/g)||[]).length;
   const br=(html.match(/20261024br/g)||[]).length;
+  const bs=(html.match(/20261024bs/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -566,8 +671,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 br', br===10, 'br='+br);
-  ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 bs', bs===10, 'bs='+bs);
+  ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br);
 });
 
 let pass=0;
