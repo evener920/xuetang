@@ -2661,21 +2661,35 @@
       </div>
       <p class="af-tip">存档内容：学习进度、打卡、习惯、复习记录、后台素材与所有内容修改。最多保留 ${ARCHIVE_MAX} 份，超出时自动淘汰最早的「自动」存档；手动存档优先保留。每天首次打开网站会自动存一份。</p>
 
-      <div class="sec-title">📅 学习板块排程（学习的始终）<small>为每个「学科·类型」设定开启、开始日、结束日与每周频次；首页将显示进度与起止，系统按设定循序渐进排课</small></div>
-      <div class="sched-list">
-        ${CHECKIN_TYPES.filter(ct=>allSubjects().includes(ct.subject)).map(({subject,type})=>{
-          const k=checkinKey(subject,type);
-          const sp=sectionPlanOf(k);
-          const on=checkinOn(subject,type);
-          const cnt=poolFor(subject,type).length;
-          if(!cnt) return "";
-          return `<div class="sched-item">
-            <label class="sched-on"><input type="checkbox" data-sched-on="${esc(k)}" ${on?"checked":""}/> <b>${esc(subject)}·${esc(type)}</b></label>
-            <label>开始<input type="date" data-sched-start="${esc(k)}" value="${esc(sp.start||"")}"/></label>
-            <label>结束<input type="date" data-sched-end="${esc(k)}" value="${esc(sp.end||"")}"/></label>
-            <label>每周频次<input type="number" min="1" max="7" data-sched-freq="${esc(k)}" value="${sp.freq||weekFreqOf(subject,type)}"/></label>
-          </div>`;
-        }).join("")}
+      <div class="sec-title">📅 学习板块排程（学习的始终）<small>为每个「学科·类型」设定开启、开始日、结束日与每周频次；按学科分组、可折叠 · 已穷举全部板块（含自定义素材，如 英语·阅读、历史·知识）</small></div>
+      <div class="sched-groups">
+        ${(()=>{
+          // 穷举所有真实存在的「学科·类型」板块（含自定义素材），而非仅内置 CHECKIN_TYPES
+          const boardMap = {};
+          ALL.forEach(x=>{ if(x.subject && x.type){ const key=x.subject+"||"+x.type; (boardMap[key]=boardMap[key]||{subject:x.subject,type:x.type,count:0}).count++; } });
+          const subs = [...new Set([...allSubjects(), ...Object.values(boardMap).map(b=>b.subject)])]
+            .filter(s=>Object.values(boardMap).some(b=>b.subject===s));
+          return subs.map(sub=>{
+            const boards = Object.values(boardMap).filter(b=>b.subject===sub).sort((a,b)=>a.type.localeCompare(b.type,"zh"));
+            if(!boards.length) return "";
+            return `<details class="sched-group" open>
+              <summary><span class="sg-subj">${esc(sub)}</span><span class="sg-cnt">${boards.length} 个板块 · 点击折叠</span></summary>
+              <div class="sg-body">
+                ${boards.map(({subject,type,count})=>{
+                  const k=checkinKey(subject,type);
+                  const sp=sectionPlanOf(k);
+                  const on=checkinOn(subject,type);
+                  return `<div class="sched-item">
+                    <label class="sched-on"><input type="checkbox" data-sched-on="${esc(k)}" ${on?"checked":""}/> <b>${esc(subject)}·${esc(type)}</b><span class="sg-count">共 ${count} 条</span></label>
+                    <label>开始<input type="date" data-sched-start="${esc(k)}" value="${esc(sp.start||"")}"/></label>
+                    <label>结束<input type="date" data-sched-end="${esc(k)}" value="${esc(sp.end||"")}"/></label>
+                    <label>每周频次<input type="number" min="1" max="7" data-sched-freq="${esc(k)}" value="${sp.freq||weekFreqOf(subject,type)}"/></label>
+                  </div>`;
+                }).join("")}
+              </div>
+            </details>`;
+          }).join("");
+        })()}
       </div>
       <div class="chips"><button class="btn primary" id="schedSave">💾 保存排程</button></div>
       <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>
