@@ -158,9 +158,10 @@ safe('④ 版本号', ()=>{
   const bf=(html.match(/20261024bf/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
+  const bi=(html.match(/20261024bi/g)||[]).length;
   ok('  0 处 be', be===0, 'be='+be);
-  ok('  0 处 bf/bg（已升级至 bh）', bf===0&&bg===0, 'bf='+bf+' bg='+bg);
-  ok('  10 处 bh', bh===10, 'bh='+bh);
+  ok('  0 处 bf/bg/bh（已升级至 bi）', bf===0&&bg===0&&bh===0, 'bf='+bf+' bg='+bg+' bh='+bh);
+  ok('  10 处 bi', bi===10, 'bi='+bi);
 });
 
 let pass=0;

@@ -1445,7 +1445,7 @@
         <div>
           <h2>今日学习</h2>
           <p>${d.getMonth()+1} 月 ${d.getDate()} 日 星期${WEEK[d.getDay()]} · 🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 共 ${total} 项任务</p>
-          <div style="margin-top:6px"><span class="badge" style="background:#fef3c7;color:#b45309">🏆 今日 +${pointToday()} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
+          <div style="margin-top:6px"><span class="badge" style="background:#fef3c7;color:#b45309">🏆 今日 +${pointToday()} 分</span>${penaltyToday()?` <span class="badge" style="background:#fee2e2;color:#b91c1c">⚠️ 今日扣分 -${penaltyToday()} 分</span>`:""} <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span class="badge" style="background:#eef2ff;color:#3730a3">📐 卡片顺序</span>
             <button class="chip ${state.orderMode!=="smart"?"on":""}" data-order-toggle="seq">顺序（按导入序）</button>
@@ -1758,7 +1758,7 @@
       <div class="hero">
         <div>
           <h2>📊 本周学习</h2>
-          <p>🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 复习到期 ${reviews.length} 项（已完成 ${reviewDoneCnt}）</p>
+          <p>🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 复习到期 ${reviews.length} 项（已完成 ${reviewDoneCnt}） · 今日 <b style="color:#15803d">+${pointToday()}</b>${penaltyToday()?` <b style="color:#b91c1c">-${penaltyToday()}</b>`:""} · 本周 +${pointWeek()} · 累计 <b>${state.points}</b> 分</p>
         </div>
         <div class="done" style="min-width:180px;">
           今日复习 ${reviewDoneCnt} / ${reviews.length}
@@ -1795,8 +1795,12 @@
         ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
       </div>
 
-      <div class="sec-title">📊 学习看板 <small>内容打卡概览（今日 / 本周）</small></div>
+      <div class="sec-title">📊 学习看板 <small>打卡与积分概览（今日 / 本周）· 扣分在「今日」行以红字显示</small></div>
       <div class="dash-grid">
+        <div class="dash-card"><div class="dc-name">🏆 积分</div>
+          <div class="dc-row"><span>今日</span><b>+${pointToday()}${penaltyToday()?` <span style="color:#b91c1c;font-size:13px">-${penaltyToday()}</span>`:""}</b></div>
+          <div class="dc-row"><span>本周</span><b>+${pointWeek()}</b></div>
+          <div class="dc-row"><span>累计</span><b>${state.points}</b></div></div>
         ${SUBJ.map(s=>`<div class="dash-card"><div class="dc-name">${s}</div>
           <div class="dc-row"><span>今日打卡</span><b>${subjCount(todayList,s)}</b></div>
           <div class="dc-row"><span>本周打卡</span><b>${subjCount(weekList,s)}</b></div></div>`).join("")}

@@ -177,11 +177,20 @@ safe('② 首页行为扣分', ()=>{
 
   // 首页渲染：扣分 chips + 不可撤销（无撤销入口）
   S.state.points = p0; S.state.pointLog = (S.state.pointLog||[]).filter(x=>x.n>=0);
+  S.penalize('p1'); // 制造一条今日扣分用于徽章断言
   S.renderHome();
   const home = ctx.window.document.getElementById('view-home').innerHTML;
   ok('  首页含扣分 chips（data-pen）', home.includes('data-pen="p1"'), '');
   ok('  首页扣分区标注「不可撤销」', home.includes('不可撤销'), '');
   ok('  首页无扣分撤销按钮（data-pen-undo）', !home.includes('data-pen-undo'), '');
+  ok('  首页 hero 显示红色「今日扣分」徽章', home.includes('今日扣分 -') && home.includes('background:#fee2e2'), '');
+  ok('  首页累计积分已扣减', home.includes('累计 '+(p0-5)+' 分'), '累计='+((home.match(/累计 (\d+) 分/)||[])[1]));
+
+  // 本周页：hero 积分行 + 学习看板积分卡（扣分红字）
+  S.renderWeek();
+  const wkPts = ctx.window.document.getElementById('view-week').innerHTML;
+  ok('  本周页 hero 显示 今日/本周/累计 积分', /今日 <b style="color:#15803d">\+\d+<\/b> <b style="color:#b91c1c">-\d+<\/b> · 本周 \+\d+ · 累计 <b>-?\d+<\/b> 分/.test(wkPts), '');
+  ok('  本周页学习看板含「🏆 积分」卡', wkPts.includes('🏆 积分'), '');
 });
 
 /* ---------- ③ 今日完成默认折叠（诉求6） ---------- */
@@ -260,14 +269,15 @@ safe('⑥ 资源页历史并入人文', ()=>{
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
+  const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
   const bf=(html.match(/20261024bf/g)||[]).length;
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bh', bh===10, 'bh='+bh);
-  ok('  0 处 bg/bf/be/bd/ba', bg===0&&bf===0&&be===0&&bd===0&&ba===0, 'bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba);
+  ok('  10 处 bi', bi===10, 'bi='+bi);
+  ok('  0 处 bh/bg/bf/be/bd/ba', bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0, 'bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba);
 });
 
 let pass=0;
