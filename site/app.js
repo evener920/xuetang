@@ -2694,7 +2694,7 @@
       save(); toast("已保存学习板块排程 📅"); renderAdmin(); renderHome(); if(view.name==="week") renderWeek();
     };
     // 云端同步：配置变更 / 立即同步
-    const syncOn=$("#syncOn"), syncPass=$("#syncPass"), syncNow=$("#syncNow"), syncStatus=$("#syncStatus");
+    const syncOn=$("#syncOn"), syncPass=$("#syncPass"), btnSyncNow=$("#syncNow"), syncStatus=$("#syncStatus");
     function syncCfgChange(){
       state.sync = state.sync || {};
       state.sync.enabled = !!(syncOn && syncOn.checked);
@@ -2704,7 +2704,7 @@
     }
     if(syncOn) syncOn.onchange=syncCfgChange;
     if(syncPass) syncPass.onchange=syncCfgChange;
-    if(syncNow) syncNow.onclick=async ()=>{
+    if(btnSyncNow) btnSyncNow.onclick=async ()=>{
       if(syncOn && !syncOn.checked){ toast("请先勾选启用云同步"); return; }
       const pass=(syncPass && syncPass.value||"").trim();
       if(!pass){ toast("请填写同步密钥"); return; }
