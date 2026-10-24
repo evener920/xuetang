@@ -194,6 +194,8 @@
   }
 
   const GRADES = ["一年级","二年级","三年级","四年级","五年级","六年级","七年级","八年级","九年级","高一","高二","高三"];
+  // 上下册：跨学科一致的「册」维度（英语单词与后台自定义素材可标注；与 学科×年级×类型×标签 交叉筛选）
+  const VOLUMES = ["上册","下册"];
   const IDIOM_GRADES = [...new Set(IDIOMS.map(x=>x.grade))];
   const WORD_GRADES  = [...new Set(WORDS.map(x=>x.grade))];
   // 年级筛选按钮按 学级 顺序排（一二三…六），不按数据出现顺序
@@ -354,19 +356,32 @@
     }
     return out;
   }
-  // 普通板块：按固定顺序（循序渐进）推进 + 掌握度加权选条
+  // 普通板块：按「卡片顺序」偏好推进
   function sectionItems(subject, type, quota){
     const pool = poolFor(subject, type);
     if(!pool.length) return [];
     const semDay = Math.max(0, dayDiff(state.semesterStart));
-    const frontier = (semDay * quota) % pool.length; // 顺序前沿，按天稳定推进
-    const WIN = Math.max(quota*3, quota+6);          // 候选窗口
-    const win=[];
-    for(let i=0;i<WIN && i<pool.length;i++) win.push(pool[(frontier+i)%pool.length]);
-    const scored = win.map((it,idx)=>({it, idx, p:practicePriority(it.key)}));
-    scored.sort((a,b)=> b.p - a.p || a.idx - b.idx); // 弱项优先，稳定保序
-    const n = Math.min(quota, win.length);
-    return scored.slice(0,n).sort((a,b)=>a.idx-b.idx).map(x=>x.it); // 显示保持顺序
+    // 智能模式（默认关闭）：顺序前沿 + 掌握度加权（弱项优先），但显示时保持相对顺序
+    if(state.orderMode === "smart"){
+      const frontier = (semDay * quota) % pool.length; // 顺序前沿，按天稳定推进
+      const WIN = Math.max(quota*3, quota+6);          // 候选窗口
+      const win=[];
+      for(let i=0;i<WIN && i<pool.length;i++) win.push(pool[(frontier+i)%pool.length]);
+      const scored = win.map((it,idx)=>({it, idx, p:practicePriority(it.key)}));
+      scored.sort((a,b)=> b.p - a.p || a.idx - b.idx); // 弱项优先，稳定保序
+      const n = Math.min(quota, win.length);
+      return scored.slice(0,n).sort((a,b)=>a.idx-b.idx).map(x=>x.it); // 显示保持顺序
+    }
+    // 顺序模式（默认）：严格按资源导入次序推进，跳过全会(5★)但保持相对顺序，前后感清晰
+    const frontier = (semDay * quota) % pool.length;
+    const out=[], seen=new Set(); let i=frontier, guard=0;
+    while(out.length<quota && guard<pool.length){
+      const it=pool[i%pool.length]; i++; guard++;
+      if(getMastery(it.key)>=5) continue;   // 全会跳过，但后序仍按序补位
+      if(seen.has(it.key)) continue;
+      seen.add(it.key); out.push(it);
+    }
+    return out; // 已是导入顺序
   }
   function habitDone(h){
     const t=fmt(new Date());
@@ -772,11 +787,11 @@
   }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules","orderMode"];
   function defaultPerStudent(){
     return { grade:"四年级", learned:{}, fav:{}, checkin:{},
       habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{},
-      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{}, rules:{} };
+      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{}, rules:{}, orderMode:"seq" };
   }
   function capturePerStudent(){
     const d={}; PER_STUDENT_FIELDS.forEach(f=>{ const v=state[f]; d[f]=(v===undefined?null:JSON.parse(JSON.stringify(v))); });
@@ -796,6 +811,7 @@
     const snap=capturePerStudent();
     state.students={ s1:{name:"学生1", data:snap}, s2:{name:"学生2", data:defaultPerStudent()} };
     state.currentStudent="s1";
+    applyPerStudent("s1"); // 把默认值（含 orderMode=seq）落到当前学生状态
   }else{
     applyPerStudent(state.currentStudent || Object.keys(state.students)[0]);
   }
@@ -1292,6 +1308,12 @@
           <h2>今日学习</h2>
           <p>${d.getMonth()+1} 月 ${d.getDate()} 日 星期${WEEK[d.getDay()]} · 🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 共 ${total} 项任务</p>
           <div style="margin-top:6px"><span class="badge" style="background:#fef3c7;color:#b45309">🏆 今日 +${pointToday()} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="badge" style="background:#eef2ff;color:#3730a3">📐 卡片顺序</span>
+            <button class="chip ${state.orderMode!=="smart"?"on":""}" data-order-toggle="seq">顺序（按导入序）</button>
+            <button class="chip ${state.orderMode==="smart"?"on":""}" data-order-toggle="smart">智能（弱项优先）</button>
+            <span style="font-size:12px;color:var(--muted)">顺序模式严格按资源导入次序，前后感更清晰；智能模式会把没掌握好的往前排</span>
+          </div>
         </div>
         <div class="done" style="min-width:180px;">
           已完成 ${done} / ${total}
@@ -1643,13 +1665,14 @@
   const gnView = {};
   function renderGeneric(el, subject){
     const types = SUBJECT_TYPES[subject] || [];
-    if(!gnView[subject]) gnView[subject] = {type:types[0]||"", grade:"全部", q:"", volume:"上册", unit:"全部", tag:""};
+    if(!gnView[subject]) gnView[subject] = {type:types[0]||"", grade:"全部", q:"", volume:"全部", unit:"全部", tag:""};
     const v = gnView[subject];
     const isEngWord = (subject==="英语" && v.type==="单词");
     let basePool, pool;
     if(isEngWord){
-      basePool = [...WORDS.filter(w=>w.grade===state.grade && w.volume===v.volume),
-              ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"&&c.grade===state.grade&&c.volume===v.volume)];
+      // 英语单词按当前年级取；「册」交由下方通用筛选（volume=全部 时不过滤）
+      basePool = [...WORDS.filter(w=>w.grade===state.grade),
+              ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"&&c.grade===state.grade)];
     }else{
       // 统一从 ALL 取（思维母题已拆分为单题、公式已拆分为小节；打散练习入口随后置顶）
       basePool = ALL.filter(c=>c.subject===subject && c.type===v.type);
@@ -1660,6 +1683,8 @@
     }
     pool = basePool.slice();
     if(v.grade!=="全部" && !isEngWord) pool = pool.filter(x=>x.grade===v.grade);
+    // 跨学科学一维：册（上下册）通用筛选；英语单词与任何标注了册的素材都参与
+    if(v.volume!=="全部") pool = pool.filter(x=>x.volume===v.volume);
     if(isEngWord && v.unit!=="全部") pool = pool.filter(w=>w.unit===v.unit);
     // 主题标签筛选（与语文·诗词页一致）：按当前「学科·类型」的内容标签聚合，点选即筛选
     if(v.tag) pool = pool.filter(x=>(x.tags||[]).includes(v.tag));
@@ -1671,26 +1696,27 @@
     basePool.forEach(x=>(x.tags||[]).forEach(t=>tagFreq[t]=(tagFreq[t]||0)+1));
     const topTags=Object.entries(tagFreq).sort((a,b)=>b[1]-a[1]).slice(0,18).map(x=>x[0]);
     const engTotal = isEngWord ? [...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"), ...EXTRA.filter(c=>c.subject==="英语"&&c.type==="单词")].filter(w=>w.grade===state.grade).length : null;
-    const units = isEngWord ? [...new Set([...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"), ...EXTRA.filter(c=>c.subject==="英语"&&c.type==="单词")].filter(w=>w.grade===state.grade&&w.volume===v.volume).map(w=>w.unit).filter(Boolean))].sort() : [];
+    const units = isEngWord ? [...new Set([...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词"), ...EXTRA.filter(c=>c.subject==="英语"&&c.type==="单词")].filter(w=>w.grade===state.grade && (v.volume==="全部"||w.volume===v.volume)).map(w=>w.unit).filter(Boolean))].sort() : [];
+    const hasVolume = basePool.some(x=>x.volume); // 当前学科·类型下是否存在标注了册的素材（有才显示册筛选）
     const listCnt = pool.filter(x=>x.key!=="practice:maththought").length;
     const desc = (hasCustom || isEngWord)
       ? `${subject}内容由「🛠 后台」添加的素材与内置教材自动归类到对应学科 / 类型 / 年级。`
       : `该栏目规划中。可在「🛠 后台」添加素材，系统自动归类到这里。`;
     el.innerHTML = `
-      <div class="subj-head"><h2>${esc(subject)} · ${esc(v.type)}</h2><span class="cnt">${isEngWord?`${esc(state.grade)} 共 ${engTotal} 个 · 当前${esc(v.volume)} ${pool.length} 个`:(hasCustom?listCnt+" 条":"规划中")}</span></div>
+      <div class="subj-head"><h2>${esc(subject)} · ${esc(v.type)}</h2><span class="cnt">${isEngWord?`${esc(state.grade)} 共 ${engTotal} 个 · 当前${esc(v.volume==="全部"?"全部册":v.volume)} ${pool.length} 个`:(hasCustom?listCnt+" 条":"规划中")}</span></div>
       <p class="subj-desc">${desc}</p>
       <div class="chips">
         ${types.map(t=>`<button class="chip ${v.type===t?"on":""}" data-gn-type="${esc(t)}">${esc(t)}</button>`).join("")}
         ${isEngWord?`<span style="width:14px"></span><span class="lbl">年级语境：</span><span class="badge" style="background:#eef2ff;color:#1e40af">${esc(state.grade)}</span>`:""}
-        ${isEngWord?`${["上册","下册"].map(vol=>`<button class="chip ${v.volume===vol?"on":""}" data-gn-volume="${esc(vol)}">${esc(vol)}</button>`).join("")}`:""}
         <span style="flex:1"></span>
         <input id="gnSearch" class="search-input" style="width:200px" placeholder="搜索…" value="${esc(v.q)}" />
       </div>
       ${(grades.length && !isEngWord)?`<div class="chips"><span class="lbl">年级：</span><button class="chip ${v.grade==="全部"?"on":""}" data-gn-grade="全部">全部</button>${grades.map(g=>`<button class="chip ${v.grade===g?"on":""}" data-gn-grade="${esc(g)}">${esc(g)}</button>`).join("")}</div>`:""}
+      ${hasVolume?`<div class="chips"><span class="lbl">册：</span><button class="chip ${v.volume==="全部"?"on":""}" data-gn-volume="全部">全部</button>${VOLUMES.map(vol=>`<button class="chip ${v.volume===vol?"on":""}" data-gn-volume="${esc(vol)}">${esc(vol)}</button>`).join("")}</div>`:""}
       ${isEngWord&&units.length?`<div class="chips"><span class="lbl">单元：</span><button class="chip ${v.unit==="全部"?"on":""}" data-gn-unit="全部">全部</button>${units.map(u=>`<button class="chip ${v.unit===u?"on":""}" data-gn-unit="${esc(u)}">${esc(u)}</button>`).join("")}</div>`:""}
       ${topTags.length?`<div class="chips"><span class="lbl">热门主题：</span><button class="tag ${!v.tag?"on":""}" data-gn-tag="">全部</button>${topTags.map(t=>`<button class="tag ${v.tag===t?"on":""}" data-gn-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>`:""}
       ${isEngWord?`
-      <div class="sec-title">🎮 单词游戏 <small>用 ${esc(state.grade)}${esc(v.volume)} 的单词玩 · 完成一轮 +5 分（每天每项限一次）</small></div>
+      <div class="sec-title">🎮 单词游戏 <small>用 ${esc(state.grade)}${esc(v.volume==="全部"?"全部册":v.volume)} 的单词玩 · 完成一轮 +5 分（每天每项限一次）</small></div>
       <div class="game-row">
         <button class="game-card" data-word-game="match"><span class="gi">🃏</span><b>配对翻牌</b><span class="gd">单词 ↔ 释义 · 记忆配对</span></button>
         <button class="game-card" data-word-game="spell"><span class="gi">🔤</span><b>拼写挑战</b><span class="gd">看释义 · 点字母拼单词</span></button>
@@ -1711,7 +1737,7 @@
     const vol=(gnView["英语"]||{}).volume||"上册";
     const seen=new Set(), out=[];
     [...WORDS, ...CUSTOM.filter(c=>c.subject==="英语"&&c.type==="单词")]
-      .filter(w=>w.grade===state.grade && w.volume===vol && w.title && w.body)
+      .filter(w=>w.grade===state.grade && (vol==="全部"||w.volume===vol) && w.title && w.body)
       .forEach(w=>{
         const k=String(w.title).toLowerCase();
         if(seen.has(k)) return;
@@ -2426,7 +2452,7 @@
 
   /* ---------- 后台：资源库（内置教材按 学科×年级×类型 交叉分类，可直接修改） ---------- */
   const RES_STEP = 30;
-  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", limit:RES_STEP };
+  let biView = { q:"", type:"全部", subj:"全部", grade:"全部", volume:"全部", tag:"", limit:RES_STEP };
   function openAdminEdit(key){
     const it = INDEX[key] || EXTRA.find(e=>e.key===key);
     if(!it){ toast("没找到这条内容"); return; }
@@ -2488,15 +2514,18 @@
   /* ---------- 资源页（与后台平级）：站内全部内置内容，按 学科×年级×类型 交叉分类 ---------- */
   function biData(){
     // 资源页展示站内全部内容：内置条目（诗词/成语/单词/动画/教材）+ 已导入/后台添加的内容（如英语阅读、历史指南）
-    // 按 学科 × 年级 × 类型 交叉归类；后台只是管理入口（增删改），内容主展示位就在这里。
+    // 按 学科 × 年级 × 类型 × 册 × 标签 五维交叉归类（统一分面筛选）；后台只是管理入口（增删改），内容主展示位就在这里。
     const customSet = new Set((CUSTOM||[]).map(x=>x.key));
     const builtins = ALL.filter(x=>x.key!=="practice:maththought" && !/^mtq:/.test(x.key));
-    // 来源（我的素材/内置）已合并进学科板块，不再按来源过滤；来源只在卡片标签上区分
-    // 联动筛选：每个维度的候选与计数，都在「另外两个维度已选条件」的范围内计算
+    // 结构型标签（年级/册/学科/类型名）不应污染「主题标签」分面，避免与对应维度重复
+    const isStructTag = t => !t || GRADES.includes(t) || VOLUMES.includes(t) || SUBJECT_TYPES[t] || Object.values(SUBJECT_TYPES).some(arr=>arr.includes(t));
+    // 联动筛选：每个维度的候选与计数，都在「其他维度已选条件」的范围内计算
     const matchExcept = except => builtins.filter(x=>{
-      if(except!=="subj"  && biView.subj !=="全部" && x.subject!==biView.subj)  return false;
-      if(except!=="grade" && biView.grade!=="全部" && x.grade !==biView.grade) return false;
-      if(except!=="type"  && biView.type !=="全部" && x.type  !==biView.type)  return false;
+      if(except!=="subj"   && biView.subj   !=="全部" && x.subject!==biView.subj)   return false;
+      if(except!=="grade"  && biView.grade  !=="全部" && x.grade  !==biView.grade)  return false;
+      if(except!=="type"   && biView.type   !=="全部" && x.type   !==biView.type)   return false;
+      if(except!=="volume" && biView.volume !=="全部" && x.volume !==biView.volume) return false;
+      if(except!=="tag"    && biView.tag && !(x.tags||[]).includes(biView.tag))     return false;
       return true;
     });
     const cntBy=(arr,fn)=>{ const m=new Map(); arr.forEach(x=>{ const k=fn(x)||""; m.set(k,(m.get(k)||0)+1); }); return m; };
@@ -2512,10 +2541,19 @@
     const subjM=cntBy(matchExcept("subj"), x=>x.subject);
     const gradeM=cntBy(matchExcept("grade").filter(x=>x.grade), x=>x.grade);
     const typeM=cntBy(matchExcept("type"), x=>x.type);
+    const volumeM=cntBy(matchExcept("volume").filter(x=>x.volume), x=>x.volume);
+    // 主题标签：聚合所有条目的 tags，排除结构型标签（年级/册/学科/类型），按词频降序最多取 24 个
+    const tagM=new Map();
+    matchExcept("tag").forEach(x=>(x.tags||[]).forEach(t=>{ if(!isStructTag(t)) tagM.set(t,(tagM.get(t)||0)+1); }));
+    let tagEntries=[...tagM.entries()].sort((a,b)=>b[1]-a[1]);
+    if(biView.tag && !tagM.has(biView.tag)) tagEntries.unshift([biView.tag, 0]); // 选中项即便当前 0 也保留
+    tagEntries=tagEntries.slice(0,24);
     const filtered = builtins.filter(x=>{
       if(biView.subj!=="全部" && x.subject!==biView.subj) return false;
       if(biView.grade!=="全部" && x.grade!==biView.grade) return false;
       if(biView.type!=="全部" && x.type!==biView.type) return false;
+      if(biView.volume!=="全部" && x.volume!==biView.volume) return false;
+      if(biView.tag && !(x.tags||[]).includes(biView.tag)) return false;
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
     });
@@ -2532,7 +2570,9 @@
       subjChips: [["全部", matchExcept("subj").length], ...chipsFor(subjM, biView.subj, ["语文","数学","英语","科学","人文"])],
       gradeChips:[["全部", matchExcept("grade").length], ...chipsFor(gradeM, biView.grade, GRADES)],
       typeChips: [["全部", matchExcept("type").length], ...chipsFor(typeM, biView.type)],
-      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||!!biView.q
+      volumeChips:[["全部", matchExcept("volume").length], ...chipsFor(volumeM, biView.volume)],
+      tagChips: [["全部", matchExcept("tag").length], ...tagEntries],
+      active: biView.subj!=="全部"||biView.grade!=="全部"||biView.type!=="全部"||biView.volume!=="全部"||!!biView.tag||!!biView.q
     };
   }
   function renderRes(){
@@ -2541,9 +2581,9 @@
     const ovCnt = Object.keys(state.overrides||{}).length;
     const subjects = D.subjChips.slice(1); // 学科板块（去掉「全部」），我的素材+内置已合并计数
     el.innerHTML = `
-      <div class="subj-head"><h2>📚 资源中心</h2><span class="cnt">站内全部内容 · 按 学科 板块合并 · 再按 年级 × 类型 细分</span></div>
+      <div class="subj-head"><h2>📚 资源中心</h2><span class="cnt">站内全部内容 · 按 学科 板块合并 · 再按 年级 × 类型 × 册 × 标签 交叉筛选</span></div>
 
-      <p class="subj-desc">这里汇总站内所有内容，<b>全部合并进下方学科板块</b>：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在各板块最前，卡片会<b>自动打上内容标签</b>（如「英语阅读」「历史知识」，紫色即本机添加，可删除；蓝色「内置」为站内自带）。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
+      <p class="subj-desc">这里汇总站内所有内容，<b>全部合并进下方学科板块</b>：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在各板块最前，卡片会<b>自动打上内容标签</b>（如「英语阅读」「历史知识」，紫色即本机添加，可删除；蓝色「内置」为站内自带）。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。下方五维分面（<b>学科 / 年级 / 类型 / 册 / 标签</b>）可任意叠加交叉筛选——例如「语文 → 诗词 → 四年级 → 写景」，或「英语 → 单词 → 三年级上册」。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
 
       <details class="res-import" ${D.customCnt?"":"open"}>
         <summary>📥 批量导入素材（粘贴 JSON）<small>从「后台」移来 · 整批添加内容</small></summary>
@@ -2569,12 +2609,20 @@
         ${D.typeChips.map(([t,c])=>`<button class="chip ${biView.type===t?"on":""}" data-bi-type="${esc(t)}">${esc(t)} ${c}</button>`).join("")}
       </div>
       <div class="chips">
+        <span class="lbl">册：</span>
+        ${D.volumeChips.map(([g,c])=>`<button class="chip ${biView.volume===g?"on":""}" data-bi-volume="${esc(g)}">${esc(g)} ${c}</button>`).join("")}
+      </div>
+      <div class="chips">
+        <span class="lbl">标签：</span>
+        ${D.tagChips.map(([t,c])=>`<button class="chip ${biView.tag===t?"on":""}" data-bi-tag="${esc(t)}">${biView.tag===t?"#":""}${esc(t)} ${c}</button>`).join("")}
+      </div>
+      <div class="chips">
         ${D.active?`<button class="btn" id="biReset" title="清空全部筛选条件">✕ 清空筛选</button>`:""}
         <span style="flex:1"></span>
         <input id="biSearch" class="search-input" style="width:220px" placeholder="搜标题 / 拼音 / 类型…" value="${esc(biView.q)}" />
       </div>
 
-      <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}${D.customCnt?` · 本机添加 ${D.customCnt} 条排在最前`:""}</span></div>
+      <div class="subj-head" style="margin-top:6px"><span class="cnt">共 ${D.filtered.length} 条匹配${D.active?` · 已叠加分面筛选`:""}${ovCnt?` · 其中 ${ovCnt} 条已修改`:""}${D.customCnt?` · 本机添加 ${D.customCnt} 条排在最前`:""}</span></div>
 
       <div class="res-grid" id="biGrid">
         ${D.show.length?D.show.map(x=>{
@@ -2632,6 +2680,8 @@
     el.querySelectorAll("[data-bi-type]").forEach(b=>b.addEventListener("click", ()=>{ biView.type=b.dataset.biType; renderRes(); }));
     el.querySelectorAll("[data-bi-subj]").forEach(b=>b.addEventListener("click", ()=>{ biView.subj=b.dataset.biSubj; renderRes(); }));
     el.querySelectorAll("[data-bi-grade]").forEach(b=>b.addEventListener("click", ()=>{ biView.grade=b.dataset.biGrade; renderRes(); }));
+    el.querySelectorAll("[data-bi-volume]").forEach(b=>b.addEventListener("click", ()=>{ biView.volume=b.dataset.biVolume; renderRes(); }));
+    el.querySelectorAll("[data-bi-tag]").forEach(b=>b.addEventListener("click", ()=>{ biView.tag=b.dataset.biTag; renderRes(); }));
     el.querySelectorAll("[data-bi-edit]").forEach(b=>b.addEventListener("click", ()=>openAdminEdit(b.dataset.biEdit)));
     el.querySelectorAll("[data-bi-revert]").forEach(b=>b.addEventListener("click", ()=>{
       const k=b.dataset.biRevert;
@@ -2647,7 +2697,7 @@
     }));
     const biReset=$("#biReset");
     if(biReset) biReset.addEventListener("click", ()=>{
-      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.q=""; biView.limit=RES_STEP;
+      biView.subj="全部"; biView.grade="全部"; biView.type="全部"; biView.volume="全部"; biView.tag=""; biView.q=""; biView.limit=RES_STEP;
       renderRes();
     });
     const biMore=$("#biMore");
@@ -3147,6 +3197,8 @@
   document.querySelector("main").addEventListener("click", e=>{
     const card=e.target.closest(".card[data-key]");
     if(card){ const it=INDEX[card.dataset.key]; if(it) openModal(it); return; }
+    const orderT=e.target.closest("[data-order-toggle]");
+    if(orderT){ state.orderMode = (orderT.dataset.orderToggle==="smart") ? "smart" : "seq"; save(); refreshView(); toast(state.orderMode==="smart"?"已切换为「智能」顺序（弱项优先）":"已切换为「顺序」模式（按导入序）"); return; }
     const tag=e.target.closest(".tag[data-tag]");
     if(tag){ go("tag", tag.dataset.tag); return; }
     const gsub=e.target.closest("[data-goto-subject]");
