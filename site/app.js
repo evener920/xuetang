@@ -778,7 +778,12 @@
     if(!_applyRemote) scheduleSyncPush(); // 云同步开启时，防抖推送（拉取落地阶段不触发，避免回环）
   }
 
-  /* ---------- 云端同步（Cloudflare KV + Pages Function；跨域名/设备共享同一份数据） ---------- */
+  /* ---------- 云端同步（统一走 xuetang.201573.xyz 的 Pages 同步后端；跨域名/设备共享同一份数据） ---------- */
+  // 关键：两个域名（xuetang.201573.xyz 与 xuetang.evener920.workers.dev）都加载同一份前端，
+  // 但同步请求统一打到 SYNC_BASE（201573.xyz 的 Pages /api/sync），这样无论从哪个域名打开、
+  // 哪台设备访问，都读写同一个 Cloudflare KV 命名空间 → 数据天然互通。
+  // （workers.dev 的 Worker 当前返回 502 不可用，故不同步走它；SYNC_BASE 可改为主用域名。）
+  var SYNC_BASE = "https://xuetang.201573.xyz";
   // 同步密钥明文存本机（仅家长设备可见）；云端 key = SHA-256(密钥)；data 整包存取，last-write-wins 按 updatedAt 裁决
   var _pushTimer = null, _pushing = false, _applyRemote = false, _netFail = false;
   function cloudSyncEnabled(){ return !!(state.sync && state.sync.enabled && state.sync.pass); }
@@ -799,7 +804,7 @@
     _pushing = true;
     try{
       const payload = JSON.stringify({ updatedAt: Date.now(), data: state });
-      const r = await fetch("/api/sync?k="+encodeURIComponent(k), { method:"PUT", headers:{"content-type":"application/json"}, body: payload });
+      const r = await fetch(SYNC_BASE + "/api/sync?k="+encodeURIComponent(k), { method:"PUT", headers:{"content-type":"application/json"}, body: payload });
       if(r.ok){ const j = await r.json().catch(()=>({})); if(j && j.updatedAt) state.sync.at = j.updatedAt; return true; }
       console.warn("syncPush 失败", r && r.status); return false;
     }catch(e){ _netFail = true; return false; /* 离线/网络错误静默，下次保存或手动同步再试 */ }
@@ -815,7 +820,7 @@
     const k = await sha256Hex(state.sync.pass);
     if(!k) return null;
     try{
-      const r = await fetch("/api/sync?k="+encodeURIComponent(k), { method:"GET" });
+      const r = await fetch(SYNC_BASE + "/api/sync?k="+encodeURIComponent(k), { method:"GET" });
       if(!r.ok) return null;
       const j = await r.json().catch(()=>({}));
       if(!j || !j.data) return null;
@@ -2582,7 +2587,7 @@
           <button class="btn primary" id="syncNow">🔄 立即同步（拉取 + 推送）</button>
           <span class="af-tip" id="syncStatus">${(state.sync&&state.sync.at)? "上次同步："+new Date(state.sync.at).toLocaleString() : "尚未同步"}</span>
         </div>
-        <p class="af-tip">开启后，每次保存会自动推送到云端；打开网站会自动拉取最新。两个域名都要在 Cloudflare 绑定<strong>同一个</strong> KV 命名空间（变量名必须叫 SYNC_KV）才会互通。密钥即账号：知道密钥的人可读写这份数据，请勿外泄。仍建议偶尔用下方「导出备份」留一份本地副本。</p>
+        <p class="af-tip">开启后，每次保存会自动推送到云端；打开网站会自动拉取最新。所有域名（xuetang.201573.xyz 等）都统一读写<strong>同一份</strong>云端数据，天然互通，无需各自配置。密钥即账号：知道密钥的人可读写这份数据，请勿外泄。仍建议偶尔用下方「导出备份」留一份本地副本。</p>
       </div>
 
       <div class="sec-title">💾 数据备份（导出 / 导入文件）<small>把全部数据（含后台素材、七年级英语词库等）存成文件，换设备 / 清缓存前请先备份</small></div>
