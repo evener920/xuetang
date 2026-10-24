@@ -651,6 +651,11 @@
   function todayStrNow(){ return fmt(new Date()); }
   function pointToday(){ return (state.pointLog||[]).filter(x=>x.t===todayStrNow() && x.n>0).reduce((a,b)=>a+b.n,0); }
   function pointWeek(){ const ws=weekDatesMondayStart(); return (state.pointLog||[]).filter(x=>x.n>0 && ws.indexOf(x.t)>=0).reduce((a,b)=>a+b.n,0); }
+  // 当日/本周净分 = 正分 - 行为扣分：「今日/本周总分」按净分展示（用户诉求：今日行为扣分要减到当日总分里），
+  // 扣分明细仍看首页红徽章、本周页「🚨 行为扣分记录」、奖励页「今日行为扣分」卡，两本账不混但总数要净
+  function pointTodayNet(){ return pointToday() - penaltyToday(); }
+  function pointWeekNet(){ return pointWeek() - penaltyLogWeek().reduce((a,b)=>a-b.n,0); }
+  function sgn(n){ return n>0 ? "+"+n : ""+n; }
   function hasAwardHook(h){ return (state.pointLog||[]).some(x=>x.hook===h); }
   function award(n, note, hook){
     if(hook && hasAwardHook(hook)) return false; // 同一事项不重复计分（取消再打卡也不刷分）
@@ -1405,6 +1410,7 @@
 
     const learnedList = Object.keys(state.learned).map(k=>INDEX[k]).filter(Boolean);
     const todayList = learnedList.filter(it=>state.learned[it.key]===todayStr);
+    const ptNet = pointTodayNet(); // 今日净分（正分-扣分），hero 徽章按净分展示
 
     // 热门标签（诗词标签词频 Top）
     const freq = {};
@@ -1449,7 +1455,7 @@
         <div>
           <h2>今日学习</h2>
           <p>${d.getMonth()+1} 月 ${d.getDate()} 日 星期${WEEK[d.getDay()]} · 🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 共 ${total} 项任务</p>
-          <div style="margin-top:6px"><span class="badge" style="background:#fef3c7;color:#b45309">🏆 今日 +${pointToday()} 分</span>${penaltyToday()?` <span class="badge" style="background:#fee2e2;color:#b91c1c">⚠️ 今日扣分 -${penaltyToday()} 分</span>`:""} <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
+          <div style="margin-top:6px"><span class="badge" style="${ptNet<0?"background:#fee2e2;color:#b91c1c":"background:#fef3c7;color:#b45309"}">🏆 今日 ${sgn(ptNet)} 分</span>${penaltyToday()?` <span class="badge" style="background:#fee2e2;color:#b91c1c">⚠️ 今日扣分 -${penaltyToday()} 分</span>`:""} <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span class="badge" style="background:#eef2ff;color:#3730a3">📐 卡片顺序</span>
             <button class="chip ${state.orderMode!=="smart"?"on":""}" data-order-toggle="seq">顺序（按导入序）</button>
@@ -1759,12 +1765,14 @@
     const lib = studyLibData();
     // 本周行为扣分记录（与习惯周跟踪放一起）
     const penWeek = penaltyLogWeek();
+    const penWkTotal = penWeek.reduce((a,b)=>a-b.n,0); // 本周共扣（净分用）
+    const ptNet = pointTodayNet(), pwNet = pointWeekNet(); // 今日/本周净分（正分-扣分）
 
     el.innerHTML = `
       <div class="hero">
         <div>
           <h2>📊 本周学习</h2>
-          <p>🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 复习到期 ${reviews.length} 项（已完成 ${reviewDoneCnt}） · 今日 <b style="color:#15803d">+${pointToday()}</b>${penaltyToday()?` <b style="color:#b91c1c">-${penaltyToday()}</b>`:""} · 本周 +${pointWeek()} · 累计 <b>${state.points}</b> 分</p>
+          <p>🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 复习到期 ${reviews.length} 项（已完成 ${reviewDoneCnt}） · 今日 <b style="${ptNet<0?"color:#b91c1c":"color:#15803d"}">${sgn(ptNet)}</b>${penaltyToday()&&pointToday()>0?` <span style="font-size:12px;color:#b91c1c">（扣 ${penaltyToday()}）</span>`:""} · 本周 <b style="${pwNet<0?"color:#b91c1c":""}">${sgn(pwNet)}</b>${penWkTotal&&pointWeek()>0?` <span style="font-size:12px;color:#b91c1c">（扣 ${penWkTotal}）</span>`:""} · 累计 <b>${state.points}</b> 分</p>
         </div>
         <div class="done" style="min-width:180px;">
           今日复习 ${reviewDoneCnt} / ${reviews.length}
@@ -1801,11 +1809,11 @@
         ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
       </div>
 
-      <div class="sec-title">📊 学习看板 <small>打卡与积分概览（今日 / 本周）· 扣分在「今日」行以红字显示</small></div>
+      <div class="sec-title">📊 学习看板 <small>打卡与积分概览（今日 / 本周）· 积分按净分展示，行为扣分已减入今日/本周总分，扣分明细见下方记录区</small></div>
       <div class="dash-grid">
         <div class="dash-card"><div class="dc-name">🏆 积分</div>
-          <div class="dc-row"><span>今日</span><b>+${pointToday()}${penaltyToday()?` <span style="color:#b91c1c;font-size:13px">-${penaltyToday()}</span>`:""}</b></div>
-          <div class="dc-row"><span>本周</span><b>+${pointWeek()}</b></div>
+          <div class="dc-row"><span>今日</span><b${ptNet<0?' style="color:#b91c1c"':""}>${sgn(ptNet)}${penaltyToday()&&pointToday()>0?` <span style="color:#b91c1c;font-size:13px">（扣 ${penaltyToday()}）</span>`:""}</b></div>
+          <div class="dc-row"><span>本周</span><b${pwNet<0?' style="color:#b91c1c"':""}>${sgn(pwNet)}${penWkTotal&&pointWeek()>0?` <span style="color:#b91c1c;font-size:13px">（扣 ${penWkTotal}）</span>`:""}</b></div>
           <div class="dc-row"><span>累计</span><b>${state.points}</b></div></div>
         ${SUBJ.map(s=>`<div class="dash-card"><div class="dc-name">${s}</div>
           <div class="dc-row"><span>今日打卡</span><b>${subjCount(todayList,s)}</b></div>
@@ -2776,12 +2784,13 @@
     const streak=currentStreak();
     const nextMile=streakMilestones().find(([d])=>d>streak)||null;
     const PR = pointRules();
+    const ptNet = pointTodayNet(), pwNet = pointWeekNet(); // 今日/本周净分（正分-扣分）
 
     el.innerHTML = `
       <div class="hero">
         <div>
           <h2>🎁 我的积分</h2>
-          <p>${esc(state.grade)} · 今日 +${pointToday()} 分${penaltyToday()?` · <span style="color:#fecaca;font-weight:700">-${penaltyToday()} 分</span>`:""} · 本周 +${pointWeek()} 分 · 最近 7 天平均 ${avg} 分/天${nextMile?` · 再学 ${nextMile[0]-streak} 天解锁「连续 ${nextMile[0]} 天」+${nextMile[1]} 分`:""}</p>
+          <p>${esc(state.grade)} · 今日 ${ptNet<0?`<b style="color:#fecaca">${sgn(ptNet)}</b>`:sgn(ptNet)} 分${penaltyToday()&&pointToday()>0?`<span style="color:#fecaca;font-weight:700">（扣 ${penaltyToday()}）</span>`:""} · 本周 ${pwNet<0?`<b style="color:#fecaca">${sgn(pwNet)}</b>`:sgn(pwNet)} 分 · 最近 7 天平均 ${avg} 分/天${nextMile?` · 再学 ${nextMile[0]-streak} 天解锁「连续 ${nextMile[0]} 天」+${nextMile[1]} 分`:""}</p>
         </div>
         <div class="done" style="min-width:200px;">
           <div style="font-size:28px;font-weight:800;color:#4c1d95">${state.points} <span style="font-size:14px;font-weight:600;opacity:.75">分</span></div>
@@ -2792,8 +2801,8 @@
 
       <div class="stat-strip">
         <div class="stat"><div class="num">${state.points}</div><div class="lbl">总积分</div></div>
-        <div class="stat"><div class="num">${pointToday()}</div><div class="lbl">今日</div></div>
-        <div class="stat"><div class="num">${pointWeek()}</div><div class="lbl">本周</div></div>
+        <div class="stat"><div class="num"${ptNet<0?' style="color:#b91c1c"':""}>${ptNet}</div><div class="lbl">今日</div></div>
+        <div class="stat"><div class="num"${pwNet<0?' style="color:#b91c1c"':""}>${pwNet}</div><div class="lbl">本周</div></div>
         <div class="stat"><div class="num" style="${penaltyToday()?"color:#b91c1c":""}">${penaltyToday()?"-"+penaltyToday():"0"}</div><div class="lbl">今日行为扣分</div></div>
         <div class="stat"><div class="num">${streak}</div><div class="lbl">连续学习天数</div></div>
         <div class="stat"><div class="num">${(state.redeems||[]).filter(r=>r.status==="待兑现").length}</div><div class="lbl">待家长兑现</div></div>
@@ -3667,7 +3676,7 @@
       pwHash, setAdminPassword, wordQuizOptions, openAdminEdit,
       archiveCreate, archiveRestore, loadArchives, renderWeek, renderHome, refreshView,
       renderReward, award, awardQuiet, redeemReward, rewardList, renderRes, currentStreak,
-      get biView(){ return biView; }, settleBonuses, pointToday, POINT_RULES, DEFAULT_REWARDS,
+      get biView(){ return biView; }, settleBonuses, pointToday, pointTodayNet, pointWeekNet, POINT_RULES, DEFAULT_REWARDS,
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, penaltyLogWeek, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
       todayTasks, poolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },

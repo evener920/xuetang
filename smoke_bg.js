@@ -5,7 +5,7 @@
 // ④ 后台无「我的素材」（诉求4）
 // ⑤ 科目页添加按钮（诉求2）：subjectTypesOf/openSubjectAdd/renderSubject chips
 // ⑥ 资源页「历史」并入「人文」（诉求7）：biData subjOf 归一
-// ⑦ 版本号：10×bm
+// ⑦ 版本号：10×bn
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -185,12 +185,14 @@ safe('② 首页行为扣分', ()=>{
   ok('  首页扣分区标注「不可撤销」', home.includes('不可撤销'), '');
   ok('  首页无扣分撤销按钮（data-pen-undo）', !home.includes('data-pen-undo'), '');
   ok('  首页 hero 显示红色「今日扣分」徽章', home.includes('今日扣分 -') && home.includes('background:#fee2e2'), '');
+  ok('  首页「今日」徽章按净分展示（无正分时 -5）', home.includes('🏆 今日 -5 分'), '');
   ok('  首页累计积分已扣减', home.includes('累计 '+(p0-5)+' 分'), '累计='+((home.match(/累计 (\d+) 分/)||[])[1]));
 
-  // 本周页：hero 积分行 + 学习看板积分卡（扣分红字）
+  // 本周页：hero 积分行 + 学习看板积分卡（净分：扣分已减入今日/本周总分）
   S.renderWeek();
   const wkPts = ctx.window.document.getElementById('view-week').innerHTML;
-  ok('  本周页 hero 显示 今日/本周/累计 积分', /今日 <b style="color:#15803d">\+\d+<\/b> <b style="color:#b91c1c">-\d+<\/b> · 本周 \+\d+ · 累计 <b>-?\d+<\/b> 分/.test(wkPts), '');
+  ok('  本周页 hero 显示 今日/本周/累计 净分积分', /今日 <b style="color:#(?:15803d|b91c1c)">[+-]?\d+<\/b> · 本周 <b[^>]*>[+-]?\d+<\/b> · 累计 <b>-?\d+<\/b> 分/.test(wkPts), '');
+  ok('  本周页积分卡「今日」为净分（无正分时显示 -5）', wkPts.includes('<span>今日</span><b style="color:#b91c1c">-5</b>'), '');
   ok('  本周页学习看板含「🏆 积分」卡', wkPts.includes('🏆 积分'), '');
 
   // 行为扣分记录搬到本周页、与习惯放一起（诉求：后台里的扣分记录移到本周页签）
@@ -207,6 +209,24 @@ safe('② 首页行为扣分', ()=>{
   S.renderWeek();
   const wkAfter = ctx.window.document.getElementById('view-week').innerHTML;
   ok('  撤销后本周页显示空态文案', wkAfter.includes('本周还没有行为扣分'), '');
+
+  // bn：净分展示——有正分时，今日/本周总分 = 正分 - 行为扣分（诉求：扣分要减到当日总分里）
+  S.award(30, '测试学会积分', 't:net30');
+  const rp2 = S.penalize('p2'); // 房间凌乱 -5
+  ok('  正分场景再扣一条（房间凌乱）', rp2===5, 'r='+rp2);
+  ok('  pointTodayNet/pointWeekNet = 正分-扣分', S.pointTodayNet()===25 && S.pointWeekNet()===25, 'today='+S.pointTodayNet()+' week='+S.pointWeekNet());
+  S.renderHome();
+  const home2 = ctx.window.document.getElementById('view-home').innerHTML;
+  ok('  首页「今日」徽章为净分 +25', home2.includes('🏆 今日 +25 分'), '');
+  ok('  首页扣分徽章仍显示明细 -5', home2.includes('⚠️ 今日扣分 -5 分'), '');
+  S.renderWeek();
+  const wk2 = ctx.window.document.getElementById('view-week').innerHTML;
+  ok('  本周页 hero 今日为净分并标注扣分', /今日 <b style="color:#15803d">\+25<\/b> <span style="font-size:12px;color:#b91c1c">（扣 5）<\/span>/.test(wk2), '');
+  ok('  本周页积分卡 今日/本周 均为净分 +25（扣 5）', wk2.includes('<span>今日</span><b>+25 <span style="color:#b91c1c;font-size:13px">（扣 5）</span></b>') && wk2.includes('<span>本周</span><b>+25 <span style="color:#b91c1c;font-size:13px">（扣 5）</span></b>'), '');
+  S.renderReward();
+  const rw2 = ctx.window.document.getElementById('view-reward').innerHTML;
+  ok('  奖励页 hero 今日/本周为净分', rw2.includes('今日 +25 分') && rw2.includes('本周 +25 分'), '');
+  ok('  奖励页 stat 今日/本周为净分数值 25', rw2.includes('<div class="num">25</div><div class="lbl">今日</div>') && rw2.includes('<div class="num">25</div><div class="lbl">本周</div>'), '');
 });
 
 /* ---------- ③ 今日完成默认折叠（诉求6） ---------- */
@@ -335,6 +355,7 @@ safe('⑦ 版本号', ()=>{
   const bk=(html.match(/20261024bk/g)||[]).length;
   const bl=(html.match(/20261024bl/g)||[]).length;
   const bm=(html.match(/20261024bm/g)||[]).length;
+  const bn=(html.match(/20261024bn/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -342,8 +363,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bm', bm===10, 'bm='+bm);
-  ok('  0 处 bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
+  ok('  10 处 bn', bn===10, 'bn='+bn);
+  ok('  0 处 bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj', bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;
