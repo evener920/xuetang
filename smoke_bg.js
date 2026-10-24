@@ -304,6 +304,7 @@ safe('⑧ 全视图渲染回归', ()=>{
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
   const bj=(html.match(/20261024bj/g)||[]).length;
+  const bk=(html.match(/20261024bk/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -311,8 +312,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bj', bj===10, 'bj='+bj);
-  ok('  0 处 bi/bh/bg/bf/be/bd/ba', bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0, 'bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba);
+  ok('  10 处 bk', bk===10, 'bk='+bk);
+  ok('  0 处 bi/bh/bg/bf/be/bd/ba/bj', bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0, 'bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj);
 });
 
 let pass=0;

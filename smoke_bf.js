@@ -160,9 +160,10 @@ safe('④ 版本号', ()=>{
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bj=(html.match(/20261024bj/g)||[]).length;
+  const bk=(html.match(/20261024bk/g)||[]).length;
   ok('  0 处 be', be===0, 'be='+be);
-  ok('  0 处 bf/bg/bh/bi（已升级至 bj）', bf===0&&bg===0&&bh===0&&bi===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi);
-  ok('  10 处 bj', bj===10, 'bj='+bj);
+  ok('  0 处 bf/bg/bh/bi（已升级至 bk）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi);
+  ok('  10 处 bk', bk===10, 'bk='+bk);
 });
 
 let pass=0;

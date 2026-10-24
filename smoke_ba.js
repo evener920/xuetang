@@ -170,11 +170,12 @@ safe('⑥ 版本号', ()=>{
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bj=(html.match(/20261024bj/g)||[]).length;
+  const bk=(html.match(/20261024bk/g)||[]).length;
   ok('  0 处 az', az===0, 'az='+az);
   ok('  0 处 ba', ba===0, 'ba='+ba);
-  ok('  0 处 bd（已升级至 bj）', bd===0, 'bd='+bd);
-  ok('  0 处 bf/bg/bh/bi（已升级至 bj）', bf===0&&bg===0&&bh===0&&bi===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi);
-  ok('  10 处 bj（含听力卡脚本）', bj===10, 'bj='+bj);
+  ok('  0 处 bd（已升级至 bk）', bd===0, 'bd='+bd);
+  ok('  0 处 bf/bg/bh/bi（已升级至 bk）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi);
+  ok('  10 处 bk（含听力卡脚本）', bk===10, 'bk='+bk);
   ok('  引入 english_listening_4.js', html.includes('english_listening_4.js'), '');
 });
 
