@@ -266,9 +266,44 @@ safe('⑥ 资源页历史并入人文', ()=>{
   ok('  biData 含 subjOf 归一', code.includes('(x.subject==="历史") ? "人文" : x.subject'), '');
 });
 
+/* ---------- ⑧ 全视图渲染回归（bg 曾因 subjOf 作用域外引用导致 renderRes 整体白屏，此块防再犯） ---------- */
+safe('⑧ 全视图渲染回归', ()=>{
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  const doc = ctx.window.document;
+  const views = [
+    ['首页',   ()=>S.renderHome(),                 'view-home'],
+    ['本周',   ()=>S.renderWeek(),                 'view-week'],
+    ['奖励',   ()=>S.renderReward(),               'view-reward'],
+    ['资源',   ()=>S.renderRes(),                  'view-res'],
+    ['语文',   ()=>S.renderSubject('语文'),         'view-subject'],
+    ['数学',   ()=>S.renderSubject('数学'),         'view-subject'],
+    ['英语',   ()=>S.renderSubject('英语'),         'view-subject'],
+    ['科学',   ()=>S.renderSubject('科学'),         'view-subject'],
+    ['人文',   ()=>S.renderSubject('人文'),         'view-subject'],
+    ['后台',   ()=>S.renderAdmin(),                'view-admin'],
+  ];
+  views.forEach(([name, fn, vid])=>{
+    let err='';
+    try{ fn(); }catch(e){ err=e.message; }
+    const html = (doc.getElementById(vid)||{}).innerHTML || '';
+    ok('  '+name+' 页渲染成功且非空', !err && html.length>500, err || ('len='+html.length));
+  });
+  // 资源页关键结构（磁贴 / 分面 chips / 卡片）
+  const resHtml = doc.getElementById('view-res').innerHTML;
+  ok('  资源页含学科板块磁贴', resHtml.includes('res-tile'), '');
+  ok('  资源页含分面筛选 chips', resHtml.includes('data-bi-subj') && resHtml.includes('data-bi-grade'), '');
+  ok('  资源页含内容卡片', resHtml.includes('res-card'), '');
+  // go() 路由切换不抛错
+  let goErr='';
+  try{ ['home','week','reward','res','admin'].forEach(v=>S.go(v)); }catch(e){ goErr=e.message; }
+  ok('  go() 路由切换无异常', goErr==='', goErr);
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
+  const bj=(html.match(/20261024bj/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -276,8 +311,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bi', bi===10, 'bi='+bi);
-  ok('  0 处 bh/bg/bf/be/bd/ba', bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0, 'bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba);
+  ok('  10 处 bj', bj===10, 'bj='+bj);
+  ok('  0 处 bi/bh/bg/bf/be/bd/ba', bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0, 'bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba);
 });
 
 let pass=0;

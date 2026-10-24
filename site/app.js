@@ -1028,6 +1028,8 @@
     return on ? `background:${c[1]};border-color:${c[1]};color:#fff`
               : `background:${c[0]};border-color:${c[0]};color:${c[1]}`;
   }
+  // 学科归一：「历史」并入「人文」（资源页不再单列历史学科；biData 与 renderRes 共用，勿放函数内）
+  function subjOf(x){ return (x.subject==="历史") ? "人文" : x.subject; }
   function toast(msg){
     const t=$("#toast"); t.textContent=msg; t.hidden=false;
     clearTimeout(t._tm); t._tm=setTimeout(()=>t.hidden=true, 2200);
@@ -2899,8 +2901,6 @@
     const builtins = ALL.filter(x=>x.key!=="practice:maththought" && !/^mtq:/.test(x.key));
     // 结构型标签（年级/册/学科/类型名）不应污染「主题标签」分面，避免与对应维度重复
     const isStructTag = t => !t || GRADES.includes(t) || VOLUMES.includes(t) || SUBJECT_TYPES[t] || Object.values(SUBJECT_TYPES).some(arr=>arr.includes(t));
-    // 学科归一：「历史」并入「人文」（资源页不再单列历史学科）
-    const subjOf = x => (x.subject==="历史") ? "人文" : x.subject;
     // 联动筛选：每个维度的候选与计数，都在「其他维度已选条件」的范围内计算
     const matchExcept = except => builtins.filter(x=>{
       if(except!=="subj"   && biView.subj   !=="全部" && subjOf(x)!==biView.subj)   return false;
