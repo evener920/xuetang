@@ -1322,6 +1322,58 @@
   }
 
   /* ---------- 本周页：复习 · 看板 · 周计划（与今日任务分页，避免首页过挤） ---------- */
+  /* ---------- 本周目标进度（总量/已学/未学 + 明细弹窗） ---------- */
+  // 本周周计划排到的板块（去重）× 各自内容池 → 统计学习总量/已学/未学
+  function weekGoalData(){
+    const plan7 = weekPlan();
+    const secs = [];
+    plan7.forEach(day=>day.forEach(s=>{
+      if(!secs.some(x=>x.subject===s.subject&&x.type===s.type)) secs.push({subject:s.subject, type:s.type});
+    }));
+    const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
+    const out = secs.map(sec=>{
+      let pool=[]; try{ pool=poolFor(sec.subject, sec.type); }catch(e){ pool=[]; }
+      const items = pool.map(it=>({ it, done: isDone(it.key), at: state.learned[it.key]||"" }));
+      items.sort((a,b)=> (a.done===b.done) ? 0 : (a.done?1:-1)); // 未学排前
+      return { subject:sec.subject, type:sec.type, items, done: items.filter(x=>x.done).length, total: items.length };
+    }).filter(s=>s.total>0);
+    return {
+      sections: out,
+      total: out.reduce((a,s)=>a+s.total,0),
+      done: out.reduce((a,s)=>a+s.done,0)
+    };
+  }
+  // 明细弹窗：按板块分组列出每个条目的已学/未学状态；点击条目可打开卡片详情
+  function openWeekGoal(){
+    const data = weekGoalData();
+    $("#modal-body").innerHTML = `
+      <div class="m-type">🎯 本周目标明细</div>
+      <div style="margin:6px 0 12px;font-size:14px;color:#475569">
+        共 <strong>${data.total}</strong> 项 · 已学 <strong style="color:#15803d">${data.done}</strong> · 未学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
+        （本周计划排到的 ${data.sections.length} 个板块，按当前年级「${esc(state.grade)}」统计）
+      </div>
+      ${data.sections.map(s=>`
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <div style="font-weight:700">${esc(s.subject)} · ${esc(s.type)}</div>
+            <div style="font-size:13px;color:#475569">已学 ${s.done} / ${s.total}</div>
+          </div>
+          <div class="pbar" style="margin:0 0 8px"><div class="pfill" style="width:${s.total?Math.round(s.done/s.total*100):0}%"></div></div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${s.items.map(x=>`
+              <button class="tag" data-wg-key="${esc(x.it.key)}" title="${x.done?("已学："+x.at):"未学"}"
+                style="cursor:pointer;${x.done?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":"background:#fff1f2;border-color:#fecdd3;color:#be123c;"}">
+                ${esc(stripTags(x.it.title||x.it.name||x.it.key)).slice(0,18)}${x.done?" ✓":" ·"}
+              </button>`).join("")}
+          </div>
+        </div>`).join("")}
+    `;
+    $("#modal-body").querySelectorAll("[data-wg-key]").forEach(b=>{
+      b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.wgKey]; if(it) openModal(it); });
+    });
+    $("#modal").hidden=false; document.body.style.overflow="hidden";
+  }
+
   function renderWeek(){
     const el = $("#view-week");
     const d = new Date();
@@ -1348,6 +1400,8 @@
 
     const learnedCount = Object.keys(state.learned).length;
     const favCount = Object.keys(state.fav).length;
+    // 本周目标进度（周计划板块的内容池：总量/已学/未学，点击看明细）
+    const goal = weekGoalData();
 
     el.innerHTML = `
       <div class="hero">
@@ -1358,6 +1412,17 @@
         <div class="done" style="min-width:180px;">
           今日复习 ${reviewDoneCnt} / ${reviews.length}
           <div class="pbar"><div class="pfill" style="width:${reviews.length?Math.round(reviewDoneCnt/reviews.length*100):100}%"></div></div>
+        </div>
+      </div>
+
+      <div class="sec-title">🎯 本周目标进度 <small>本周计划板块的学习总量 · 点击卡片查看明细</small></div>
+      <div class="stat-strip" id="wkGoalCard" style="cursor:pointer" title="点击查看本周目标明细">
+        <div class="stat"><div class="num">${goal.total}</div><div class="lbl">学习总量</div></div>
+        <div class="stat"><div class="num" style="color:#15803d">${goal.done}</div><div class="lbl">已学习</div></div>
+        <div class="stat"><div class="num" style="color:#be123c">${goal.total-goal.done}</div><div class="lbl">未学习</div></div>
+        <div class="stat" style="flex:2;min-width:220px">
+          <div class="lbl" style="margin-bottom:4px">目标完成率 ${goal.total?Math.round(goal.done/goal.total*100):0}%</div>
+          <div class="pbar" style="margin:0"><div class="pfill" style="width:${goal.total?Math.round(goal.done/goal.total*100):0}%"></div></div>
         </div>
       </div>
 
@@ -1428,6 +1493,8 @@
         <span class="af-tip">总开关：关闭的「学科·类型」不参与周计划安排（已存本地）</span>
       </div>
     `;
+    const wgCard = $("#wkGoalCard");
+    if(wgCard) wgCard.addEventListener("click", openWeekGoal);
   }
 
   /* ---------- 学科栏目页 ---------- */
@@ -2945,7 +3012,7 @@
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
-      cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }
+      cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal
     };
   }
 })();
