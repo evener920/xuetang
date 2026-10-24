@@ -206,7 +206,7 @@
     "语文":["诗词","成语","文言","成语动画廊","作文","故事","阅读","课文"],
     "数学":["公式","计算题","应用题","每日一练","思维母题"],
     "英语":["单词","听力","短语","句子","阅读","课文背诵"],
-    "科学":["实验","知识"],
+    "科学":["实验","知识","动画"],
     "人文":["史实","人物","阅读"],
     // 初中「小四门 + 理化」：切到七/八/九年级时，导航与打卡范围自动换成这些科目
     "生物":["知识","练习"],
@@ -984,7 +984,7 @@
       "文言":["#fff7ed","#ea580c"],"成语动画廊":["#fef3c7","#d97706"],"作文":["#ecfeff","#0891b2"],
       "故事":["#f0fdf4","#16a34a"],"阅读":["#eef2ff","#4f46e5"],
       "单词":["#ecfdf5","#0d9488"],"应用题":["#fdf2f8","#db2777"],"计算题":["#ecfdf5","#0d9488"],
-      "知识":["#ecfdf5","#059669"],"练习":["#fff7ed","#ea580c"],
+      "知识":["#ecfdf5","#059669"],"动画":["#fff7ed","#d97706"],"练习":["#fff7ed","#ea580c"],
       "史实":["#faf5ff","#9333ea"],"人物":["#fef2f2","#dc2626"]
     };
     const [bg,fg]=map[type]||["#f1f5f9","#475569"];
@@ -1107,7 +1107,8 @@
     const seeds = [
       {flag:"historyGuide", src:(typeof window!=="undefined" && window.HISTORY_GUIDE_7)||[]},
       {flag:"englishReading4v2", src:(typeof window!=="undefined" && window.ENGLISH_READING_4)||[]},
-      {flag:"englishListening4", src:(typeof window!=="undefined" && window.ENGLISH_LISTENING_4)||[]}
+      {flag:"englishListening4", src:(typeof window!=="undefined" && window.ENGLISH_LISTENING_4)||[]},
+      {flag:"scienceGallery", src:(typeof window!=="undefined" && window.SCIENCE_GALLERY)||[]}
     ];
     state.seeded = state.seeded || {};
     // 迁移：清理旧版「一页两篇」英语阅读卡（rd4:p*），避免用户本地新旧重复、新版不显示
@@ -1123,6 +1124,11 @@
       // 导致听力卡永远不再注入。flag 已置位但一张 ls4 卡都没有 → 清 flag 重新注入。
       if(s.flag==="englishListening4" && state.seeded[s.flag]
          && !((state.custom||[]).some(x=>x.key && /^ls4:\d+$/.test(x.key)))){
+        state.seeded[s.flag] = false;
+      }
+      // 自愈（scienceGallery 通用）：flag 已置位但一张 sci: 卡都没有 → 清 flag 重新注入
+      if(s.flag==="scienceGallery" && state.seeded[s.flag]
+         && !((state.custom||[]).some(x=>x.key && /^sci:\d+$/.test(x.key)))){
         state.seeded[s.flag] = false;
       }
       if(state.seeded[s.flag]) return;
@@ -1257,7 +1263,7 @@
         ${it.unit?`<span>#${esc(it.unit)}</span>`:""}
         ${extraMeta||""}
         ${it.html?`<span class="play">📖 图文</span>`:""}
-        ${vids.length?`<span class="play">▶ ${it.type==="成语动画廊"?"动画":"视频"}</span>`:""}
+        ${vids.length?`<span class="play">▶ ${it.type==="成语动画廊"||it.type==="动画"?"动画":"视频"}</span>`:""}
       </div>
       <div class="c-stars">${starHTML}</div>
       <h4>${esc(it.title)}</h4>
