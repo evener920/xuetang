@@ -322,31 +322,9 @@
     if(ps.del && ps.del[k]) return false;
     return planRecommended().some(s=>checkinKey(s.subject,s.type)===k);
   }
-  // 计划 ⊆ 目标 联动：某板块被加入计划、但其内容尚未「加入学习」（目标内 0 条）时，
-  // 自动把该板块【当前年级】内容并入学习目标（与「学习库」整板块「全部加入学习」同一口径），保证三处数据一致。
-  // 已部分加入（含其他年级）的板块不补（尊重用户的勾选选择）。
-  function planSyncGoalJoin(subject,type){
-    const joinedAll = poolForAll(subject,type).filter(it=>state.studySet&&state.studySet[it.key]).length;
-    if(joinedAll>0) return 0;
-    let pool=[]; try{ pool=poolFor(subject,type); }catch(e){ pool=[]; } // 当前年级（与「加入学习」同口径）
-    state.studySet = state.studySet || {};
-    pool.forEach(it=>{ state.studySet[it.key]=true; });
-    return pool.length;
-  }
-  // 目标抽空（该板块「加入学习」归零）后若仍在计划中 → 自动移出计划（计划 ⊆ 目标，不能排没有目标的内容）
-  function planAutoRemoveIfEmpty(subject,type){
-    if(!planHas(subject,type)) return false;
-    const joinedAll = poolForAll(subject,type).filter(it=>state.studySet&&state.studySet[it.key]).length;
-    if(joinedAll>0) return false;
-    state.planSecs = state.planSecs || {add:{},del:{}};
-    const k=checkinKey(subject,type);
-    delete state.planSecs.add[k];
-    if(planRecommended().some(s=>checkinKey(s.subject,s.type)===k)) state.planSecs.del[k]=true;
-    save();
-    return true;
-  }
-  // 增删胶囊：返回 {inPlan, joined} —— inPlan=操作后是否在计划内；joined=本次自动并入目标的学习条目数
-  // 加入计划 → 自动把内容并入「学习目标」（计划是目标的分解）；移出计划不删目标内容
+  // 学习目标 ⊇ 本周计划 已合并为同一概念：本周计划里的模块，其内容即学习目标（进度条按计划模块统计）。
+  // 因此「加入本周计划」即把该模块纳入学习目标；不再有独立的「加入学习」门槛，也无需计划↔目标的双向同步。
+  // 增删胶囊：返回 {inPlan, joined} —— inPlan=操作后是否在计划内；joined 保留字段(恒为0，兼容旧调用)
   function planToggle(subject,type){
     const k=checkinKey(subject,type);
     state.planSecs = state.planSecs || {add:{},del:{}};
@@ -361,17 +339,15 @@
     }else{
       state.planSecs.add[k]=true;
       delete state.planSecs.del[k];
-      const joined = planSyncGoalJoin(subject,type); // 计划⊆目标：加入计划即把内容并入目标
       save();
-      return { inPlan:true, joined };
+      return { inPlan:true, joined:0 };
     }
   }
-  // 恢复 WB 推荐版本（清除全部增删）；推荐版同样保持 计划⊆目标（把推荐板块内容并入目标，缺省一致）
+  // 恢复 WB 推荐版本（清除全部增删）
   function planReset(){
     state.planSecs = {add:{},del:{}};
-    let joined=0; planSecs().forEach(s=>{ joined += planSyncGoalJoin(s.subject,s.type); });
     save();
-    return { inPlan:planSecs().length, joined };
+    return { inPlan:planSecs().length, joined:0 };
   }
   // 计划开关按钮三态文案（学习库弹窗 / 板块选择器复用）
   function planInLabel(subject,type){
@@ -380,7 +356,7 @@
   function planInTitle(subject,type){
     if(planHas(subject,type)) return "移出本周计划（内容与学习目标不受影响）";
     if(!sectionActive(subject,type)) return "板块未开始或已结课，暂不能排入本周计划";
-    return "把该板块排进每周计划（首页今日任务会带上，并自动加入学习目标）";
+    return "把该板块排进每周计划（首页今日任务会带上，并成为「🎯 学习目标」）";
   }
   function planAddDisabled(subject,type){
     return !planHas(subject,type) && !sectionActive(subject,type);
@@ -393,8 +369,7 @@
       <div class="m-type">🗓 本周计划 · 板块管理</div>
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
         WB 推荐已按「主课多、副课少」自动排好每周分布；在这里<b>增删板块胶囊</b>，排布会自动重算。
-        与「📖 学习库」「🎯 学习目标」联动：加入计划的板块会排进首页今日任务，并自动加入学习目标（计划是目标的分解）；
-        把板块内容从目标移空会自动移出计划。
+        从「📖 学习库」点「加入本周计划」的板块，其内容即成为「🎯 学习目标」（进度条按计划模块统计），并排进首页今日任务。
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <button class="btn" data-plan-reset="1" title="清除全部增删，恢复 WB 推荐版本">↺ 恢复推荐</button>
@@ -409,7 +384,7 @@
           const why=!act ? (sp.start && fmt(new Date())<sp.start ? "未开始" : "已结课") : "";
           return `<div class="admin-item">
             <div class="ai-main"><b>${esc(s.subject)} · ${esc(s.type)}</b>
-              <span style="font-size:12px;color:var(--muted)">${s.total} 项 · 已学 ${s.done}${s.joined?` · 🎯 目标内 ${s.joined}`:` · 未加入目标`}${why?` · ${why}`:""}</span></div>
+              <span style="font-size:12px;color:var(--muted)">${s.total} 项 · 已学 ${s.done}${s.inPlan?` · 🗓 计划中`:` · 未加入计划`}${why?` · ${why}`:""}</span></div>
             <button class="btn ${inP?"":"primary"}" data-plan-toggle="${esc(k)}" title="${planInTitle(s.subject,s.type)}" ${planAddDisabled(s.subject,s.type)?"disabled":""}>${planInLabel(s.subject,s.type)}</button>
           </div>`;
         }).join("")}
@@ -423,12 +398,12 @@
       const now=planHas(k.slice(0,i),k.slice(i+1));
       const r=planToggle(k.slice(0,i),k.slice(i+1));
       openPlanPicker(); refreshView();
-      toast(now?"已移出本周计划，排布已重算 ↺":`已加入本周计划，排布已重算 🗓${r.joined?` · 同步加入学习目标 ${r.joined} 项 🎯`:""}`);
+      toast(now?"已移出本周计划，学习目标同步移出 ↺":"已加入本周计划，成为学习目标并进入每周排程 🗓");
     }));
     const rb=mb.querySelector('[data-plan-reset="1"]');
     if(rb) rb.addEventListener("click",()=>{
       const r=planReset(); openPlanPicker(); refreshView();
-      toast(`已恢复 WB 推荐计划 ↺${r.joined?` · 同步加入学习目标 ${r.joined} 项 🎯`:""}`);
+      toast(`已恢复 WB 推荐计划 ↺`);
     });
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
@@ -506,7 +481,7 @@
   }
   // 普通板块：按「卡片顺序」偏好推进
   function sectionItems(subject, type, quota){
-    const pool = libPoolFor(subject, type); // 本年级 + 已加入学习的其他年级（年级筛选扩大选择范围后生效）
+    const pool = libPoolFor(subject, type); // 当前年级内容（计划/目标口径）
     if(!pool.length) return [];
     const semDay = Math.max(0, dayDiff(state.semesterStart));
     // 智能模式（默认关闭）：顺序前沿 + 掌握度加权（弱项优先），但显示时保持相对顺序
@@ -666,7 +641,6 @@
     state.custom = state.custom || [];  // 后台添加的素材（已归一化为标准条目）
     state.overrides = state.overrides || {}; // 对「内置教材」条目的覆盖版本（key = 内置条目 key，仅本机保存，可还原）
     state.checkin = state.checkin || {}; // 首页每日打卡范围（学科→true/false，缺省=开启）
-    state.studySet = state.studySet || {}; // 学习库：加入学习目标的条目（key→true，按学生独立；只有加入的才计入「学习目标」统计）
     state.mastery = state.mastery || {}; // 每张内容卡的掌握度星级 0~5（按学生独立）
     state.sectionPlan = state.sectionPlan || {}; // 每个「学科·类型」板块的起止日/每周频次（按学生独立）
     // 本周计划板块胶囊（按学生独立）：WB 推荐为底，用户增删记 delta（add=新增、del=移出推荐）
@@ -1041,11 +1015,11 @@
   }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","studySet","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules","orderMode","planSecs","planGoalLink2026"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules","orderMode","planSecs","migGoalPlanMerge2026"];
   function defaultPerStudent(){
-    return { grade:"四年级", learned:{}, fav:{}, checkin:{}, studySet:{},
+    return { grade:"四年级", learned:{}, fav:{}, checkin:{},
       habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{},
-      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{}, rules:{}, orderMode:"seq", planSecs:{add:{},del:{}}, planGoalLink2026:false };
+      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{}, rules:{}, orderMode:"seq", planSecs:{add:{},del:{}}, migGoalPlanMerge2026:false };
   }
   function capturePerStudent(){
     const d={}; PER_STUDENT_FIELDS.forEach(f=>{ const v=state[f]; d[f]=(v===undefined?null:JSON.parse(JSON.stringify(v))); });
@@ -1086,20 +1060,30 @@
   save(); // 首次即持久化多学生结构（含迁移）
   seedDefaultContent(); // 七年级历史第一单元学习指南（后台素材，可删除）
   rebuildAll(); // 用主数据 + 后台素材填充 ALL / INDEX
-  // 一次性迁移（bt）：本周计划 ↔ 学习目标 强制联动（计划 ⊆ 目标）。
-  // 旧数据里「计划板块」可能没加入学习目标（计划与目标脱节）→ 把计划内板块的内容补加入 studySet，保证三处数据一致。
-  // 对每个「学生」独立跑（studySet/planSecs 都是 per-student）。
-  if(!state.planGoalLink2026){
+  // 一次性迁移（bu）：学习目标与本周计划合并为同一概念（计划内容即目标，进度条按计划模块统计）。
+  // 旧数据的「加入学习」(studySet) 是独立的学习范围，需保住 → 把每个有 studySet 内容的板块并入本周计划(planSecs.add)，
+  // 再清空 studySet（不再使用）。对每个「学生」独立跑。
+  if(!state.migGoalPlanMerge2026){
     const curStd = state.currentStudent;
     Object.keys(state.students||{}).forEach(id=>{
       applyPerStudent(id); // 切到该学生的扁平字段
-      planSecs().forEach(s=>{ let pool=[]; try{ pool=poolFor(s.subject,s.type); }catch(e){ pool=[]; } // 当前年级内容
-        pool.forEach(it=>{ state.studySet[it.key]=true; }); });
+      const ps = state.planSecs = state.planSecs || {add:{},del:{}}; ps.add=ps.add||{}; ps.del=ps.del||{};
+      const seen = new Set();
+      const secList = [];
+      CHECKIN_TYPES.forEach(({subject,type})=>secList.push({subject,type}));
+      [...CUSTOM, ...EXTRA].forEach(c=>{ if(c.subject&&c.type) secList.push({subject:c.subject,type:c.type}); });
+      secList.forEach(({subject,type})=>{
+        const k=checkinKey(subject,type); if(seen.has(k)) return; seen.add(k);
+        if(ps.del[k]) return; // 用户显式移出过推荐，不强行加回
+        let had=false; try{ had = poolFor(subject,type).some(it=>state.studySet&&state.studySet[it.key]); }catch(e){}
+        if(had && !planHas(subject,type)) ps.add[k]=true;
+      });
+      state.studySet = {}; // 旧「加入学习」字段不再使用
       state.students[id].data = capturePerStudent(); // 写回该学生快照
-      state.students[id].data.planGoalLink2026 = true; // 该学生迁移完成标记（防止重复迁移）
+      state.students[id].data.migGoalPlanMerge2026 = true; // 该学生迁移完成标记
     });
-    applyPerStudent(curStd); // 切回当前学生（含迁移后的 studySet）
-    state.planGoalLink2026 = true;
+    applyPerStudent(curStd);
+    state.migGoalPlanMerge2026 = true;
     save();
   }
   function save(){
@@ -1606,13 +1590,9 @@
     if(subject==="数学" && (type==="公式"||type==="每日一练")) return ALL.filter(c=>c.subject===subject && c.type===type);
     return [...cus, ...EXTRA.filter(c=>c.subject===subject && c.type===type)];
   }
-  // 今日任务池 = 本年级内容 + 用户在学习库显式「加入学习」的其他年级内容（年级筛选扩大选择范围后，加入的要能排进今日）
+  // 今日任务池 = 当前年级内容（计划/目标均按当前年级口径，不再跨年级并入）
   function libPoolFor(subject, type){
-    const pool = poolFor(subject, type);
-    const has = new Set(pool.map(x=>x.key));
-    const ss = state.studySet||{};
-    const extra = poolForAll(subject, type).filter(it=>!has.has(it.key) && ss[it.key]);
-    return extra.length ? pool.concat(extra) : pool;
+    return poolFor(subject, type);
   }
   /* ---------- 首页：今日学习 ---------- */
   // 今日任务：只包含今天（按周计划）排到的「学科·类型」，每类型按配额取条目（控制每日总量）
@@ -1791,22 +1771,17 @@
   }
 
   /* ---------- 本周页：复习 · 看板 · 周计划（与今日任务分页，避免首页过挤） ---------- */
-  /* ---------- 学习目标进度（只统计「加入学习」的条目）---------- */
-  // 学习库（本周页）里每个条目可「加入学习」；只有加入的才计入这里的目标进度
+  /* ---------- 学习目标进度 = 本周计划内容（计划即目标，进度按计划模块统计）---------- */
+  // 学习库穷举该时间段全部模块；从学习库「加入本周计划」的模块，其内容即学习目标；
+  // 学习目标进度条直接体现本周计划的学习结构（按各计划模块统计已学/未学）。不再有独立的「加入学习」门槛。
   function weekGoalData(){
     const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
-    const keys = Object.keys(state.studySet||{}).filter(k=>state.studySet[k]);
-    const bySec = {};
-    keys.forEach(k=>{
-      const it = INDEX[k]; if(!it) return;
-      const sk = it.subject+"·"+it.type;
-      (bySec[sk]=bySec[sk]||{subject:it.subject, type:it.type, items:[]});
-      bySec[sk].items.push({ it, done: isDone(it.key), at: state.learned[it.key]||"" });
-    });
-    const out = Object.values(bySec).map(sec=>{
-      sec.items.sort((a,b)=> (a.done===b.done) ? 0 : (a.done?1:-1)); // 未学排前
-      return { subject:sec.subject, type:sec.type, items:sec.items, done: sec.items.filter(x=>x.done).length, total: sec.items.length,
-        inPlan: planHas(sec.subject, sec.type) };
+    const secs = planSecs(); // 本周计划模块（即学习目标范围）
+    const out = secs.map(sec=>{
+      let pool=[]; try{ pool=poolFor(sec.subject, sec.type); }catch(e){ pool=[]; }
+      const items = pool.map(it=>({ it, done: isDone(it.key), at: state.learned[it.key]||"" }));
+      items.sort((a,b)=> (a.done===b.done) ? 0 : (a.done?1:-1)); // 未学排前
+      return { subject:sec.subject, type:sec.type, items, done: items.filter(x=>x.done).length, total: items.length, inPlan:true };
     }).filter(s=>s.total>0);
     return {
       sections: out,
@@ -1816,7 +1791,7 @@
   }
   /* ---------- 学习库数据：本学期（当前年级）全部「学科·类型」板块 ---------- */
   // 板块来源：内置穷举（SUBJECT_TYPES）+ 后台自定义素材实际用到的「学科·类型」；只列有内容的板块
-  // 每板块：total=该年级内容池总数（与科目页数字同源 poolFor）、done=已学、joined=已加入学习目标
+  // 每板块：total=该年级内容池总数（与科目页数字同源 poolFor）、done=已学、inPlan=是否已排进本周计划（即纳入学习目标）
   function studyLibData(){
     const secs = [];
     const push = (subject,type)=>{ if(!secs.some(x=>x.subject===subject&&x.type===type)) secs.push({subject,type}); };
@@ -1825,13 +1800,10 @@
     const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
     const out = secs.map(sec=>{
       let pool=[]; try{ pool=poolFor(sec.subject, sec.type); }catch(e){ pool=[]; }
-      const items = pool.map(it=>({ it, done: isDone(it.key), at: state.learned[it.key]||"", joined: !!(state.studySet&&state.studySet[it.key]) }));
-      // joined 按全年级口径：学习库弹窗可切年级扩大选择范围，加入的其他年级内容也要计入「目标内」与打卡 pill
-      let poolAll=[]; try{ poolAll=poolForAll(sec.subject, sec.type); }catch(e){ poolAll=pool; }
-      const joinedAll = poolAll.filter(it=>state.studySet&&state.studySet[it.key]).length;
+      const items = pool.map(it=>({ it, done: isDone(it.key), at: state.learned[it.key]||"" }));
       return { subject:sec.subject, type:sec.type, items,
         done: items.filter(x=>x.done).length, total: items.length,
-        joined: joinedAll, inPlan: planHas(sec.subject, sec.type) };
+        inPlan: planHas(sec.subject, sec.type) };
     }).filter(s=>s.total>0);
     // 排序：主课（语数英）在前，其余按名称；与科目导航顺序观感一致
     const order = ["语文","数学","英语"];
@@ -1840,18 +1812,17 @@
       if(ia!==ib) return (ia<0?98:ia)-(ib<0?98:ib);
       return a.subject===b.subject ? a.type.localeCompare(b.type,"zh") : a.subject.localeCompare(b.subject,"zh");
     });
-    return { sections: out, total: out.reduce((a,s)=>a+s.total,0), done: out.reduce((a,s)=>a+s.done,0), joined: out.reduce((a,s)=>a+s.joined,0) };
+    return { sections: out, total: out.reduce((a,s)=>a+s.total,0), done: out.reduce((a,s)=>a+s.done,0) };
   }
-  // 明细弹窗：按板块分组列出已加入学习目标的条目（已学/未学）；点击条目可打开卡片详情
+  // 明细弹窗：按板块分组列出已排进本周计划（即学习目标）的条目（已学/未学）；点击条目可打开卡片详情
   function openWeekGoal(){
     const data = weekGoalData();
     $("#modal-body").innerHTML = `
       <div class="m-type">🎯 学习目标明细</div>
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
         共 <strong>${data.total}</strong> 项目标 · 已学 <strong style="color:#15803d">${data.done}</strong> · 未学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
-        ${data.total?"":"· 还没有加入任何学习内容，去下方「📖 学习库」把要学的内容「加入学习」"}
-        （统计已「加入学习」的内容，可含其他年级——在学习库板块弹窗里切换年级即可扩大选择范围）
-        <br>三处联动：<b>📖 学习库</b>（本时段全部内容）→ 这里挑出<b>🎯 学习目标</b>（准备学的内容）→ 再分解进<b>🗓 本周计划</b>（每周任务）。把板块排进计划会自动加入目标；把内容移出目标会自动移出计划。
+        ${data.total?"":"· 还没有安排学习内容，去下方「📖 学习库」点「加入本周计划」把要学的板块排进来"}
+        <br>三处联动：<b>📖 学习库</b>（穷举该时间段全部模块）→ 点「加入本周计划」→ 即成为<b>🎯 学习目标</b>（进度条按各计划模块统计已学/未学），并排进<b>🗓 本周计划</b>的每周任务。学习目标与本周计划是同一批内容。
       </div>
       ${data.sections.map(s=>`
         <div style="margin-bottom:16px">
@@ -1880,13 +1851,13 @@
       const now=planHas(k.slice(0,i),k.slice(i+1));
       const r=planToggle(k.slice(0,i),k.slice(i+1));
       openWeekGoal(); refreshView();
-      toast(now?"已移出本周计划，排布已重算 ↺":`已排进本周计划，今日任务会带上 🗓${r.joined?` · 同步加入学习目标 ${r.joined} 项 🎯`:""}`);
+      toast(now?"已移出本周计划，学习目标同步移出 ↺":"已排进本周计划，成为学习目标并进入每周排程 🗓");
     }));
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
-  // 学习库板块管理弹窗：该「学科·类型」的内容，按年级筛选查看/「加入学习/移出」
-  // 默认只列当前年级（与科目页数字一致）；可切换到其他年级扩大选择范围，加入后计入学习目标并排进今日学习
+  // 学习库板块管理弹窗：该「学科·类型」的内容，按年级查看；主操作=「加入本周计划」
+  // 点一下即把该板块排进本周计划，其内容即成为「🎯 学习目标」（进度条按计划模块统计）。不再有逐条「加入学习」门槛。
   // gradeSel：null/undefined=当前年级；"__all"=全部年级；其余=具体年级名
   function openLibSection(subject,type){
     const sec = studyLibData().sections.find(s=>s.subject===subject&&s.type===type);
@@ -1898,37 +1869,34 @@
     const g = gradeSel || state.grade;
     const shown = (g==="__all") ? all : all.filter(it=>!it.grade || it.grade===g);
     const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
-    const items = shown.map(it=>({ it, done:isDone(it.key), joined:!!(state.studySet&&state.studySet[it.key]) }));
-    const joinedAll = all.filter(it=>state.studySet&&state.studySet[it.key]).length;
-    // 年级 chips：本年级（默认）→ 其他有内容的年级 → 全部年级
+    const items = shown.map(it=>({ it, done:isDone(it.key) }));
+    const inP = planHas(subject,type);
+    // 年级 chips：本年级（默认）→ 其他有内容的年级 → 全部年级（仅供查看；排计划以当前年级内容为准）
     const otherGrades = GRADES.filter(x=>x!==state.grade && all.some(it=>it.grade===x));
     const cntCur = all.filter(it=>!it.grade || it.grade===state.grade).length;
     const gLabel = (g==="__all") ? "全部年级" : esc(g);
     $("#modal-body").innerHTML = `
-      <div class="m-type">📖 ${esc(subject)} · ${esc(type)} <span style="font-size:12px;color:#475569">（学习库 · 默认当前年级「${esc(state.grade)}」与科目页数字一致 · 可切换年级扩大选择范围）</span></div>
+      <div class="m-type">📖 ${esc(subject)} · ${esc(type)} <span style="font-size:12px;color:#475569">（学习库 · 默认当前年级「${esc(state.grade)}」与科目页数字一致 · 可切换年级查看）</span></div>
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
-        <span style="font-size:13px;color:#334155">年级筛选：</span>
+        <span style="font-size:13px;color:#334155">年级筛选（查看）：</span>
         <button class="chip ${g===state.grade?"on":""}" data-lib-grade="${esc(state.grade)}" title="当前年级的内容（与科目页一致）">${esc(state.grade)}（本年级）${cntCur}</button>
-        ${otherGrades.map(x=>`<button class="chip ${g===x?"on":""}" data-lib-grade="${esc(x)}" title="查看${esc(x)}的内容，可加入学习扩大范围">${esc(x)} ${all.filter(it=>it.grade===x).length}</button>`).join("")}
+        ${otherGrades.map(x=>`<button class="chip ${g===x?"on":""}" data-lib-grade="${esc(x)}" title="查看${esc(x)}的内容">${esc(x)} ${all.filter(it=>it.grade===x).length}</button>`).join("")}
         ${otherGrades.length?`<button class="chip ${g==="__all"?"on":""}" data-lib-grade="__all" title="查看全部年级的内容">全部年级 ${all.length}</button>`:""}
       </div>
       <div style="margin:0 0 12px;font-size:14px;color:#475569">
-        共 <strong>${items.length}</strong> 项（${gLabel}）· 已学 <strong style="color:#15803d">${items.filter(x=>x.done).length}</strong> · 已加入学习目标 <strong style="color:#4f46e5">${items.filter(x=>x.joined).length}</strong>${joinedAll>items.filter(x=>x.joined).length?`（全部年级共 ${joinedAll}）`:""}
+        共 <strong>${items.length}</strong> 项（${gLabel}）· 已学 <strong style="color:#15803d">${items.filter(x=>x.done).length}</strong> · 本周计划 <strong style="color:#7c3aed">${inP?"已排":"未排"}</strong>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn primary" data-study-all="1">＋ 全部加入学习</button>
-        <button class="btn" data-study-all="0">↩ 全部移出</button>
-        <button class="btn" data-plan-toggle="${esc(checkinKey(subject,type))}" title="${planInTitle(subject,type)}" ${planAddDisabled(subject,type)?"disabled":""}>${planInLabel(subject,type)}</button>
-        <span class="af-tip" style="align-self:center">「加入学习」计入「🎯 学习目标」；「加入本周计划」后进入每周排程与今日任务（计划板块会自动加入学习目标）</span>
+        <button class="btn ${inP?"":"primary"}" data-plan-toggle="${esc(checkinKey(subject,type))}" title="${planInTitle(subject,type)}" ${planAddDisabled(subject,type)?"disabled":""}>${planInLabel(subject,type)}</button>
+        <span class="af-tip" style="align-self:center">点「加入本周计划」即把该板块内容排进每周任务，并成为「🎯 学习目标」（进度条按计划模块统计）；移出则从目标移除。</span>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
         ${items.map(x=>`
-          <span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;${x.done?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":(x.joined?"background:#eef2ff;border-color:#c7d2fe;color:#3730a3;":"background:#f8fafc;border-color:#e2e8f0;color:#475569;")}">
+          <span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;${x.done?"background:#ecfdf5;border-color:#a7f3d0;color:#15803d;":"background:#f8fafc;border-color:#e2e8f0;color:#475569;"}">
             <button class="tag-btn" data-lib-key="${esc(x.it.key)}" title="点击查看详情" style="all:unset;cursor:pointer;${x.done?"color:#15803d;":""}">${x.it.grade && x.it.grade!==state.grade?`<span style="opacity:.65;font-size:11px;margin-right:2px">${esc(x.it.grade)}</span>`:""}${esc(stripTags(x.it.title||x.it.name||x.it.key)).slice(0,18)}${x.done?" ✓":""}</button>
-            <button class="tag-btn" data-study-toggle="${esc(x.it.key)}" title="${x.joined?"移出学习目标":"加入学习目标"}" style="all:unset;cursor:pointer;font-weight:700">${x.joined?"✓":"＋"}</button>
           </span>`).join("")}
       </div>
-      <p class="af-tip" style="margin-top:12px">绿色=已学（带完成日期）· 蓝色=已加入学习目标 · 灰=未加入；点条目名查看详情，点右侧 ＋/✓ 加入或移出。切换到其他年级即可扩大选择范围，加入的其他年级内容会计入学习目标，并排进该板块的今日学习。</p>
+      <p class="af-tip" style="margin-top:12px">绿色=已学（带完成日期）· 灰=未学；点条目名查看详情。切换到其他年级仅用于查看内容；排进本周计划始终以当前年级「${esc(state.grade)}」的内容为准。</p>
     `;
     const mb=$("#modal-body");
     mb.querySelectorAll("[data-lib-key]").forEach(b=>{
@@ -1937,37 +1905,13 @@
     mb.querySelectorAll("[data-lib-grade]").forEach(b=>b.addEventListener("click", ()=>{
       renderLibModal(subject, type, b.dataset.libGrade);
     }));
-    mb.querySelectorAll("[data-study-toggle]").forEach(b=>b.addEventListener("click", ()=>{
-      const k=b.dataset.studyToggle;
-      state.studySet = state.studySet || {};
-      if(state.studySet[k]) delete state.studySet[k]; else state.studySet[k]=true;
-      save();
-      const dropped = planAutoRemoveIfEmpty(subject, type); // 目标抽空 → 自动移出计划（计划⊆目标）
-      if(dropped) toast("该板块已无「加入学习」的内容，自动移出本周计划（计划需有目标内容）");
-      renderLibModal(subject, type, g);
-      refreshView();
-    }));
     mb.querySelectorAll("[data-plan-toggle]").forEach(b=>b.addEventListener("click",()=>{
       const k=b.dataset.planToggle; const i=k.indexOf("·");
       const now=planHas(k.slice(0,i),k.slice(i+1));
-      const r=planToggle(k.slice(0,i),k.slice(i+1));
+      planToggle(k.slice(0,i),k.slice(i+1));
       renderLibModal(subject, type, g); refreshView();
-      toast(now?"已移出本周计划，排布已重算 ↺":`已加入本周计划，排布已重算 🗓${r.joined?` · 同步加入学习目标 ${r.joined} 项 🎯`:""}`);
+      toast(now?"已移出本周计划，学习目标同步移出 ↺":"已加入本周计划，成为学习目标并进入每周排程 🗓");
     }));
-    const allBtn = mb.querySelector('[data-study-all="1"]'), noneBtn = mb.querySelector('[data-study-all="0"]');
-    if(allBtn) allBtn.addEventListener("click", ()=>{
-      state.studySet = state.studySet || {};
-      items.forEach(x=>{ state.studySet[x.it.key]=true; });
-      save(); renderLibModal(subject, type, g); refreshView();
-      toast(`已把「${gLabel}」的 ${items.length} 项加入学习目标 🎯`);
-    });
-    if(noneBtn) noneBtn.addEventListener("click", ()=>{
-      state.studySet = state.studySet || {};
-      items.forEach(x=>{ delete state.studySet[x.it.key]; });
-      const dropped = planAutoRemoveIfEmpty(subject, type); // 目标抽空 → 自动移出计划
-      save(); renderLibModal(subject, type, g); refreshView();
-      toast(dropped?"已全部移出学习目标，并自动移出本周计划（计划需有目标内容）":"已全部移出学习目标");
-    });
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
@@ -2071,7 +2015,7 @@
     const weekDays=[];
     for(let i=6;i>=0;i--){ const dd=new Date(); dd.setDate(dd.getDate()-i); const ds=fmt(dd); weekDays.push({ds, c:learnedList.filter(it=>state.learned[it.key]===ds).length}); }
     const wkDates = weekDatesMondayStart();
-    // 学习目标进度（只统计学习库里「加入学习」的条目）
+    // 学习目标进度 = 本周计划内容（计划即目标）
     const goal = weekGoalData();
     const lib = studyLibData();
     const caps = planSecs(); // 本周计划板块胶囊（WB 推荐 + 用户增删）
@@ -2092,7 +2036,7 @@
         </div>
       </div>
 
-      <div class="sec-title">🎯 学习目标 <small>「加入学习」的内容才计入进度 · 与「🗓 本周计划」联动：计划板块自动进入目标、移出目标自动移出计划 · 点击卡片查看明细</small></div>
+      <div class="sec-title">🎯 学习目标 <small>＝本周计划的内容（计划即目标）· 进度条按各计划模块统计已学/未学 · 点卡片查看明细</small></div>
       <div class="stat-strip" id="wkGoalCard" style="cursor:pointer" title="点击查看学习目标明细">
         <div class="stat"><div class="num">${goal.total}</div><div class="lbl">目标总量</div></div>
         <div class="stat"><div class="num" style="color:#15803d">${goal.done}</div><div class="lbl">已学习</div></div>
@@ -2104,12 +2048,12 @@
         </div>
       </div>
 
-      <div class="sec-title">🗓 本周计划 <small>「🎯 学习目标」的板块分解到一周（WB 推荐算法排布：主课多、副课少）· 胶囊可增删 · 加入计划会自动加入学习目标、移出目标会自动移出计划 · 增删后自动重排</small></div>
+      <div class="sec-title">🗓 本周计划 <small>从「📖 学习库」把板块排进来（WB 推荐已按主课多、副课少排好）· 胶囊可增删 · 计划里的板块即成为「🎯 学习目标」· 增删后自动重排</small></div>
       <div class="plan-caps">
         ${caps.map(s=>{ const k=checkinKey(s.subject,s.type); const c=SUBJECT_COLORS[s.subject]||["#f1f5f9","#475569"];
           return `<span class="plan-cap" style="background:${c[0]};color:${c[1]};border-color:${c[0]}" data-plan-cap="${esc(k)}">
             <button class="plan-cap-nm" data-plan-open="${esc(k)}" title="点击进「📖 学习库」管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">${esc(s.subject)}·${esc(s.type)}</button>
-            <button class="plan-cap-x" data-plan-del="${esc(k)}" title="移出本周计划（内容与学习目标不受影响）">×</button>
+            <button class="plan-cap-x" data-plan-del="${esc(k)}" title="移出本周计划（学习目标同步移出）">×</button>
           </span>`;}).join("")}
         <button class="btn" id="planAddBtn" title="从学习库选择板块加入本周计划">＋ 添加板块</button>
         <button class="btn" id="planResetBtn" title="清除全部增删，恢复 WB 推荐版本">↺ 恢复推荐</button>
@@ -2130,16 +2074,16 @@
       ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
         :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
-      <div class="sec-title">📖 学习库 <small>本目标时段全部学习内容（与科目页数字一致）· 点卡片进管理：进去「加入学习」才计入上方「🎯 学习目标」、再排进「🗓 本周计划」· 卡片标「🗓 计划中」的已排进本周计划、「🎯 目标中」的已加入目标</small></div>
+      <div class="sec-title">📖 学习库 <small>穷举该时间段全部模块（与科目页数字一致）· 点卡片进管理，主操作「加入本周计划」即把板块排进每周任务、成为上方「🎯 学习目标」· 卡片标「🗓 计划中」的已排进本周计划</small></div>
       <div class="stat-strip">
         ${lib.sections.map(s=>{
-          const ck = s.joined>0; // 打卡范围 = 已「加入学习」的内容；没选中就不算打卡中
+          const ck = s.inPlan; // 是否已排进本周计划（即纳入学习目标）
           return `
           <div class="stat lib-sec" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
             <div class="num">${s.total}</div>
             <div class="lbl">${esc(s.subject)}·${esc(s.type)}</div>
-            <div class="lib-meta">已学 ${s.done}${s.joined?` · <span style="color:#4f46e5">🎯 目标内 ${s.joined}</span>`:""}${s.inPlan?` · <span style="color:#7c3aed">🗓 计划中</span>`:""}${!s.joined&&!s.inPlan?` · <span style="color:#94a3b8">未加入目标</span>`:""}</div>
-            <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${ck?`已加入学习 ${s.joined} 条 · 正处打卡范围 · 点击进去管理`:"还没有加入学习的内容 · 点击进去选择（加入后才进入打卡范围）"}">${ck?"✓ 打卡中":"＋ 加入打卡"}</button>
+            <div class="lib-meta">已学 ${s.done}${s.inPlan?` · <span style="color:#7c3aed">🗓 计划中</span>`:` · <span style="color:#94a3b8">未加入计划</span>`}</div>
+            <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${ck?`已排进本周计划，正处学习目标范围 · 点击进去管理`:"还没有排进本周计划 · 点击进去选择（排进后才进入学习目标）"}">${ck?"✓ 已排计划":"＋ 加入本周计划"}</button>
           </div>`;}).join("")}
         ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
       </div>
@@ -2213,9 +2157,9 @@
     if(addBtn) addBtn.addEventListener("click", openPlanPicker);
     const resetBtn = el.querySelector("#planResetBtn");
     if(resetBtn) resetBtn.addEventListener("click",()=>{
-      const r=planReset(); toast(`已恢复 WB 推荐计划 ↺${r.joined?` · 同步加入学习目标 ${r.joined} 项 🎯`:""}`); refreshView();
+      const r=planReset(); toast(`已恢复 WB 推荐计划 ↺`); refreshView();
     });
-    // 板块卡（含「打卡中」pill）点击都进管理弹窗——进去把内容「加入学习」后才进入打卡范围
+    // 板块卡（含「已排计划」pill）点击都进管理弹窗——进去点「加入本周计划」即纳入学习目标
     el.querySelectorAll("[data-lib-sec]").forEach(b=>b.addEventListener("click", (e)=>{
       const i=b.dataset.libSec.indexOf("·");
       openLibSection(b.dataset.libSec.slice(0,i), b.dataset.libSec.slice(i+1));
@@ -4036,7 +3980,7 @@
       inTodayGoal, undoLearn, isLearnedKey,
       studyLibData, subjectTypesOf, openSubjectAdd,
       planRecommended, planSecs, planHas, planToggle, planReset, openPlanPicker,
-      planInLabel, planInTitle, planAddDisabled, planSyncGoalJoin, planAutoRemoveIfEmpty
+      planInLabel, planInTitle, planAddDisabled
     };
   }
 })();

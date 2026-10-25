@@ -1,5 +1,5 @@
 // 冒烟测试：bg 版本 —— 诉求 E 收尾（7 项）
-// ① 学习库/学习目标（诉求5）：studyLibData 板块 total 与 poolFor 同源、joined 计数、weekGoalData 只算 studySet、renderWeek 新结构
+// ① 学习库/学习目标（诉求5）：studyLibData 板块 total 与 poolFor 同源、weekGoalData 由 planSecs 聚合（目标=计划内容）、renderWeek 新结构（计划即目标）
 // ② 首页扣分（诉求3）：penalize 扣分/同日一次/每日上限/欠分下限、首页不可自行撤销；br：扣分卡片网格+习惯分值
 // ③ 今日完成默认折叠（诉求6）
 // ④ 后台无「我的素材」（诉求4）
@@ -10,8 +10,8 @@
 // ⑩ 语文页筛选空态与「↩ 返回」（bp：点已学筛选被待导入空态困住）
 // ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框）
 // ⑫ 本周计划板块胶囊（bs：WB 推荐+用户增删 delta，与学习目标/学习库联动，计划移至学习目标下）
-// ⑬ 三处联动 计划⊆目标（bt：加入计划自动入目标、移出目标自动移出计划、跨年级只并当前年级、一次性迁移）
-// ⑦ 版本号：10×bt
+// ⑬ 学习目标=本周计划内容（bu：去 studySet 门槛、学习库主操作「加入本周计划」、一次性迁移 migGoalPlanMerge2026、本周页无「加入学习/目标内/打卡中」）
+// ⑦ 版本号：10×bu
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -73,15 +73,13 @@ function safe(name, fn){ try{ fn(); }catch(e){ results.push({name, ok:false, ext
 
 const CODE = bundleCode();
 
-/* ---------- ① 学习库 / 学习目标（诉求5） ---------- */
+/* ---------- ① 学习库 / 学习目标（bu：学习目标=本周计划内容，库主操作=加入本周计划） ---------- */
 safe('① 学习库与学习目标', ()=>{
   const ctx = boot({});
   const S = ctx.window.__SITE__;
   ok('  __SITE__ 注入', !!S, '');
-  // bt 迁移会在 boot 时把计划板块内容并入学习目标；此处重置为空，独立验证目标聚合逻辑（联动在 ⑬ 专测）
-  S.state.studySet = {};
 
-  // 学习库板块：总量与科目页同源（poolFor）
+  // 学习目标 = 本周计划内容（计划即目标）：穷举的板块 total 与 poolFor 同源
   const lib = S.studyLibData();
   ok('  学习库有板块', lib.sections.length>0, 'n='+lib.sections.length);
   let badTotal=0;
@@ -93,72 +91,61 @@ safe('① 学习库与学习目标', ()=>{
   const mainIdx = firstSubj.map(s=>["语文","数学","英语"].indexOf(s)).filter(i=>i>=0);
   ok('  主课板块排在前', mainIdx.length>0 && mainIdx.every((v,i,a)=>i===0||v>=a[i-1]), JSON.stringify(firstSubj.slice(0,4)));
 
-  // 初始无学习目标
-  ok('  初始学习目标为空', S.weekGoalData().total===0, 'total='+S.weekGoalData().total);
+  // 取一个有内容的板块 sec0，先确保它不在计划内（学习目标初始不含它）
+  const sec0 = lib.sections.find(s=>s.total>0);
+  if(S.planHas(sec0.subject,sec0.type)) S.planToggle(sec0.subject,sec0.type);
+  ok('  初始（未排计划）该板块不在学习目标', !S.weekGoalData().sections.some(s=>s.subject===sec0.subject&&s.type===sec0.type), '');
 
-  // 全部加入第一个板块 → joined=total；目标总量=该板块条数
-  const sec0 = lib.sections[0];
-  sec0.items.forEach(x=>{ S.state.studySet[x.it.key]=true; });
-  const lib2 = S.studyLibData();
-  const s0b = lib2.sections.find(s=>s.subject===sec0.subject&&s.type===sec0.type);
-  ok('  加入后 joined=total', s0b.joined===s0b.total, 'joined='+s0b.joined+' total='+s0b.total);
+  // 把它排进本周计划 → 学习目标总量=该板块条数（计划即目标）
+  S.planToggle(sec0.subject,sec0.type);
   const goal = S.weekGoalData();
-  ok('  学习目标总量=该板块条数', goal.total===sec0.items.length, 'goal='+goal.total+' items='+sec0.items.length);
+  const g0 = goal.sections.find(s=>s.subject===sec0.subject&&s.type===sec0.type);
+  ok('  排进计划后板块进入学习目标', !!g0, '');
+  ok('  学习目标总量=该计划板块条数', g0 && g0.total===sec0.items.length, 'goal='+(g0&&g0.total)+' items='+sec0.items.length);
   ok('  学习目标分组含 学科·类型', goal.sections.some(s=>s.subject===sec0.subject&&s.type===sec0.type), '');
 
   // 已学 1 条 → 目标 done=1
   S.state.learned[sec0.items[0].it.key] = '2026-10-24';
   ok('  已学计入目标 done', S.weekGoalData().done===1, 'done='+S.weekGoalData().done);
 
-  // 移出 1 条 → 目标总量减 1
-  delete S.state.studySet[sec0.items[1].it.key];
-  ok('  移出后目标总量减 1', S.weekGoalData().total===sec0.items.length-1, 'total='+S.weekGoalData().total);
+  // 移出计划 → 板块离开学习目标
+  S.planToggle(sec0.subject,sec0.type);
+  ok('  移出计划后板块离开学习目标', !S.weekGoalData().sections.some(s=>s.subject===sec0.subject&&s.type===sec0.type), '');
 
-  // 目标外已学不计入：另一板块标已学但不在 studySet → 目标总量不变
-  const other = lib.sections.find(s=>s!==sec0.subject+sec0.type && s.total>0 && s.items.some(x=>!S.state.studySet[x.it.key]));
+  // 计划外已学不计入：另一板块标已学但不在计划 → 目标不含它
+  const other = lib.sections.find(s=>s!==sec0 && s.total>0 && !S.planHas(s.subject,s.type));
   if(other){
-    const k = other.items.find(x=>!S.state.studySet[x.it.key]).it.key;
-    S.state.learned[k] = '2026-10-24';
-    const g2 = S.weekGoalData();
-    ok('  目标外已学不计入目标', g2.total===sec0.items.length-1 && g2.done===1, 'total='+g2.total+' done='+g2.done);
-  } else {
-    ok('  目标外已学不计入目标（无第二个板块可测，跳过）', true, '');
-  }
+    S.state.learned[other.items[0].it.key] = '2026-10-24';
+    ok('  计划外已学不计入学习目标', !S.weekGoalData().sections.some(s=>s.subject===other.subject&&s.type===other.type), '');
+  } else ok('  计划外已学不计入（无第二个非计划板块，跳过）', true, '');
 
   // 弹窗可打开（mock DOM 下不抛错）
   let threw='';
   try{ S.openLibSection(sec0.subject, sec0.type); S.openWeekGoal(); }catch(e){ threw=e.message; }
   ok('  学习库管理/目标明细弹窗可打开', threw==='', threw);
 
-  // renderWeek 新结构：学习目标 + 学习库；旧「打卡范围」chips 已移除
+  // renderWeek 新结构：学习目标 + 学习库；学习库卡片主操作=加入本周计划
+  const wk0 = (S.renderWeek(), ctx.window.document.getElementById('view-week').innerHTML);
+  ok('  本周页含「🎯 学习目标」（=本周计划内容）', wk0.includes('🎯 学习目标') && wk0.includes('计划即目标'), '');
+  ok('  本周页含「📖 学习库」', wk0.includes('📖 学习库'), '');
+  ok('  学习库板块卡含 data-lib-sec', wk0.includes('data-lib-sec='), '');
+  ok('  板块卡含状态 pill（chip lib-ck）', wk0.includes('class="chip lib-ck"'), '');
+  ok('  板块卡 pill 不再挂 data-checkin', !wk0.includes('data-checkin='), '');
+  ok('  旧「打卡范围：」chips 标签已移除', !wk0.includes('打卡范围：'), '');
+  ok('  默认计划内板块显示「✓ 已排计划」', wk0.includes('✓ 已排计划'), '');
+  // 把某个在计划内的板块移出，验证未排计划态显示「＋ 加入本周计划」
+  const outSec = S.studyLibData().sections.find(s=>S.planHas(s.subject,s.type));
+  if(outSec) S.planToggle(outSec.subject, outSec.type);
   S.renderWeek();
   const wk = ctx.window.document.getElementById('view-week').innerHTML;
-  ok('  本周页含「🎯 学习目标」', wk.includes('🎯 学习目标'), '');
-  ok('  本周页含「📖 学习库」', wk.includes('📖 学习库'), '');
-  ok('  学习库板块卡含 data-lib-sec', wk.includes('data-lib-sec='), '');
-  ok('  板块卡含打卡状态 pill（chip lib-ck）', wk.includes('class="chip lib-ck"'), '');
-  ok('  板块卡 pill 不再挂 data-checkin（打卡范围由「加入学习」决定）', !wk.includes('data-checkin='), '');
-  ok('  旧「打卡范围：」chips 标签已移除', !wk.includes('打卡范围：'), '');
-
-  // 打卡范围 = 已「加入学习」的内容：sec0 已全部加入 → 实色「✓ 打卡中」；未加入的板块 → 浅底「＋ 加入打卡」
-  ok('  已加入学习的板块显示「✓ 打卡中」实色（学科主题色）', /<button class="chip lib-ck" style="background:#7c3aed;border-color:#7c3aed;color:#fff"[^>]*>✓ 打卡中/.test(wk), '');
-  ok('  未加入学习的板块显示「＋ 加入打卡」浅底', wk.includes('＋ 加入打卡') && /<button class="chip lib-ck" style="background:#f5f3ff/.test(wk), '');
-
-  // 全部移出 → 回到浅底；重新加入 → 恢复实色
-  sec0.items.forEach(x=>{ delete S.state.studySet[x.it.key]; });
-  S.renderWeek();
-  const wkOff = ctx.window.document.getElementById('view-week').innerHTML;
-  ok('  全部移出后回到「＋ 加入打卡」浅底态', wkOff.includes('＋ 加入打卡'), '');
-  sec0.items.forEach(x=>{ S.state.studySet[x.it.key]=true; });
-  S.renderWeek();
-  const wkOn = ctx.window.document.getElementById('view-week').innerHTML;
-  ok('  重新加入后恢复「✓ 打卡中」实色态', wkOn.includes('✓ 打卡中'), '');
+  ok('  未排计划的板块显示「＋ 加入本周计划」', wk.includes('＋ 加入本周计划'), '');
 
   // 源码守卫
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
-  ok('  weekGoalData 只聚合 studySet', /function weekGoalData\(\)\{[\s\S]{0,200}studySet/.test(code), '');
+  ok('  weekGoalData 聚合 planSecs（无 studySet 门槛）', /function weekGoalData\(\)\{[\s\S]{0,200}planSecs\(\)/.test(code), '');
   ok('  studyLibData 用 poolFor 取总量', /function studyLibData\(\)\{[\s\S]{0,600}poolFor\(sec\.subject, sec\.type\)/.test(code), '');
-  ok('  PER_STUDENT_FIELDS 含 studySet', code.includes('"studySet"'), '');
+  ok('  PER_STUDENT_FIELDS 含 migGoalPlanMerge2026（迁移标志）', code.includes('"migGoalPlanMerge2026"'), '');
+  ok('  PER_STUDENT_FIELDS 不再含 studySet', !code.includes('"studySet"'), '');
 });
 
 /* ---------- ② 首页扣分（诉求3） ---------- */
@@ -360,11 +347,10 @@ safe('⑧ 全视图渲染回归', ()=>{
   ok('  go() 路由切换无异常', goErr==='', goErr);
 });
 
-/* ---------- ⑨ 学习库年级筛选（诉求：扩大选择范围） ---------- */
+/* ---------- ⑨ 学习库年级筛选（bu：年级 chips 仅用于查看；计划/目标按当前年级） ---------- */
 safe('⑨ 学习库年级筛选', ()=>{
   const ctx = boot({});
   const S = ctx.window.__SITE__;
-  S.state.studySet = {}; // 重置为空，隔离验证跨年级加入（联动在 ⑬ 专测）
   const doc = ctx.window.document;
   const sub="语文", tp="诗词";
   const g0 = S.state.grade;
@@ -379,43 +365,33 @@ safe('⑨ 学习库年级筛选', ()=>{
   ok('  弹窗含年级筛选 chips（data-lib-grade）', (mb.match(/data-lib-grade=/g)||[]).length>=2, 'n='+(mb.match(/data-lib-grade=/g)||[]).length);
   ok('  默认选中当前年级（本年级 chip 带 on）', mb.includes('data-lib-grade="'+g0+'"') && /chip on" data-lib-grade="/.test(mb), '');
   ok('  有「全部年级」chip', mb.includes('data-lib-grade="__all"'), '');
-  ok('  默认只列当前年级条目', (mb.match(/data-study-toggle=/g)||[]).length===cur.length, 'n='+(mb.match(/data-study-toggle=/g)||[]).length+' cur='+cur.length);
-  ok('  弹窗说明可切换年级扩大选择范围', mb.includes('扩大选择范围'), '');
+  ok('  默认只列当前年级条目', (mb.match(/data-lib-key=/g)||[]).length===cur.length, 'n='+(mb.match(/data-lib-key=/g)||[]).length+' cur='+cur.length);
+  ok('  弹窗说明年级 chips 仅用于查看', mb.includes('年级筛选（查看）'), '');
 
-  // 切到具体年级（显式传参，等价点 chip）
+  // 切到具体年级
   const g2 = grades[0];
   S.renderLibModal(sub, tp, g2);
   mb = doc.getElementById('modal-body').innerHTML;
   const cur2 = all.filter(it=>!it.grade || it.grade===g2);
-  ok('  切到其他年级后按该年级筛选', (mb.match(/data-study-toggle=/g)||[]).length===cur2.length, 'n='+(mb.match(/data-study-toggle=/g)||[]).length+' exp='+cur2.length);
+  ok('  切到其他年级后按该年级筛选', (mb.match(/data-lib-key=/g)||[]).length===cur2.length, 'n='+(mb.match(/data-lib-key=/g)||[]).length+' exp='+cur2.length);
   ok('  该年级 chip 选中（on）', mb.includes('chip on" data-lib-grade="'+g2+'"'), '');
   ok('  非当前年级条目标注年级名前缀', cur2.some(it=>it.grade===g2) && mb.includes('>'+g2+'</span>'), '');
 
   // 全部年级视图
   S.renderLibModal(sub, tp, "__all");
   mb = doc.getElementById('modal-body').innerHTML;
-  ok('  全部年级视图列出所有条目', (mb.match(/data-study-toggle=/g)||[]).length===all.length, 'n='+(mb.match(/data-study-toggle=/g)||[]).length+' all='+all.length);
+  ok('  全部年级视图列出所有条目', (mb.match(/data-lib-key=/g)||[]).length===all.length, 'n='+(mb.match(/data-lib-key=/g)||[]).length+' all='+all.length);
   ok('  全部年级 chip 选中（on）', mb.includes('chip on" data-lib-grade="__all"'), '');
 
-  // 跨年级加入：joined 全年级口径 + 计入学习目标 + 排进今日任务池 + 卡片 pill
-  const xg = all.find(it=>it.grade && it.grade!==g0);
-  ok('  找到一条其他年级内容', !!xg, '');
-  const lpBefore = S.libPoolFor(sub, tp);
-  ok('  加入前 libPoolFor 不含跨年级条目', !lpBefore.some(it=>it.key===xg.key), '');
-  S.state.studySet = S.state.studySet || {};
-  S.state.studySet[xg.key] = true;
-  const sec = S.studyLibData().sections.find(s=>s.subject===sub&&s.type===tp);
-  ok('  跨年级加入后板块 joined 计入（全年级口径）', sec.joined===1, 'joined='+sec.joined);
-  ok('  跨年级加入计入学习目标总量', S.weekGoalData().total===1, 'total='+S.weekGoalData().total);
-  const lpAfter = S.libPoolFor(sub, tp);
-  ok('  加入后 libPoolFor 含跨年级条目（排进今日轮换）', lpAfter.some(it=>it.key===xg.key) && lpAfter.length===cur.length+1, 'len='+lpAfter.length);
-  S.renderWeek();
-  const wk = doc.getElementById('view-week').innerHTML;
-  ok('  跨年级加入后板块卡显示「✓ 打卡中」', wk.includes('✓ 打卡中'), '');
-  // 弹窗头部提示全部年级已加入数
-  S.openLibSection(sub, tp);
+  // 主操作=加入本周计划（grade-scoped）；不再有逐条「加入学习」
+  S.renderLibModal(sub, tp, g0);
   mb = doc.getElementById('modal-body').innerHTML;
-  ok('  弹窗头部提示「全部年级共 N」', mb.includes('（全部年级共 1）'), '');
+  ok('  弹窗含「加入本周计划」主按钮（data-plan-toggle）', mb.includes('data-plan-toggle='), '');
+  ok('  弹窗不再有逐条「加入学习」按钮（data-study-toggle）', !mb.includes('data-study-toggle='), '');
+  const wasPlan = S.planHas(sub,tp);
+  if(!wasPlan) S.planToggle(sub,tp);
+  ok('  加入本周计划成功（inPlan:true）', S.planHas(sub,tp)===true, '');
+  ok('  加入后该板块进入学习目标（planSecs 与 weekGoalData 一致）', S.weekGoalData().sections.some(s=>s.subject===sub&&s.type===tp), '');
 });
 
 /* ---------- ⑩ 语文页筛选空态与「↩ 返回」（bp：点「已学」筛选后被「待导入」空态困住） ---------- */
@@ -634,14 +610,13 @@ safe('⑫ 本周计划板块胶囊', ()=>{
   S.openLibSection(sec0.subject, sec0.type);
   const mbLib = doc.getElementById('modal-body').innerHTML;
   ok('  学习库弹窗含计划开关', mbLib.includes('data-plan-toggle='), '');
-  ok('  学习库弹窗说明计划联动', mbLib.includes('「加入本周计划」后进入每周排程与今日任务'), '');
+  ok('  学习库弹窗说明计划联动', mbLib.includes('点「加入本周计划」即把该板块内容排进每周任务'), '');
 
-  // 学习目标明细：板块计划状态 + 切换入口 + 联动说明
-  if(sec0.items[0]) S.state.studySet[sec0.items[0].it.key]=true;
+  // 学习目标明细：板块计划状态 + 切换入口 + 联动说明（bu：目标=计划内容，无 studySet 门槛）
   S.openWeekGoal();
   const mbGoal = doc.getElementById('modal-body').innerHTML;
   ok('  目标明细含板块计划状态 chip', mbGoal.includes('data-wg-plan=') && mbGoal.includes('🗓 计划中'), '');
-  ok('  目标明细说明三处联动（库→目标→计划）', mbGoal.includes('📖 学习库') && mbGoal.includes('🎯 学习目标') && mbGoal.includes('🗓 本周计划') && mbGoal.includes('把板块排进计划会自动加入目标'), '');
+  ok('  目标明细说明计划即目标（库→目标/计划同一批内容）', mbGoal.includes('📖 学习库') && mbGoal.includes('🎯 学习目标') && mbGoal.includes('🗓 本周计划') && mbGoal.includes('学习目标与本周计划是同一批内容'), '');
 
   // 板块管理弹窗可开、含恢复推荐
   S.openPlanPicker();
@@ -655,44 +630,52 @@ safe('⑫ 本周计划板块胶囊', ()=>{
   ok('  applyStateDefaults 补 planSecs 缺省（旧包兼容）', /state\.planSecs = state\.planSecs \|\| \{add:\{\},del:\{\}/.test(code), '');
 });
 
-/* ---------- ⑬ 三处联动：计划⊆目标（bt：加入计划自动入目标、移出目标自动移出计划、迁移） ---------- */
-safe('⑬ 三处联动 计划⊆目标', ()=>{
+/* ---------- ⑬ 三处联动（bu：学习目标=本周计划内容；库主操作=加入本周计划；无 studySet 门槛） ---------- */
+safe('⑬ 三处联动 学习目标=本周计划', ()=>{
   const ctx = boot({});
   const S = ctx.window.__SITE__;
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
-  // 引擎存在
-  ok('  planSyncGoalJoin / planAutoRemoveIfEmpty 已导出', typeof S.planSyncGoalJoin==='function' && typeof S.planAutoRemoveIfEmpty==='function', '');
-  ok('  app.js 定义 planSyncGoalJoin', code.includes('function planSyncGoalJoin('), '');
-  ok('  app.js 定义 planAutoRemoveIfEmpty', code.includes('function planAutoRemoveIfEmpty('), '');
-  // 当前（迁移后）计划内每个板块都在目标内
-  ok('  迁移后：每个计划板块都在目标内（joined>0）', S.planSecs().every(s=>S.poolForAll(s.subject,s.type).filter(it=>S.state.studySet[it.key]).length>0), '');
-  ok('  迁移后：weekGoalData 每个目标板块都在计划中', S.weekGoalData().sections.every(x=>x.inPlan), '');
-  // 加入计划自动并入目标（当前年级）
-  const pl=S.planSecs()[0];
-  S.poolForAll(pl.subject,pl.type).forEach(it=>{ delete S.state.studySet[it.key]; });
-  const off=S.planToggle(pl.subject,pl.type);
-  if(off.inPlan) throw new Error('off failed（移出仍显示在计划内）');
-  const r=S.planToggle(pl.subject,pl.type);
-  ok('  加入计划返回 {inPlan:true,joined>0}', r.inPlan===true && r.joined>0, JSON.stringify(r));
-  ok('  加入计划后该板块确定在目标内', S.poolFor(pl.subject,pl.type).filter(it=>S.state.studySet[it.key]).length===S.poolFor(pl.subject,pl.type).length, '');
-  // 移出目标（抽空）自动移出计划
-  const pl2=S.planSecs().find(x=>x.subject===pl.subject&&x.type===pl.type)||S.planSecs()[0];
-  S.poolForAll(pl2.subject,pl2.type).forEach(it=>{ delete S.state.studySet[it.key]; });
-  const dropped=S.planAutoRemoveIfEmpty(pl2.subject,pl2.type);
-  ok('  目标抽空自动移出计划', dropped===true && S.planHas(pl2.subject,pl2.type)===false, 'dropped='+dropped);
-  // 部分加入（含其他年级）时 planSyncGoalJoin 不补
-  S.planReset();
-  const before=S.planSecs().every(s=>S.poolForAll(s.subject,s.type).filter(it=>S.state.studySet[it.key]).length>0);
-  ok('  恢复推荐后计划⊆目标依然成立', before, '');
-  // 源码守卫：renderWeek 三处文案
-  ok('  renderWeek 学习目标 sec-title 说明「移出目标自动移出计划」', code.includes('移出目标自动移出计划'), '');
-  ok('  renderWeek 本周计划 sec-title 说明「学习目标」的板块分解', code.includes('学习目标」的板块分解'), '');
-  ok('  renderWeek 学习库 sec-title 说明「🎯 学习目标」「🗓 本周计划」', code.includes('再排进「🗓 本周计划」') && code.includes('计入上方「🎯 学习目标」'), '');
-  ok('  学习库卡 lib-meta 三态（目标内/计划中/未加入目标）', code.includes('目标内') && code.includes('计划中') && code.includes('未加入目标'), '');
-  // 迁移代码存在
-  ok('  一次性迁移 planGoalLink2026 已加', code.includes('state.planGoalLink2026') && code.includes('planGoalLink2026 = true'), '');
-  ok('  defaultPerStudent 含 planGoalLink2026', code.includes('planGoalLink2026:false'), '');
-  ok('  PER_STUDENT_FIELDS 含 planGoalLink2026', code.includes('"planGoalLink2026"'), '');
+  // 不再有 studySet 门槛函数
+  ok('  planSyncGoalJoin / planAutoRemoveIfEmpty 已移除（不再导出）', typeof S.planSyncGoalJoin==='undefined' && typeof S.planAutoRemoveIfEmpty==='undefined', '');
+  ok('  app.js 不再定义 planSyncGoalJoin / planAutoRemoveIfEmpty', !code.includes('function planSyncGoalJoin(') && !code.includes('function planAutoRemoveIfEmpty('), '');
+  // 学习目标 = 计划内容：每个目标板块都在计划中、且总量=计划模块内容之和
+  const plan = S.planSecs();
+  ok('  计划非空（WB 推荐）', plan.length>0, 'n='+plan.length);
+  const goal = S.weekGoalData();
+  ok('  每个目标板块都在计划中（目标=计划内容）', goal.sections.every(x=>x.inPlan), '');
+  const expectTotal = plan.reduce((a,s)=>a + Math.max(0, S.poolFor(s.subject,s.type).length), 0);
+  ok('  目标总量=各计划模块内容之和', goal.total===expectTotal, 'goal='+goal.total+' exp='+expectTotal);
+  // 加入一个计划外板块 → 目标新增该模块内容；移出 → 移除
+  const allSecs = S.studyLibData().sections;
+  const extra = allSecs.find(s=>!S.planHas(s.subject,s.type));
+  if(extra){
+    const before = S.weekGoalData().total;
+    S.planToggle(extra.subject, extra.type);
+    const after = S.weekGoalData().total;
+    ok('  排进计划→学习目标新增该模块内容', after===before + extra.items.length, 'before='+before+' after='+after+' add='+extra.items.length);
+    S.planToggle(extra.subject, extra.type);
+    ok('  移出计划→学习目标移除该模块内容', S.weekGoalData().total===before, 'total='+S.weekGoalData().total);
+  } else ok('  无计划外板块可测（跳过加入/移出）', true, '');
+  // 学习库主操作=加入本周计划（无逐条加入学习）
+  const sec0 = allSecs.find(s=>s.total>0);
+  S.openLibSection(sec0.subject, sec0.type);
+  const mb = ctx.window.document.getElementById('modal-body').innerHTML;
+  ok('  学习库弹窗含「加入本周计划」主按钮', mb.includes('data-plan-toggle='), '');
+  ok('  学习库弹窗无逐条「加入学习」按钮', !mb.includes('data-study-toggle='), '');
+  // 源码守卫：三处文案与迁移
+  ok('  renderWeek 学习目标 sec-title 说明「计划即目标」', code.includes('计划即目标'), '');
+  ok('  renderWeek 本周计划 sec-title 说明「加入本周计划」并成为学习目标', code.includes('计划里的板块即成为「🎯 学习目标」'), '');
+  ok('  renderWeek 学习库 sec-title 说明「加入本周计划」与「🎯 学习目标」', code.includes('主操作「加入本周计划」') && code.includes('成为上方「🎯 学习目标」'), '');
+  ok('  学习库卡 lib-meta 三态（计划中/未加入计划）', code.includes('🗓 计划中') && code.includes('未加入计划'), '');
+  // 本周页不再残留「加入学习」「目标内」「打卡中」
+  S.renderWeek();
+  const wkHtml = ctx.window.document.getElementById('view-week').innerHTML;
+  ok('  本周页不再出现「加入学习」「目标内」「打卡中」字样', !wkHtml.includes('加入学习') && !wkHtml.includes('目标内') && !wkHtml.includes('打卡中'), '');
+  // 迁移 migGoalPlanMerge2026（旧 studySet→计划）
+  ok('  一次性迁移 migGoalPlanMerge2026 已加', code.includes('state.migGoalPlanMerge2026') && code.includes('migGoalPlanMerge2026 = true'), '');
+  ok('  defaultPerStudent 含 migGoalPlanMerge2026', code.includes('migGoalPlanMerge2026:false'), '');
+  ok('  PER_STUDENT_FIELDS 含 migGoalPlanMerge2026', code.includes('"migGoalPlanMerge2026"'), '');
+  ok('  旧迁移标志 planGoalLink2026 已清除', !code.includes('planGoalLink2026'), '');
 });
 
 /* ---------- ⑦ 版本号 ---------- */
@@ -708,7 +691,7 @@ safe('⑦ 版本号', ()=>{
   const bq=(html.match(/20261024bq/g)||[]).length;
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
-  const bt=(html.match(/20261024bt/g)||[]).length;
+  const bu=(html.match(/20261025bu/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -716,7 +699,7 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bt', bt===10, 'bt='+bt);
+  ok('  10 处 bu', bu===10, 'bu='+bu);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 
