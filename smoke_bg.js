@@ -746,9 +746,10 @@ safe('⑭ 排程移到本周页底部（cb）', ()=>{
   const n=(code.match(/学习板块排程（学习的始终）/g)||[]).length;
   ok('  「学习板块排程」sec-title 仅 schedSectionHTML 一处', n===1, 'n='+n);
   ok('  后台模板无排程块（移出注释标记存在）', code.includes('已移到「本周」页最下面'), '');
-  // 所有板块直接列出：不再用 <details> 折叠
-  ok('  排程不再折叠（无 <details class="sched-group">）', !code.includes('<details class="sched-group">'), '');
-  ok('  分组头用 sg-head（始终展开）', code.includes('class="sg-head"'), '');
+  // cd：整段默认折叠（<details class="sched-collapse"> 无 open）；组内板块仍全部列出（sg-head 不折叠）
+  ok('  排程整段默认折叠（sched-collapse 无 open）', code.includes('<details class="sched-collapse">') && !code.includes('<details class="sched-collapse" open'), '');
+  ok('  折叠头部用 sched-summary + 展开提示', code.includes('class="sec-title sched-summary"') && code.includes('sched-toggle'), '');
+  ok('  组内板块仍直接列出（sg-head，不折叠）', code.includes('class="sg-head"') && !code.includes('<details class="sched-group">'), '');
   // 保存后刷新当前视图（本周页）
   ok('  保存排程后 refreshView', /toast\("已保存学习板块排程 📅"\); renderHome\(\); refreshView\(\)/.test(code), '');
   // 实跑：renderWeek 输出包含排程区块，且穷举板块全部列出
@@ -775,7 +776,7 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
   ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
   ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
-  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cc"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cd"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
   // 实跑：英语单词卡（有配图）0→1→2 三段
   const ctx = boot({});
   const S = ctx.window.__SITE__;
@@ -822,7 +823,8 @@ safe('⑦ 版本号', ()=>{
   const bv=(html.match(/20261025bv/g)||[]).length;
   const ca=(html.match(/20261025ca/g)||[]).length;
   const cb=(html.match(/20261025cb/g)||[]).length;
-  const cbx=(html.match(/20261025cc/g)||[]).length;
+  const cc=(html.match(/20261025cc/g)||[]).length;
+  const cbx=(html.match(/20261025cd/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -830,8 +832,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  11 处 cc（新增 word_emoji.js 脚本）', cbx===11, 'cc='+cbx);
-  ok('  0 处 ca/cb/bv（旧版本已全部替换）', ca===0&&cb===0&&bv===0, 'ca='+ca+' cb='+cb+' bv='+bv);
+  ok('  11 处 cd（新增 word_emoji.js 脚本）', cbx===11, 'cd='+cbx);
+  ok('  0 处 ca/cb/cc/bv（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&bv===0, 'ca='+ca+' cb='+cb+' cc='+cc+' bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 

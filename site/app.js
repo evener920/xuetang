@@ -2055,10 +2055,11 @@
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
-  // —— 📅 学习板块排程（cb：从后台移到「本周」页最下面；所有板块直接列出、不再折叠）——
+  // —— 📅 学习板块排程（cd：整段默认折叠，点开设置；组内板块仍全部列出 · 紧凑版）——
   function schedSectionHTML(){
     return `
-      <div class="sec-title">📅 学习板块排程（学习的始终）<small>为每个「学科·类型」设定开启、开始日、结束日与每周频次 · 所有板块直接列出 · 含自定义素材（如 英语·阅读、历史·知识）</small></div>
+      <details class="sched-collapse">
+      <summary class="sec-title sched-summary">📅 学习板块排程（学习的始终）<small>为每个「学科·类型」设定开启、开始日、结束日与每周频次 · 点开设置（默认折叠）· 含自定义素材</small><span class="sched-toggle">展开 ▾</span></summary>
       <div class="sched-groups">
         ${(()=>{
           // 穷举所有真实存在的「学科·类型」板块（含自定义素材），而非仅内置 CHECKIN_TYPES
@@ -2089,7 +2090,8 @@
         })()}
       </div>
       <div class="chips"><button class="btn primary" id="schedSave">💾 保存排程</button></div>
-      <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>`;
+      <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>
+      </details>`;
   }
   function bindSchedSave(){
     const schedSave=$("#schedSave");
