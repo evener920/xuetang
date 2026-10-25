@@ -179,11 +179,12 @@ safe('⑥ 版本号', ()=>{
   const bq=(html.match(/20261024bq/g)||[]).length;
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
+  const bt=(html.match(/20261024bt/g)||[]).length;
   ok('  0 处 az', az===0, 'az='+az);
   ok('  0 处 ba', ba===0, 'ba='+ba);
-  ok('  0 处 bd（已升级至 bs）', bd===0, 'bd='+bd);
-  ok('  0 处 bf/bg/bh/bi/bj/bk/bl/bm/bn/bo/bp/bq/br（已升级至 bs）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0&&bm===0&&bn===0&&bo===0&&bp===0&&bq===0&&br===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl+' bm='+bm+' bn='+bn+' bo='+bo+' bp='+bp+' bq='+bq+' br='+br);
-  ok('  10 处 bs（含听力卡脚本）', bs===10, 'bs='+bs);
+  ok('  0 处 bd（已升级至 bt）', bd===0, 'bd='+bd);
+  ok('  0 处 bf/bg/bh/bi/bj/bk/bl/bm/bn/bo/bp/bq/br/bs（已升级至 bt）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0&&bm===0&&bn===0&&bo===0&&bp===0&&bq===0&&br===0&&bs===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl+' bm='+bm+' bn='+bn+' bo='+bo+' bp='+bp+' bq='+bq+' br='+br+' bs='+bs);
+  ok('  10 处 bt（含听力卡脚本）', bt===10, 'bt='+bt);
   ok('  引入 english_listening_4.js', html.includes('english_listening_4.js'), '');
 });
 

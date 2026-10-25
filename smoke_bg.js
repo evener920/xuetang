@@ -10,7 +10,8 @@
 // ⑩ 语文页筛选空态与「↩ 返回」（bp：点已学筛选被待导入空态困住）
 // ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框）
 // ⑫ 本周计划板块胶囊（bs：WB 推荐+用户增删 delta，与学习目标/学习库联动，计划移至学习目标下）
-// ⑦ 版本号：10×bs
+// ⑬ 三处联动 计划⊆目标（bt：加入计划自动入目标、移出目标自动移出计划、跨年级只并当前年级、一次性迁移）
+// ⑦ 版本号：10×bt
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -77,6 +78,8 @@ safe('① 学习库与学习目标', ()=>{
   const ctx = boot({});
   const S = ctx.window.__SITE__;
   ok('  __SITE__ 注入', !!S, '');
+  // bt 迁移会在 boot 时把计划板块内容并入学习目标；此处重置为空，独立验证目标聚合逻辑（联动在 ⑬ 专测）
+  S.state.studySet = {};
 
   // 学习库板块：总量与科目页同源（poolFor）
   const lib = S.studyLibData();
@@ -361,6 +364,7 @@ safe('⑧ 全视图渲染回归', ()=>{
 safe('⑨ 学习库年级筛选', ()=>{
   const ctx = boot({});
   const S = ctx.window.__SITE__;
+  S.state.studySet = {}; // 重置为空，隔离验证跨年级加入（联动在 ⑬ 专测）
   const doc = ctx.window.document;
   const sub="语文", tp="诗词";
   const g0 = S.state.grade;
@@ -637,7 +641,7 @@ safe('⑫ 本周计划板块胶囊', ()=>{
   S.openWeekGoal();
   const mbGoal = doc.getElementById('modal-body').innerHTML;
   ok('  目标明细含板块计划状态 chip', mbGoal.includes('data-wg-plan=') && mbGoal.includes('🗓 计划中'), '');
-  ok('  目标明细说明与本周计划联动', mbGoal.includes('与「🗓 本周计划」联动'), '');
+  ok('  目标明细说明三处联动（库→目标→计划）', mbGoal.includes('📖 学习库') && mbGoal.includes('🎯 学习目标') && mbGoal.includes('🗓 本周计划') && mbGoal.includes('把板块排进计划会自动加入目标'), '');
 
   // 板块管理弹窗可开、含恢复推荐
   S.openPlanPicker();
@@ -649,6 +653,46 @@ safe('⑫ 本周计划板块胶囊', ()=>{
   ok('  weekPlan 槽位源为 planSecs()', /function weekPlan\(\)\{[\s\S]{0,120}planSecs\(\)/.test(code), '');
   ok('  PER_STUDENT_FIELDS 含 planSecs', code.includes('"planSecs"'), '');
   ok('  applyStateDefaults 补 planSecs 缺省（旧包兼容）', /state\.planSecs = state\.planSecs \|\| \{add:\{\},del:\{\}/.test(code), '');
+});
+
+/* ---------- ⑬ 三处联动：计划⊆目标（bt：加入计划自动入目标、移出目标自动移出计划、迁移） ---------- */
+safe('⑬ 三处联动 计划⊆目标', ()=>{
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  // 引擎存在
+  ok('  planSyncGoalJoin / planAutoRemoveIfEmpty 已导出', typeof S.planSyncGoalJoin==='function' && typeof S.planAutoRemoveIfEmpty==='function', '');
+  ok('  app.js 定义 planSyncGoalJoin', code.includes('function planSyncGoalJoin('), '');
+  ok('  app.js 定义 planAutoRemoveIfEmpty', code.includes('function planAutoRemoveIfEmpty('), '');
+  // 当前（迁移后）计划内每个板块都在目标内
+  ok('  迁移后：每个计划板块都在目标内（joined>0）', S.planSecs().every(s=>S.poolForAll(s.subject,s.type).filter(it=>S.state.studySet[it.key]).length>0), '');
+  ok('  迁移后：weekGoalData 每个目标板块都在计划中', S.weekGoalData().sections.every(x=>x.inPlan), '');
+  // 加入计划自动并入目标（当前年级）
+  const pl=S.planSecs()[0];
+  S.poolForAll(pl.subject,pl.type).forEach(it=>{ delete S.state.studySet[it.key]; });
+  const off=S.planToggle(pl.subject,pl.type);
+  if(off.inPlan) throw new Error('off failed（移出仍显示在计划内）');
+  const r=S.planToggle(pl.subject,pl.type);
+  ok('  加入计划返回 {inPlan:true,joined>0}', r.inPlan===true && r.joined>0, JSON.stringify(r));
+  ok('  加入计划后该板块确定在目标内', S.poolFor(pl.subject,pl.type).filter(it=>S.state.studySet[it.key]).length===S.poolFor(pl.subject,pl.type).length, '');
+  // 移出目标（抽空）自动移出计划
+  const pl2=S.planSecs().find(x=>x.subject===pl.subject&&x.type===pl.type)||S.planSecs()[0];
+  S.poolForAll(pl2.subject,pl2.type).forEach(it=>{ delete S.state.studySet[it.key]; });
+  const dropped=S.planAutoRemoveIfEmpty(pl2.subject,pl2.type);
+  ok('  目标抽空自动移出计划', dropped===true && S.planHas(pl2.subject,pl2.type)===false, 'dropped='+dropped);
+  // 部分加入（含其他年级）时 planSyncGoalJoin 不补
+  S.planReset();
+  const before=S.planSecs().every(s=>S.poolForAll(s.subject,s.type).filter(it=>S.state.studySet[it.key]).length>0);
+  ok('  恢复推荐后计划⊆目标依然成立', before, '');
+  // 源码守卫：renderWeek 三处文案
+  ok('  renderWeek 学习目标 sec-title 说明「移出目标自动移出计划」', code.includes('移出目标自动移出计划'), '');
+  ok('  renderWeek 本周计划 sec-title 说明「学习目标」的板块分解', code.includes('学习目标」的板块分解'), '');
+  ok('  renderWeek 学习库 sec-title 说明「🎯 学习目标」「🗓 本周计划」', code.includes('再排进「🗓 本周计划」') && code.includes('计入上方「🎯 学习目标」'), '');
+  ok('  学习库卡 lib-meta 三态（目标内/计划中/未加入目标）', code.includes('目标内') && code.includes('计划中') && code.includes('未加入目标'), '');
+  // 迁移代码存在
+  ok('  一次性迁移 planGoalLink2026 已加', code.includes('state.planGoalLink2026') && code.includes('planGoalLink2026 = true'), '');
+  ok('  defaultPerStudent 含 planGoalLink2026', code.includes('planGoalLink2026:false'), '');
+  ok('  PER_STUDENT_FIELDS 含 planGoalLink2026', code.includes('"planGoalLink2026"'), '');
 });
 
 /* ---------- ⑦ 版本号 ---------- */
@@ -664,6 +708,7 @@ safe('⑦ 版本号', ()=>{
   const bq=(html.match(/20261024bq/g)||[]).length;
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
+  const bt=(html.match(/20261024bt/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -671,8 +716,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bs', bs===10, 'bs='+bs);
-  ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br);
+  ok('  10 处 bt', bt===10, 'bt='+bt);
+  ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 
 let pass=0;
