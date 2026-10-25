@@ -779,12 +779,12 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
   ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
   ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
-  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025ch"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
-  // 实跑：英语单词卡（有配图）0→1→2 三段
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025ci"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  // 实跑：英语单词卡（有配图）0→1→2 三段（注意 key 别用 ls4:/ls 前缀——ci 起听力键被闪卡过滤）
   const ctx = boot({});
   const S = ctx.window.__SITE__;
   const pool = [
-    {key:"ls4:x1", subject:"英语", type:"单词", title:"tired", sub:"/ˈtaɪəd/", body:"疲劳的"},
+    {key:"word:x1", subject:"英语", type:"单词", title:"tired", sub:"/ˈtaɪəd/", body:"疲劳的"},
     {key:"poem:x1", subject:"语文", type:"诗词", title:"江南", body:"江南可采莲"}
   ];
   S.openFlashcards(pool, "测试 · 单词");
@@ -887,6 +887,43 @@ safe('⑱ ch 添加素材板块从后台移至资源中心', ()=>{
   })(), '');
 });
 
+safe('⑲ ci 听力不进闪卡 + 编辑弹窗实时预览', ()=>{
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  ok('  openFlashcards 过滤听力卡（type 听力 / ls 键）', /x\.type!=="听力"/.test(code) && /\^ls\\d\*:/.test(code), '');
+  ok('  编辑表单含实时预览 efPreview + sanitizeRich 渲染', /id="efPreview"/.test(code) && /renderEfPrev/.test(code) && /sanitizeRich\(v\)/.test(code), '');
+  ok('  编辑表单含「实时预览」提示与 HTML 说明', /实时预览/.test(code) && /标签结构请保留/.test(code), '');
+  // 实跑（mock DOM 元素跨 boot 共享，不能用「无渲染」断言；改查导出的 fcState：空池 early-return 不改 fcState）
+  ok('  实跑：pool 只有听力卡 → 不建卡组（fcState.deck 仍为空）', (()=>{
+    try{
+      const ctx = boot({}); const S = ctx.window.__SITE__;
+      const ls={key:"ls4:2",subject:"英语",type:"听力",title:"T2",body:"<audio></audio>"};
+      S.openFlashcards([ls],"听力");
+      return S.fcState.deck.length===0;
+    }catch(e){ return false; }
+  })(), '');
+  ok('  实跑：听力卡被剔除（deck 只剩单词卡，翻面见单词不见音频 HTML）', (()=>{
+    try{
+      const ctx = boot({}); const S = ctx.window.__SITE__;
+      const ls={key:"ls4:1",subject:"英语",type:"听力",title:"Topic 1 · Exercise 1",body:"<div class=\"ls-wrap\"><audio controls></audio></div>"};
+      const w={key:"word:1",subject:"英语",type:"单词",title:"apple",body:"苹果"};
+      S.openFlashcards([ls,w],"测试");
+      const html = ctx.document.querySelector("#modal-body").innerHTML;
+      const okDeck = /1 \/ 1/.test(html) && !/ls-wrap/.test(html) && !/Topic 1/.test(html);
+      S.fcFlip(); // 第0段是图片(🍎)，翻面才显示单词
+      const html2 = ctx.document.querySelector("#modal-body").innerHTML;
+      return okDeck && /apple/.test(html2);
+    }catch(e){ return false; }
+  })(), '');
+  ok('  实跑：编辑 HTML 卡渲染出实时预览', (()=>{
+    try{
+      const ctx = boot({}); const S = ctx.window.__SITE__;
+      S.renderEditForm({key:"custom:pv",subject:"人文",type:"知识",title:"九、自测练习",sub:"",grade:"",body:"<h3>A. 单项选择题</h3><div class=\"quiz\"><div class=\"q\">1. 北京人</div></div>"});
+      const html = ctx.document.querySelector("#modal-body").innerHTML;
+      return /efPreview/.test(html) && /实时预览/.test(html);
+    }catch(e){ return false; }
+  })(), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -904,6 +941,7 @@ safe('⑦ 版本号', ()=>{
   const ca=(html.match(/20261025ca/g)||[]).length;
   const cb=(html.match(/20261025cb/g)||[]).length;
   const cc=(html.match(/20261025cc/g)||[]).length;
+  const ci=(html.match(/20261025ci/g)||[]).length;
   const ch=(html.match(/20261025ch/g)||[]).length;
   const cg=(html.match(/20261025cg/g)||[]).length;
   const cd=(html.match(/20261025cd/g)||[]).length;
@@ -914,8 +952,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  11 处 ch（添加素材移至资源中心）', ch===11, 'ch='+ch);
-  ok('  0 处 ca/cb/cc/cd/bv/cg（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0&&cg===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv+' cg='+cg);
+  ok('  11 处 ci（听力不进闪卡 + 编辑实时预览）', ci===11, 'ci='+ci);
+  ok('  0 处 ca/cb/cc/cd/bv/cg/ch（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0&&cg===0&&ch===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv+' cg='+cg+' ch='+ch);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 

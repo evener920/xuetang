@@ -2749,7 +2749,8 @@
     fcState.order=arr;
   }
   function openFlashcards(pool, label){
-    const deck=(pool||[]).filter(x=>x && x.key && x.key!=="practice:maththought" && x.key.indexOf("mtq:")!==0 && (x.title||x.body));
+    // ci：听力卡（正文是音频播放器 HTML）不适合闪卡，直接剔除
+    const deck=(pool||[]).filter(x=>x && x.key && x.key!=="practice:maththought" && x.key.indexOf("mtq:")!==0 && x.type!=="听力" && !/^ls\d*:/.test(x.key) && (x.title||x.body));
     if(!deck.length){ toast("当前筛选下没有可用的闪卡内容"); return; }
     fcState={ deck, order:[], idx:0, stage:0, label:label||"闪卡", shuffle:false };
     fcBuildOrder();
@@ -3204,6 +3205,9 @@
         <label class="ef-row">副标题 / 来源<input id="efSub" value="${esc(cur.sub||"")}" /></label>
         <label class="ef-row">年级<select id="efGrade"><option ${cg===""?"selected":""}>—</option>${grades}</select></label>
         <label class="ef-block">正文 / 题目<textarea id="efBody" rows="12" placeholder="题目、公式或课文内容…">${esc(cur.body||"")}</textarea></label>
+        <p class="af-tip">💡 图文 / 选择题 / 听力类卡片的正文是网页格式（HTML）：直接改文字即可，标签结构请保留，别担心看到「代码」——下方「实时预览」就是它实际显示的样子。</p>
+        <div class="ef-preview-head">👁 实时预览</div>
+        <div class="ef-preview" id="efPreview"></div>
         <p class="af-tip">${isExtra?"这是内置教材的「覆盖版本」，仅保存在本机浏览器；可随时点弹窗里的「⤺ 还原内置」或后台「✏️ 已修改的内置内容」恢复原文。":"这是后台自定义内容，修改将直接保存本机；不再需要时可在下方「🗑 删除该素材」（删除后不可恢复）。"}</p>
         <div class="af-actions">
           <button class="btn primary" data-act="saveedit">💾 保存修改</button>
@@ -3212,6 +3216,10 @@
         </div>
       </div>`;
     $("#modal").hidden=false; document.body.style.overflow="hidden";
+    // ci：实时预览——HTML 正文按网页渲染（与查看弹窗同款 sanitizeRich），纯文本按换行渲染
+    const efBody=$("#efBody"), efPreview=$("#efPreview");
+    const renderEfPrev=()=>{ const v=efBody.value; efPreview.innerHTML = /<[a-z][\s\S]*>/i.test(v) ? `<div class="guide-body">${sanitizeRich(v)}</div>` : esc(v).replace(/\n/g,"<br>"); };
+    renderEfPrev(); efBody.addEventListener("input", renderEfPrev);
     $("#modal-body").querySelectorAll("[data-act]").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         const act=btn.dataset.act;
@@ -4153,7 +4161,7 @@
       todayTasks, poolFor, poolForAll, libPoolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, renderLibModal, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
-      openFlashcards, fcFlip, fcNav, fcShuffle, fcKnown, get fcState(){ return fcState; },
+      openFlashcards, fcFlip, fcNav, fcShuffle, fcKnown, get fcState(){ return fcState; }, renderEditForm,
       fcWordEmoji, fcCustomImg, fcHasPic, fcNormKey, fcMaxStage, openImgDialog, downscaleImage,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,

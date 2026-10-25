@@ -808,3 +808,8 @@ label.af-block textarea:focus,label.af-block input:focus{border-color:var(--acce
 .ls-check:hover{background:#1e40af;}
 .ls-answer{margin-top:6px; padding:10px 14px; background:#fff7ed; border:1px dashed #fdba74; border-radius:10px; color:#9a3412; font-size:13px; display:none;}
 .ls-answer.ls-show{display:block;}
+
+/* ci：编辑弹窗实时预览区 */
+.ef-preview-head{font-size:12px; font-weight:600; color:var(--muted); margin:8px 0 4px;}
+.ef-preview{border:1px solid var(--line); border-radius:12px; background:#f8fafc; padding:12px 14px; max-height:38vh; overflow:auto;}
+.ef-preview:empty::after{content:"（正文为空）"; color:var(--muted); font-size:13px;}
