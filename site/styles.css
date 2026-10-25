@@ -760,6 +760,21 @@ label.af-block textarea:focus,label.af-block input:focus{border-color:var(--acce
   .fc-front-title{font-size:26px;}
   .fc-back-cn{font-size:20px;}
 }
+/* cg：自定义配图（用户上传/链接的图片） */
+.fc-img{max-width:72%; max-height:42vh; object-fit:contain; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.12); background:#fff;}
+.imgmodal{position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;}
+.imgmodal[hidden]{display:none;}
+.imgmodal-mask{position:absolute; inset:0; background:rgba(15,23,42,.55);}
+.imgmodal-card{position:relative; z-index:1; background:#fff; border-radius:16px; padding:20px; width:min(92vw,460px); box-shadow:0 20px 60px rgba(0,0,0,.35);}
+.imgmodal-card h3{margin:0 0 6px; font-size:17px;}
+.imgmodal-tip{margin:0 0 12px; font-size:12px; color:#64748b; line-height:1.5;}
+.imgmodal-prev{min-height:120px; display:flex; align-items:center; justify-content:center; background:#f8fafc; border-radius:12px; margin-bottom:12px; padding:8px;}
+.imgmodal-prev img{max-width:100%; max-height:32vh; border-radius:8px;}
+.imgmodal-empty{color:#94a3b8; font-size:13px;}
+.imgmodal-row{display:block; font-size:13px; color:#334155; margin-bottom:10px;}
+.imgmodal-row input{display:block; width:100%; margin-top:4px; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; box-sizing:border-box;}
+.imgmodal-actions{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;}
+
 
 /* ===== 英语听力卡（试点：Topic 1 Family life） ===== */
 .ls-wrap{display:flex; flex-direction:column; gap:18px;}

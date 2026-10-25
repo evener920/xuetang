@@ -649,6 +649,7 @@
     state.habits = Array.isArray(state.habits) ? state.habits : ["房间卫生","早睡早起","学校作业"]; // 每日习惯打卡
     state.habitLog = state.habitLog || {};   // 日期 → {习惯名: true}
     state.reviewed = state.reviewed || {};   // 日期 → {条目key: true}（艾宾浩斯复习打卡）
+    state.wordImages = state.wordImages || {}; // 用户给单词/卡片自定义配图（key=标题小写 → 图片 src/URL），随云同步
     state.semesterStart = state.semesterStart || fmt(new Date()); // 学期第 1 天（90 天学期）
     state.points   = typeof state.points==="number" ? state.points : 0;
     state.pointLog = Array.isArray(state.pointLog) ? state.pointLog : [];  // 流水 [{t,n,note,hook}]
@@ -1145,7 +1146,13 @@
   }
   function save(){
     syncPerStudent(); // 先把当前学生的进度/打卡/年级/习惯写入其独立快照
-    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    try{
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    }catch(e){
+      // 多半是 localStorage 配额（约 5MB）被自定义图片撑爆；给出提示但不让整条保存链路崩
+      console.warn("本地存储写入失败（可能自定义图片过大）", e);
+      toast("⚠️ 本地保存失败：自定义图片可能太多/太大，建议改用网络图片链接或移除部分图片");
+    }
     if(!_applyRemote) scheduleSyncPush(); // 云同步开启时，防抖推送（拉取落地阶段不触发，避免回环）
   }
 
@@ -2731,7 +2738,11 @@
     const e=window.WORD_EMOJI[w];
     return (e && typeof e==="string" && e.trim()) ? e : "";
   }
-  function fcMaxStage(it){ return fcWordEmoji(it)?2:1; } // 有图单词卡：图→词→释义 三段；其余：面→答案 两段
+  // 自定义配图（cg）：用户给任意卡片加的图片，按「标题小写」为 key 存于 state.wordImages（URL 或 dataURL）
+  function fcNormKey(it){ return String(it && it.title || "").toLowerCase().trim(); }
+  function fcCustomImg(it){ return (state.wordImages && state.wordImages[fcNormKey(it)]) || ""; }
+  function fcHasPic(it){ return !!(fcCustomImg(it) || fcWordEmoji(it)); } // 自定义图优先于 emoji
+  function fcMaxStage(it){ return fcHasPic(it)?2:1; } // 有图卡：图→词→释义 三段；其余：面→答案 两段
   function fcBuildOrder(){
     const arr=[...Array(fcState.deck.length).keys()];
     if(fcState.shuffle){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
@@ -2769,14 +2780,16 @@
     const isWord = it.subject==="英语";
     const learned = !!state.learned[it.key];
     const N = fcState.deck.length, i = fcState.idx;
-    const emoji = fcWordEmoji(it), max = fcMaxStage(it), stage = fcState.stage;
-    // 正面/中间段（cc 三段翻转）：有图单词卡 = 图片 → 单词 → 释义；其余卡 = 题面 → 答案
-    const front = emoji && stage===0 ? `
-      <div class="fc-emoji">${emoji}</div>
-      <div class="fc-hint">看图猜单词 · 点击卡片显示单词</div>` : `
+    const emoji = fcWordEmoji(it), customImg = fcCustomImg(it), pic = customImg || emoji, max = fcMaxStage(it), stage = fcState.stage;
+    // 正面/中间段（cc 三段翻转）：有图卡 = 图片 → 单词 → 释义；其余卡 = 题面 → 答案
+    const front = (stage===0 && pic) ? (
+        customImg
+          ? `<img class="fc-img" src="${esc(customImg)}" alt=""><div class="fc-hint">这是你加的图片 · 点击看单词</div>`
+          : `<div class="fc-emoji">${emoji}</div><div class="fc-hint">看图猜单词 · 点击卡片显示单词</div>`
+      ) : `
       <div class="fc-front-title">${esc(it.title)}</div>
       ${(!isWord && it.sub)?`<div class="fc-front-sub">${esc(it.sub)}</div>`:""}
-      <div class="fc-hint">${emoji&&stage===1?"想一想它的意思 · 点击卡片看释义":"想一想它的意思 · 点击卡片翻面"}</div>`;
+      <div class="fc-hint">${pic&&stage===1?"想一想它的意思 · 点击卡片看释义":"这张还没配图 · 点『🖼 加图片』给它加一张"}</div>`;
     // 背面：释义 / 全文（长文可滚动）
     const back = isWord
       ? `<div class="fc-front-title">${esc(it.title)}</div>
@@ -2792,7 +2805,7 @@
         </div>
         <div class="fc-prog"><div class="fc-prog-fill" style="width:${Math.round((i+1)/N*100)}%"></div></div>
         <div class="fc-card" data-fc-flip>
-          ${stage===0||(emoji&&stage===1)?front:back}
+          ${stage===0||(pic&&stage===1)?front:back}
         </div>
         <div class="fc-nav">
           <button class="btn" data-fc-prev>← 上一张</button>
@@ -2801,6 +2814,7 @@
         </div>
         <div class="fc-nav">
           <button class="btn" data-fc-shuffle>${fcState.shuffle?"➡ 恢复原序":"🔀 乱序"}</button>
+          <button class="btn" data-fc-img>${customImg?"🖼 换图片":"🖼 加图片"}</button>
           <button class="btn pa" data-fc-speak>🔊 朗读</button>
           <button class="btn pa" data-fc-known>✓ 我会了（下一张）</button>
         </div>
@@ -2813,6 +2827,7 @@
     mb.querySelectorAll("[data-fc-shuffle]").forEach(b=>b.addEventListener("click",fcShuffle));
     mb.querySelectorAll("[data-fc-known]").forEach(b=>b.addEventListener("click",fcKnown));
     mb.querySelectorAll("[data-fc-speak]").forEach(b=>b.addEventListener("click",()=>{ const c=fcCur(); if(c) speak(isWord? c.title : c.title+"。"+(c.body||""), isWord?"en-US":"zh-CN"); }));
+    mb.querySelectorAll("[data-fc-img]").forEach(b=>b.addEventListener("click",()=>openImgDialog(fcCur())));
     // 手机滑动：左右滑=切换（滑动后短暂屏蔽 click，防止误翻面）
     const card=mb.querySelector(".fc-card");
     if(card){
@@ -2828,6 +2843,77 @@
     }
     $("#modal").hidden=false;
     document.body.style.overflow="hidden";
+  }
+
+  // 自定义配图弹窗：给没有 emoji 的单词/卡片由用户上传（自动压缩）或粘贴图片链接，存到 state.wordImages
+  function openImgDialog(it){
+    if(!it) return;
+    const key = fcNormKey(it);
+    const cur = (state.wordImages && state.wordImages[key]) || "";
+    let pending = cur;
+    let overlay = document.getElementById("imgModal");
+    if(!overlay){
+      overlay = document.createElement("div");
+      overlay.id = "imgModal";
+      overlay.className = "imgmodal";
+      overlay.hidden = true;
+      document.body.appendChild(overlay);
+    }
+    const render = ()=>{
+      overlay.innerHTML = `
+        <div class="imgmodal-mask" data-img-close></div>
+        <div class="imgmodal-card">
+          <h3>给《${esc(it.title)}》加图片</h3>
+          <p class="imgmodal-tip">建议用网络图片链接（更小、能随云同步）；也可从电脑选择，会自动压缩后保存（仅本机 + 云同步）。</p>
+          <div class="imgmodal-prev">${pending?`<img src="${esc(pending)}" alt="">`:`<div class="imgmodal-empty">还没有图片</div>`}</div>
+          <label class="imgmodal-row">📁 从电脑选择：<input type="file" accept="image/*" data-img-file></label>
+          <label class="imgmodal-row">🔗 或粘贴图片链接：<input type="text" placeholder="https://… 或 data:image/…" data-img-url></label>
+          <div class="imgmodal-actions">
+            ${cur?`<button class="btn" data-img-remove style="color:#b91c1c;border-color:#fecaca">🗑 移除图片</button>`:""}
+            <button class="btn primary" data-img-save>💾 保存</button>
+            <button class="btn" data-img-cancel>取消</button>
+          </div>
+        </div>`;
+      const fileInput = overlay.querySelector("[data-img-file]");
+      const urlInput = overlay.querySelector("[data-img-url]");
+      const setPending = (src)=>{ pending = src; overlay.querySelector(".imgmodal-prev").innerHTML = src?`<img src="${esc(src)}" alt="">`:`<div class="imgmodal-empty">还没有图片</div>`; };
+      fileInput.addEventListener("change", ev=>{
+        const f = ev.target.files && ev.target.files[0]; if(!f) return;
+        const r = new FileReader();
+        r.onload = ()=>{ downscaleImage(r.result, 640, (durl)=>{ urlInput.value=""; setPending(durl); }); };
+        r.readAsDataURL(f);
+      });
+      urlInput.addEventListener("input", ev=>{ const v=ev.target.value.trim(); if(/^(https?:|data:image\/)/i.test(v)){ setPending(v); } });
+      overlay.querySelector("[data-img-close]").addEventListener("click", closeImgDialog);
+      overlay.querySelector("[data-img-cancel]").addEventListener("click", closeImgDialog);
+      const saveBtn = overlay.querySelector("[data-img-save]");
+      if(saveBtn) saveBtn.addEventListener("click", ()=>{
+        if(!pending){ toast("请先选择或粘贴一张图片"); return; }
+        if(!state.wordImages) state.wordImages={};
+        state.wordImages[key]=pending; save(); closeImgDialog(); fcState.stage=0; fcRender(); toast("已保存图片 🖼");
+      });
+      const rm = overlay.querySelector("[data-img-remove]");
+      if(rm) rm.addEventListener("click", ()=>{ if(state.wordImages) delete state.wordImages[key]; save(); closeImgDialog(); fcState.stage=0; fcRender(); toast("已移除图片"); });
+    };
+    render();
+    overlay.hidden = false;
+  }
+  function closeImgDialog(){ const o=document.getElementById("imgModal"); if(o) o.hidden=true; }
+  // 把图片压到最大边 maxEdge，输出 jpeg dataURL，减小本地存储 / 云同步体积（避免撑爆 localStorage 5MB 配额）
+  function downscaleImage(src, maxEdge, cb){
+    const im = new Image();
+    im.onload = ()=>{
+      const w = im.naturalWidth||im.width, h = im.naturalHeight||im.height;
+      const s = Math.min(1, maxEdge/Math.max(w,h));
+      if(s>=1){ cb(src); return; }
+      try{
+        const c=document.createElement("canvas"); c.width=Math.round(w*s); c.height=Math.round(h*s);
+        c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+        cb(c.toDataURL("image/jpeg",0.82));
+      }catch(e){ cb(src); }
+    };
+    im.onerror = ()=>cb(src);
+    im.src = src;
   }
 
   /* ---------- 标签专题页 ---------- */
@@ -4065,6 +4151,7 @@
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, renderLibModal, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,
       openFlashcards, fcFlip, fcNav, fcShuffle, fcKnown, get fcState(){ return fcState; },
+      fcWordEmoji, fcCustomImg, fcHasPic, fcNormKey, fcMaxStage, openImgDialog, downscaleImage,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
       pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay, openLibSection,
