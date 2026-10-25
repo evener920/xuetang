@@ -1861,7 +1861,7 @@
       return { subject:sec.subject, type:sec.type, items,
         done: items.filter(x=>x.done).length, total: items.length,
         inPlan: planHas(sec.subject, sec.type) };
-    }).filter(s=>s.total>0);
+    });
     // 排序：主课（语数英）在前，其余按名称；与科目导航顺序观感一致
     const order = ["语文","数学","英语"];
     out.sort((a,b)=>{
@@ -1877,9 +1877,9 @@
     $("#modal-body").innerHTML = `
       <div class="m-type">🎯 学习目标明细</div>
       <div style="margin:6px 0 12px;font-size:14px;color:#475569">
-        共 <strong>${data.total}</strong> 项目标 · 已学 <strong style="color:#15803d">${data.done}</strong> · 未学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
+        共 <strong>${data.total}</strong> 项目标 · 已完成 <strong style="color:#15803d">${data.done}</strong> · 待学 <strong style="color:#b91c1c">${data.total-data.done}</strong>
         ${data.total?"":"· 还没有安排学习内容，去下方「📖 学习库」点「加入本周计划」把要学的板块排进来"}
-        <br>三处联动：<b>📖 学习库</b>（穷举该时间段全部模块）→ 点「加入本周计划」→ 即成为<b>🎯 学习目标</b>（进度条按各计划模块统计已学/未学），并排进<b>🗓 本周计划</b>的每周任务。学习目标与本周计划是同一批内容。
+        <br>三处联动：<b>📖 学习库</b>（穷举该时间段全部模块）→ 点「加入本周计划」→ 即成为<b>🎯 学习目标</b>（进度条按各计划模块统计已学/待学），并排进<b>🗓 本周计划</b>的每周任务。学习目标与本周计划是同一批内容。（已完成＝已学会，待学＝还没学会）
       </div>
       ${data.sections.map(s=>`
         <div style="margin-bottom:16px">
@@ -2076,6 +2076,7 @@
     const goal = weekGoalData();
     const lib = studyLibData();
     const caps = planSecs(); // 本周计划板块胶囊（WB 推荐 + 用户增删）
+    const goalByKey = {}; goal.sections.forEach(s=> goalByKey[checkinKey(s.subject,s.type)] = s); // 每板块「已学/共」查表
     // 本周行为扣分记录（与习惯周跟踪放一起）
     const penWeek = penaltyLogWeek();
     const penWkTotal = penWeek.reduce((a,b)=>a-b.n,0); // 本周共扣（净分用）
@@ -2093,11 +2094,11 @@
         </div>
       </div>
 
-      <div class="sec-title">🎯 学习目标 <small>＝本周计划的内容（计划即目标）· 进度条按各计划模块统计已学/未学 · 点卡片查看明细</small></div>
+      <div class="sec-title">🎯 学习目标 <small>＝本周计划的内容（计划即目标）· 进度条按各计划模块统计已学/待学 · 点卡片查看明细</small></div>
       <div class="stat-strip" id="wkGoalCard" style="cursor:pointer" title="点击查看学习目标明细">
         <div class="stat"><div class="num">${goal.total}</div><div class="lbl">目标总量</div></div>
-        <div class="stat"><div class="num" style="color:#15803d">${goal.done}</div><div class="lbl">已学习</div></div>
-        <div class="stat"><div class="num" style="color:#be123c">${goal.total-goal.done}</div><div class="lbl">未学习</div></div>
+        <div class="stat"><div class="num" style="color:#15803d">${goal.done}</div><div class="lbl">已完成</div></div>
+        <div class="stat"><div class="num" style="color:#be123c">${goal.total-goal.done}</div><div class="lbl">待学</div></div>
         <div class="stat"><div class="num" style="color:#4f46e5">${caps.length}</div><div class="lbl">计划板块</div></div>
         <div class="stat" style="flex:2;min-width:220px">
           <div class="lbl" style="margin-bottom:4px">目标完成率 ${goal.total?Math.round(goal.done/goal.total*100):0}% · 本周计划 ${caps.length} 个板块</div>
@@ -2108,8 +2109,10 @@
       <div class="sec-title">🗓 本周计划 <small>从「📖 学习库」把板块排进来（WB 推荐已按主课多、副课少排好）· 胶囊可增删 · 计划里的板块即成为「🎯 学习目标」· 增删后自动重排</small></div>
       <div class="plan-caps">
         ${caps.map(s=>{ const k=checkinKey(s.subject,s.type); const c=SUBJECT_COLORS[s.subject]||["#f1f5f9","#475569"];
+          const g = goalByKey[k] || {done:0, total:0};
           return `<span class="plan-cap" style="background:${c[0]};color:${c[1]};border-color:${c[0]}" data-plan-cap="${esc(k)}">
             <button class="plan-cap-nm" data-plan-open="${esc(k)}" title="点击进「📖 学习库」管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">${esc(s.subject)}·${esc(s.type)}</button>
+            <span class="plan-cap-sub" title="已学 ${g.done} / 共 ${g.total}（学习目标进度按计划模块统计）">已学 ${g.done}/${g.total}</span>
             <button class="plan-cap-x" data-plan-del="${esc(k)}" title="移出本周计划（学习目标同步移出）">×</button>
           </span>`;}).join("")}
         <button class="btn" id="planAddBtn" title="从学习库选择板块加入本周计划">＋ 添加板块</button>
@@ -2134,13 +2137,16 @@
       <div class="sec-title">📖 学习库 <small>穷举该时间段全部模块（与科目页数字一致）· 点卡片进管理，主操作「加入本周计划」即把板块排进每周任务、成为上方「🎯 学习目标」· 卡片标「🗓 计划中」的已排进本周计划</small></div>
       <div class="stat-strip">
         ${lib.sections.map(s=>{
-          const ck = s.inPlan; // 是否已排进本周计划（即纳入学习目标）
+          const ck = s.inPlan && s.total>0; // 是否已排进本周计划（仅在有内容的板块生效）
+          const empty = s.total===0;
           return `
-          <div class="stat lib-sec" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
+          <div class="stat lib-sec ${empty?"lib-empty":""}" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
             <div class="num">${s.total}</div>
             <div class="lbl">${esc(s.subject)}·${esc(s.type)}</div>
-            <div class="lib-meta">已学 ${s.done}${s.inPlan?` · <span style="color:#7c3aed">🗓 计划中</span>`:` · <span style="color:#94a3b8">未加入计划</span>`}</div>
-            <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${ck?`已排进本周计划，正处学习目标范围 · 点击进去管理`:"还没有排进本周计划 · 点击进去选择（排进后才进入学习目标）"}">${ck?"✓ 已排计划":"＋ 加入本周计划"}</button>
+            <div class="lib-meta">${empty?`<span style="color:#94a3b8">暂无内容 · 去科目页/后台添加</span>`:`已学 ${s.done}${s.inPlan?` · <span style="color:#7c3aed">🗓 计划中</span>`:` · <span style="color:#94a3b8">未加入计划</span>`}`}</div>
+            ${empty
+              ? `<button class="chip lib-ck" disabled style="opacity:.5;cursor:not-allowed" title="该板块当前年级暂无内容，去科目页或后台添加内容后可排进计划">暂无内容</button>`
+              : `<button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${ck?`已排进本周计划，正处学习目标范围 · 点击进去管理`:"还没有排进本周计划 · 点击进去选择（排进后才进入学习目标）"}">${ck?"✓ 已排计划":"＋ 加入本周计划"}</button>`}
           </div>`;}).join("")}
         ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
       </div>

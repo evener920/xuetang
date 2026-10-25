@@ -170,9 +170,11 @@ safe('④ 版本号', ()=>{
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
+  const bw=(html.match(/20261025bw/g)||[]).length;
   ok('  0 处 be', be===0, 'be='+be);
   ok('  0 处 bf/bg/bh/bi/bj/bk/bl/bm/bn/bo/bp/bq/br/bs（已升级至 bt）', bf===0&&bg===0&&bh===0&&bi===0&&bj===0&&bk===0&&bl===0&&bm===0&&bn===0&&bo===0&&bp===0&&bq===0&&br===0&&bs===0, 'bf='+bf+' bg='+bg+' bh='+bh+' bi='+bi+' bj='+bj+' bk='+bk+' bl='+bl+' bm='+bm+' bn='+bn+' bo='+bo+' bp='+bp+' bq='+bq+' br='+br+' bs='+bs);
-  ok('  10 处 bv', bv===10, 'bv='+bv);
+  ok('  10 处 bw', bw===10, 'bw='+bw);
+  ok('  0 处 bv（旧版本已全部替换）', bv===0, 'bv='+bv);
 });
 
 let pass=0;

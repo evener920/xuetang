@@ -11,7 +11,7 @@
 // ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框）
 // ⑫ 本周计划板块胶囊（bs：WB 推荐+用户增删 delta，与学习目标/学习库联动，计划移至学习目标下）
 // ⑬ 学习目标=本周计划内容（bu：去 studySet 门槛、学习库主操作「加入本周计划」、一次性迁移 migGoalPlanMerge2026、本周页无「加入学习/目标内/打卡中」）
-// ⑦ 版本号：10×bv
+// ⑦ 版本号：10×bw
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -146,6 +146,23 @@ safe('① 学习库与学习目标', ()=>{
   ok('  studyLibData 用 poolFor 取总量', /function studyLibData\(\)\{[\s\S]{0,600}poolFor\(sec\.subject, sec\.type\)/.test(code), '');
   ok('  PER_STUDENT_FIELDS 含 migGoalPlanMerge2026（迁移标志）', code.includes('"migGoalPlanMerge2026"'), '');
   ok('  PER_STUDENT_FIELDS 不再含 studySet', !code.includes('"studySet"'), '');
+
+  // ===== bw：学习库必须列出所有板块（含无内容的空板块），不再被 .filter(s=>s.total>0) 滤掉 =====
+  const libAll = S.studyLibData();
+  const mathAll = libAll.sections.filter(s=>s.subject==='数学');
+  ok('  数学 5 个类型板块全部列出（不因空内容被删）', mathAll.length===5, 'n='+mathAll.length);
+  ok('  数学含 total===0 的空板块（如计算题/应用题）', mathAll.some(s=>s.total===0), JSON.stringify(mathAll.map(s=>s.type+':'+s.total)));
+  const wkMath = (S.renderWeek(), ctx.window.document.getElementById('view-week').innerHTML);
+  ok('  学习库空板块显示「暂无内容 · 去科目页/后台添加」', wkMath.includes('暂无内容'), '');
+  ok('  学习库仍列出数学板块卡（data-lib-sec="数学·）', /data-lib-sec="数学·/.test(wkMath), '');
+  ok('  空板块「加入本周计划」按钮禁用（disabled）', /data-lib-sec="数学·[\s\S]*?disabled/.test(wkMath), '');
+  // 学习目标卡片量化：已完成/待学 标签 + 本周计划胶囊每板块「已学 X/共 Y」
+  ok('  学习目标卡含「已完成」标签', wkMath.includes('已完成'), '');
+  ok('  学习目标卡含「待学」标签（替代旧「未学习」）', wkMath.includes('待学') && !wkMath.includes('未学习'), '');
+  ok('  本周计划胶囊含「已学 X/Y」字样', /已学 \d+\/\d+/.test(wkMath), '');
+  // 源码守卫：studyLibData 函数体内不再含 .filter(s=>s.total>0)
+  const m = code.match(/function studyLibData\(\)\{[\s\S]*?\n  \}/);
+  ok('  studyLibData 不再按 total>0 过滤（空板块保留）', m && !m[0].includes('.filter(s=>s.total>0)'), m?(m[0].includes('.filter(s=>s.total>0)')?'仍含filter':''):'未匹配到函数');
 });
 
 /* ---------- ② 首页扣分（诉求3） ---------- */
@@ -713,6 +730,7 @@ safe('⑦ 版本号', ()=>{
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
+  const bw=(html.match(/20261025bw/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -720,7 +738,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bv', bv===10, 'bv='+bv);
+  ok('  10 处 bw', bw===10, 'bw='+bw);
+  ok('  0 处 bv（旧版本已全部替换）', bv===0, 'bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 
