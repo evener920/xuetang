@@ -890,6 +890,63 @@
     };
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
+  // 积分流水：撤销任意一条记录（需家长口令 + 确认框）。按记录类型决定后果：
+  // learn=退分并取消已学/星级；pen=返还积分；兑换=返还并撤回兑换申请；退回兑换=收回积分并恢复兑换；其余=纯冲减积分。
+  // 这样积分流水的「每条记录都可以撤销」统一由本函数兜底，奖励页/兑换审核各自的撤销入口仍保留。
+  function undoLogEntry(idx){
+    const log = state.pointLog || [];
+    const e = log[idx];
+    if(!e){ toast("这条记录不存在或已撤销"); return; }
+    const isLearn  = /^learn:/.test(e.hook);
+    const isPen    = /^pen:/.test(e.hook);
+    const isRedeem = e.note && e.note.indexOf("兑换 ")===0;
+    const isRefund = e.note && e.note.indexOf("退回兑换 ")===0;
+    let title, effect;
+    if(isLearn){ title="↩️ 撤销学会积分"; effect=`退回 <b>+${e.n} 分</b>，并取消该卡的已学标记与星级（之后可重新学、重新计分）`; }
+    else if(isPen){ title="✅ 撤销行为扣分"; effect=`返还 <b>+${-e.n} 分</b> 到当前积分，这条扣分记录同时消失`; }
+    else if(isRedeem){ title="↩️ 撤销兑换"; effect=`返还 <b>+${-e.n} 分</b>，并撤回这次兑换申请（兑换审核里同步移除）`; }
+    else if(isRefund){ title="↩️ 撤销兑换退回"; effect=`收回 <b>${e.n} 分</b>，并恢复这次兑换（重新出现在兑换审核）`; }
+    else { title="↩️ 撤销积分"; effect=`收回 <b>${e.n>0?"+"+e.n:e.n} 分</b>，这条记录消失`; }
+    requireAdmin(()=>{
+      $("#modal-body").innerHTML = `
+        <div class="m-type">${title}</div>
+        <div class="af-tip" style="margin:6px 0 12px;font-size:14px;line-height:1.7">
+          <p>将撤销：<b>${esc(e.note||"")}</b>（${esc(e.t)}，${e.n>0?"+"+e.n:e.n} 分）。</p>
+          <p>撤销后${effect}。</p>
+        </div>
+        <div class="af-actions">
+          <button class="btn primary" id="cfOk">确定撤销</button>
+          <button class="btn" id="cfCancel">再想想</button>
+        </div>`;
+      $("#cfCancel").onclick = closeModal;
+      $("#cfOk").onclick = ()=>{
+        closeModal();
+        state.points -= e.n; // 反向冲减积分（n>0 则收回，n<0 则返还）
+        if(isLearn){
+          const key = e.hook.slice(6);
+          delete state.learned[key];
+          delete state.mastery[key];
+          const t = fmt(new Date());
+          if(state.reviewed[t]) delete state.reviewed[t][key];
+        } else if(isRedeem){
+          const name = e.note.replace(/^兑换 /,"");
+          const ri = (state.redeems||[]).findIndex(r=>r.name===name && r.cost===-e.n);
+          if(ri>=0) state.redeems.splice(ri,1);
+        } else if(isRefund){
+          const name = e.note.replace(/^退回兑换 /,"");
+          (state.redeems||[]).unshift({ t:fmt(new Date()), name, icon:"🎁", cost:e.n, status:"已兑现" });
+        }
+        const cur = state.pointLog || [];
+        const j = cur.indexOf(e);
+        if(j>=0) cur.splice(j,1);
+        if(cur.length>600) cur.length=600;
+        save();
+        toast("已撤销：" + (e.note||"") + " ↩️");
+        refreshView();
+      };
+      $("#modal").hidden=false; document.body.style.overflow="hidden";
+    });
+  }
   // 学习日期集合（已打卡的日期）与连续天数
   function studyDates(){
     const s=new Set();
@@ -3131,9 +3188,9 @@
         }).join("")}
       </div>
 
-      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 学习所得不会因漏打卡被扣回 · 行为扣分由家长记录，改正后可撤销 · 学会积分加错了可「撤销」（退分并取消该卡已学）· 撤销需验证家长口令</small></div>
+      <div class="sec-title">🧾 积分流水 <small>最近 ${Math.min(20,(state.pointLog||[]).length)} 条 · 每条记录都可撤销（撤销需验证家长口令）· 行为扣分/学会/兑换/奖励积分均可退回，撤销会相应冲减积分与学习记录</small></div>
       ${(state.pointLog||[]).length?`<div class="admin-list">
-        ${(state.pointLog||[]).slice(0,20).map(x=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${x.n<0?`<span class="badge" style="background:#fef2f2;color:#b91c1c">行为扣分</span>`:""}${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div>${/^learn:/.test(x.hook)?`<button class="btn" style="font-size:12px;padding:2px 8px" data-undo-learn="${esc(x.hook.slice(6))}" title="退回这 +${x.n} 分，并取消该卡的已学标记（加错时用）">撤销</button>`:""}${/^pen:/.test(x.hook)?`<button class="btn" style="font-size:12px;padding:2px 8px" data-undo-pen="${esc(x.hook)}" title="孩子已改正 → 返还 +${-x.n} 分">撤销</button>`:""}</div>`).join("")}
+        ${(state.pointLog||[]).slice(0,20).map((x,i)=>`<div class="admin-item"><div class="ai-main"><b style="color:${x.n>0?"#166534":"#b91c1c"}">${x.n>0?"+":""}${x.n}</b> ${x.n<0?`<span class="badge" style="background:#fef2f2;color:#b91c1c">行为扣分</span>`:""}${esc(x.note)} <span style="font-size:12px;color:var(--muted)">${esc(x.t)}</span></div><button class="btn" style="font-size:12px;padding:2px 8px" data-undo-log="${i}" title="撤销这条积分记录（需家长口令）">撤销</button></div>`).join("")}
       </div>`:'<div class="placeholder" style="padding:16px">还没有积分记录，去首页完成今天的任务吧 🚀</div>'}
 
       <div class="sec-title">📦 兑换记录 <small>兑换后需家长在「🛠 后台」确认兑现</small></div>
@@ -3144,12 +3201,9 @@
       </div>`:'<div class="placeholder" style="padding:16px">还没有兑换过奖励</div>'}
     `;
     el.querySelectorAll("[data-redeem]").forEach(b=>b.addEventListener("click", ()=>redeemReward(b.dataset.redeem)));
-    // 积分流水撤销：先过家长口令（requireAdmin），再弹确认框（confirmUndo）
-    el.querySelectorAll("[data-undo-learn]").forEach(b=>b.addEventListener("click", ()=>{
-      requireAdmin(()=>confirmUndo("learn", b.dataset.undoLearn));
-    }));
-    el.querySelectorAll("[data-undo-pen]").forEach(b=>b.addEventListener("click", ()=>{
-      requireAdmin(()=>confirmUndo("pen", b.dataset.undoPen));
+    // 积分流水：每条记录都可由家长撤销（先过家长口令，再弹确认框说明后果）
+    el.querySelectorAll("[data-undo-log]").forEach(b=>b.addEventListener("click", ()=>{
+      undoLogEntry(parseInt(b.dataset.undoLog,10));
     }));
   }
 
@@ -3969,7 +4023,7 @@
       get biView(){ return biView; }, settleBonuses, pointToday, pointTodayNet, pointWeekNet, POINT_RULES, DEFAULT_REWARDS,
       get cnView(){ return cnView; }, get gnView(){ return gnView; },
       penalize, undoPenalty, penaltyList, penaltyToday, penaltyLogToday, penaltyLogWeek, PENALTY_CAP_DAY, PENALTY_FLOOR, DEFAULT_PENALTIES,
-      requireAdmin, adminGateTry, confirmUndo, confirmUnlearn,
+      requireAdmin, adminGateTry, confirmUndo, confirmUnlearn, undoLogEntry,
       todayTasks, poolFor, poolForAll, libPoolFor, splitSections, weekDatesMondayStart, weekPlan, motherOrdered, extraSubjects, allSubjects, cnPool,
       cardHTML, sanitizeRich, stripTags, seedDefaultContent, biData, renderRes, renderSubject, renderTag, renderSearch, renderLibModal, go, get biView(){ return biView; },
       openWordGame, wordGamePool, get wgBound(){ return wgBound; }, runBulkImport,

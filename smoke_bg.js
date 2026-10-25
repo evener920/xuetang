@@ -11,7 +11,7 @@
 // ⑪ 积分撤销需家长权限（bq：撤销按钮 + 口令闸门 + 确认框）
 // ⑫ 本周计划板块胶囊（bs：WB 推荐+用户增删 delta，与学习目标/学习库联动，计划移至学习目标下）
 // ⑬ 学习目标=本周计划内容（bu：去 studySet 门槛、学习库主操作「加入本周计划」、一次性迁移 migGoalPlanMerge2026、本周页无「加入学习/目标内/打卡中」）
-// ⑦ 版本号：10×bu
+// ⑦ 版本号：10×bv
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -470,8 +470,9 @@ safe('⑪ 积分撤销权限闸门', ()=>{
   S.award(8, '学会《测试卡》', 'learn:test:key1');
   S.renderReward();
   const rw = doc.getElementById('view-reward').innerHTML;
-  ok('  积分流水扣分明细带撤销按钮', rw.includes('data-undo-pen="pen:p1:'+today+'"'), '');
-  ok('  积分流水学会明细带撤销按钮', rw.includes('data-undo-learn="test:key1"'), '');
+  const logN = (S.state.pointLog||[]).length;
+  const undoN = (rw.match(/data-undo-log=/g)||[]).length;
+  ok('  积分流水每条记录都带撤销按钮（data-undo-log）', rw.includes('data-undo-log=') && undoN===Math.min(20,logN), 'logN='+logN+' undoN='+undoN);
   ok('  流水说明标注撤销需家长口令', rw.includes('撤销需验证家长口令'), '');
 
   // 权限闸门：未登录 → 弹验证框且不执行
@@ -523,9 +524,29 @@ safe('⑪ 积分撤销权限闸门', ()=>{
   doc.getElementById('cfOk').onclick();
   ok('  确认后取消已学标记', !S.state.learned[poem.key], '');
 
+  // 积分流水「每条都撤销」：兑换/通用奖励等此前无撤销按钮的记录，现在也能撤销并正确冲减
+  S.state.adminAuthed = true;
+  S.state.points = 100;
+  S.state.pointLog = [{t:today, n:-30, note:'兑换 乐高', hook:''}];
+  S.state.redeems = [{t:today, name:'乐高', icon:'🎁', cost:30, status:'待兑现'}];
+  S.renderReward();
+  const rw2 = doc.getElementById('view-reward').innerHTML;
+  ok('  兑换记录也带撤销按钮（data-undo-log）', rw2.includes('data-undo-log='), '');
+  S.undoLogEntry(0);                 // 撤销兑换（已登录 → 直接弹确认框）
+  doc.getElementById('cfOk').onclick();
+  ok('  撤销兑换返还积分', S.state.points===130, 'p='+S.state.points);
+  ok('  撤销兑换同步移除兑换申请', S.state.redeems.length===0, 'len='+S.state.redeems.length);
+  // 通用奖励积分撤销：纯冲减余额
+  S.state.pointLog = [{t:today, n:50, note:'小测答对 +50', hook:'quiz:1'}];
+  S.state.adminAuthed = true;
+  S.renderReward();
+  S.undoLogEntry(0);
+  doc.getElementById('cfOk').onclick();
+  ok('  撤销通用奖励积分冲减余额', S.state.points===80, 'p='+S.state.points);
+
   // 源码守卫：撤销入口均走 requireAdmin
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
-  ok('  撤销按钮均走 requireAdmin（含定义≥5 处）', (code.match(/requireAdmin\(/g)||[]).length>=5, 'n='+(code.match(/requireAdmin\(/g)||[]).length);
+  ok('  撤销入口均走 requireAdmin（含定义≥4 处）', (code.match(/requireAdmin\(/g)||[]).length>=4, 'n='+(code.match(/requireAdmin\(/g)||[]).length);
 });
 
 /* ---------- ⑫ 本周计划板块胶囊（bs：与学习目标/学习库联动，WB 推荐+可增删） ---------- */
@@ -691,7 +712,7 @@ safe('⑦ 版本号', ()=>{
   const bq=(html.match(/20261024bq/g)||[]).length;
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
-  const bu=(html.match(/20261025bu/g)||[]).length;
+  const bv=(html.match(/20261025bv/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -699,7 +720,7 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bu', bu===10, 'bu='+bu);
+  ok('  10 处 bv', bv===10, 'bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 
