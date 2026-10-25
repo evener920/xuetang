@@ -366,6 +366,14 @@ safe('⑧ 全视图渲染回归', ()=>{
   ok('  资源页含学科板块磁贴', resHtml.includes('res-tile'), '');
   ok('  资源页含分面筛选 chips', resHtml.includes('data-bi-subj') && resHtml.includes('data-bi-grade'), '');
   ok('  资源页含内容卡片', resHtml.includes('res-card'), '');
+  // 闪卡按钮：不与板块类型并列（移到右侧搜索框旁）、去图标、带底色
+  S.renderSubject('语文');
+  const cnHtml = doc.getElementById('view-subject').innerHTML;
+  ok('  语文页闪卡按钮存在（data-cn-flash）', cnHtml.includes('data-cn-flash'), '');
+  ok('  闪卡按钮去图标（无 🃏）', !cnHtml.includes('🃏 闪卡') && cnHtml.includes('>闪卡<'), '');
+  ok('  闪卡按钮带底色（#e0e7ff）', /data-cn-flash[^>]*background:#e0e7ff/.test(cnHtml), '');
+  ok('  闪卡按钮在右侧（弹性占位之后、搜索框之前）', cnHtml.indexOf('flex:1')>-1 && cnHtml.indexOf('flex:1')<cnHtml.indexOf('data-cn-flash') && cnHtml.indexOf('data-cn-flash')<cnHtml.indexOf('cnSearch'), '');
+  ok('  闪卡不再与板块类型并列（位于「＋ 添加」之后）', cnHtml.indexOf('data-cn-add')>-1 && cnHtml.indexOf('data-cn-add')<cnHtml.indexOf('flex:1'), '');
   // go() 路由切换不抛错
   let goErr='';
   try{ ['home','week','reward','res','admin'].forEach(v=>S.go(v)); }catch(e){ goErr=e.message; }
@@ -738,7 +746,7 @@ safe('⑦ 版本号', ()=>{
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
-  const bw=(html.match(/20261025by/g)||[]).length;
+  const bw=(html.match(/20261025bz/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -746,7 +754,7 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 by', bw===10, 'bw='+bw);
+  ok('  10 处 bz', bw===10, 'bw='+bw);
   ok('  0 处 bv（旧版本已全部替换）', bv===0, 'bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });

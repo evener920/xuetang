@@ -2292,10 +2292,10 @@
       <p class="subj-desc">${desc}</p>
       <div class="chips">
         ${types.map(t=>`<button class="chip ${v.type===t?"on":""}" data-gn-type="${esc(t)}">${esc(t)}</button>`).join("")}
-        ${listCnt?`<button class="chip" data-gn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案">🃏 闪卡</button>`:""}
         <button class="chip" data-gn-add title="自定义添加板块或板块下的内容，添加后归集到「📚 资源」页">＋ 添加</button>
         ${isEngWord?`<span style="width:14px"></span><span class="lbl">年级语境：</span><span class="badge" style="background:#eef2ff;color:#1e40af">${esc(state.grade)}</span>`:""}
         <span style="flex:1"></span>
+        ${listCnt?`<button class="chip" data-gn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案" style="background:#e0e7ff;color:#3730a3;border-color:#c7d2fe;font-weight:600">闪卡</button>`:""}
         <input id="gnSearch" class="search-input" style="width:200px" placeholder="搜索…" value="${esc(v.q)}" />
       </div>
       ${(grades.length && !isEngWord)?`<div class="chips"><span class="lbl">年级：</span><button class="chip ${v.grade==="全部"?"on":""}" data-gn-grade="全部">全部</button>${grades.map(g=>`<button class="chip ${v.grade===g?"on":""}" data-gn-grade="${esc(g)}">${esc(g)}</button>`).join("")}</div>`:""}
@@ -2618,9 +2618,9 @@
       <p class="subj-desc">${isIdiom?"成语已按年级自动匹配。":"诗词已按部编版教材标注年级，可筛选查看对应年级的篇目。"}点击卡片查看全文与解析。</p>
       <div class="chips">
         ${cnTypes.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}
-        <button class="chip" data-cn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案">🃏 闪卡</button>
         <button class="chip" data-cn-add title="自定义添加板块或板块下的内容，添加后归集到「📚 资源」页">＋ 添加</button>
         <span style="flex:1"></span>
+        <button class="chip" data-cn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案" style="background:#e0e7ff;color:#3730a3;border-color:#c7d2fe;font-weight:600">闪卡</button>
         <input id="cnSearch" class="search-input" style="width:200px" placeholder="在语文内搜索…" value="${esc(cnView.q)}" />
       </div>
       ${grades.length?`
