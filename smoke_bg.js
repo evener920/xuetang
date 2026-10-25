@@ -17,7 +17,7 @@ const vm = require('vm');
 const path = require('path');
 
 const SITE_DIR = path.resolve(__dirname, 'site');
-const FILES = ['data.js','extra.js','extra2.js','history_guide_7.js','english_reading_4.js','english_listening_4.js','gallery.js','science_gallery.js','app.js'];
+const FILES = ['data.js','extra.js','extra2.js','history_guide_7.js','english_reading_4.js','english_listening_4.js','gallery.js','science_gallery.js','word_emoji.js','app.js'];
 
 const registry = {};
 function makeEl(id){
@@ -763,6 +763,49 @@ safe('⑭ 排程移到本周页底部（cb）', ()=>{
   ok('  排程板块卡片带频次输入', html.includes('data-sched-freq'), '');
 });
 
+/* ---------- ⑮ 闪卡三段翻转（图片→单词→释义）+ 进度计数不被 × 挡住（cc） ---------- */
+safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  ok('  fcState 用 stage 三段（无 flipped 残留）', code.includes('stage:0') && !code.includes('fcState.flipped'), '');
+  ok('  fcWordEmoji 配图查表函数', code.includes('function fcWordEmoji'), '');
+  ok('  fcMaxStage 有图卡三段/无图卡两段', code.includes('function fcMaxStage'), '');
+  ok('  翻面循环 stage>=max 归零', /stage=fcState\.stage>=max\?0:fcState\.stage\+1/.test(code), '');
+  ok('  正面图模式提示「看图猜单词」', code.includes('看图猜单词'), '');
+  ok('  中间段提示「点击卡片看释义」', code.includes('想一想它的意思 · 点击卡片看释义'), '');
+  ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
+  ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
+  ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cc"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  // 实跑：英语单词卡（有配图）0→1→2 三段
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  const pool = [
+    {key:"ls4:x1", subject:"英语", type:"单词", title:"tired", sub:"/ˈtaɪəd/", body:"疲劳的"},
+    {key:"poem:x1", subject:"语文", type:"诗词", title:"江南", body:"江南可采莲"}
+  ];
+  S.openFlashcards(pool, "测试 · 单词");
+  const mb = ctx.document.getElementById('modal-body');
+  const h0 = mb.innerHTML;
+  ok('  有图单词卡 stage0 显示 emoji 图', h0.includes('fc-emoji') && h0.includes('🥱'), '');
+  S.fcFlip();
+  const h1 = mb.innerHTML;
+  ok('  点击后 stage1 显示单词', h1.includes('tired') && !h1.includes('fc-emoji'), '');
+  S.fcFlip();
+  const h2 = mb.innerHTML;
+  ok('  再点击后 stage2 显示释义（疲劳的）', h2.includes('疲劳的'), '');
+  S.fcFlip();
+  const h3 = mb.innerHTML;
+  ok('  再点击回到 stage0 图片', h3.includes('fc-emoji'), '');
+  // 无配图卡两段
+  S.openFlashcards([{key:"eng:x9", subject:"英语", type:"单词", title:"xyzzy", body:"未知词"}], "测试");
+  S.fcFlip();
+  ok('  无配图卡翻面直接出释义', mb.innerHTML.includes('未知词'), '');
+  // 诗词卡不受影响
+  S.openFlashcards([{key:"poem:x2", subject:"语文", type:"诗词", title:"江南", body:"江南可采莲"}], "测试");
+  S.fcFlip();
+  ok('  非英语卡保持两段（翻面出全文）', mb.innerHTML.includes('江南可采莲'), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -778,7 +821,8 @@ safe('⑦ 版本号', ()=>{
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
   const ca=(html.match(/20261025ca/g)||[]).length;
-  const cbx=(html.match(/20261025cb/g)||[]).length;
+  const cb=(html.match(/20261025cb/g)||[]).length;
+  const cbx=(html.match(/20261025cc/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -786,8 +830,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 cb', cbx===10, 'cb='+cbx);
-  ok('  0 处 ca/bv（旧版本已全部替换）', ca===0&&bv===0, 'ca='+ca+' bv='+bv);
+  ok('  11 处 cc（新增 word_emoji.js 脚本）', cbx===11, 'cc='+cbx);
+  ok('  0 处 ca/cb/bv（旧版本已全部替换）', ca===0&&cb===0&&bv===0, 'ca='+ca+' cb='+cb+' bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 

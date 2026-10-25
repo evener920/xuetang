@@ -2720,8 +2720,16 @@
   // 入口：学科页「🃏 闪卡」按钮 —— 把当前筛选出的卡片（类型/册/单元/年级/标签/搜索）作为一副牌
   // 正面=标题（单词/成语/诗题），点击翻面看释义/全文；←→切换、空格翻面、手机左右滑动；「我会了」与学会/积分体系打通。
   // 适用于 英语单词 / 成语 / 诗词 / 文言 / 经典阅读 等一切「有标题+正文」的卡片。
-  let fcState = { deck:[], order:[], idx:0, flipped:false, label:"", shuffle:false };
+  let fcState = { deck:[], order:[], idx:0, stage:0, label:"", shuffle:false }; // cc：stage 三段翻转（0图/0词面 → 1单词 → 2释义），无图卡只有 0/1
   let fcJustSwiped = false; // 滑动后短暂屏蔽 click 翻面，避免滑动误触发
+  // 英语单词配图（cc）：查 word_emoji 表，命中返回 emoji（作图片），否则空串
+  function fcWordEmoji(it){
+    if(!it || it.subject!=="英语" || !window.WORD_EMOJI) return "";
+    const w=String(it.title||"").toLowerCase().trim();
+    const e=window.WORD_EMOJI[w];
+    return (e && typeof e==="string" && e.trim()) ? e : "";
+  }
+  function fcMaxStage(it){ return fcWordEmoji(it)?2:1; } // 有图单词卡：图→词→释义 三段；其余：面→答案 两段
   function fcBuildOrder(){
     const arr=[...Array(fcState.deck.length).keys()];
     if(fcState.shuffle){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
@@ -2730,14 +2738,14 @@
   function openFlashcards(pool, label){
     const deck=(pool||[]).filter(x=>x && x.key && x.key!=="practice:maththought" && x.key.indexOf("mtq:")!==0 && (x.title||x.body));
     if(!deck.length){ toast("当前筛选下没有可用的闪卡内容"); return; }
-    fcState={ deck, order:[], idx:0, flipped:false, label:label||"闪卡", shuffle:false };
+    fcState={ deck, order:[], idx:0, stage:0, label:label||"闪卡", shuffle:false };
     fcBuildOrder();
     fcRender();
   }
   function fcCur(){ return fcState.deck[fcState.order[fcState.idx]]; }
-  function fcFlip(){ if(!fcState.deck.length) return; fcState.flipped=!fcState.flipped; fcRender(); }
-  function fcNav(d){ if(!fcState.deck.length) return; const n=fcState.deck.length; fcState.idx=(fcState.idx+d+n)%n; fcState.flipped=false; fcRender(); }
-  function fcShuffle(){ if(!fcState.deck.length) return; fcState.shuffle=!fcState.shuffle; fcBuildOrder(); fcState.idx=0; fcState.flipped=false; fcRender(); toast(fcState.shuffle?"已乱序 🔀":"已恢复原顺序"); }
+  function fcFlip(){ if(!fcState.deck.length) return; const max=fcMaxStage(fcCur()); fcState.stage=fcState.stage>=max?0:fcState.stage+1; fcRender(); }
+  function fcNav(d){ if(!fcState.deck.length) return; const n=fcState.deck.length; fcState.idx=(fcState.idx+d+n)%n; fcState.stage=0; fcRender(); }
+  function fcShuffle(){ if(!fcState.deck.length) return; fcState.shuffle=!fcState.shuffle; fcBuildOrder(); fcState.idx=0; fcState.stage=0; fcRender(); toast(fcState.shuffle?"已乱序 🔀":"已恢复原顺序"); }
   function fcKnown(){ // 与弹窗「标记为学会」同一套语义：learned + 默认5星；只有今日目标内的才计学会积分
     const it=fcCur(); if(!it) return;
     if(!state.learned[it.key]){
@@ -2759,17 +2767,21 @@
     const isWord = it.subject==="英语";
     const learned = !!state.learned[it.key];
     const N = fcState.deck.length, i = fcState.idx;
-    // 正面：只出「要猜的」—— 单词/成语=词，诗词=题+作者；副标题（如音标）只出现在背面
-    const front = `
+    const emoji = fcWordEmoji(it), max = fcMaxStage(it), stage = fcState.stage;
+    // 正面/中间段（cc 三段翻转）：有图单词卡 = 图片 → 单词 → 释义；其余卡 = 题面 → 答案
+    const front = emoji && stage===0 ? `
+      <div class="fc-emoji">${emoji}</div>
+      <div class="fc-hint">看图猜单词 · 点击卡片显示单词</div>` : `
       <div class="fc-front-title">${esc(it.title)}</div>
       ${(!isWord && it.sub)?`<div class="fc-front-sub">${esc(it.sub)}</div>`:""}
-      <div class="fc-hint">想一想它的意思 · 点击卡片翻面</div>`;
+      <div class="fc-hint">${emoji&&stage===1?"想一想它的意思 · 点击卡片看释义":"想一想它的意思 · 点击卡片翻面"}</div>`;
     // 背面：释义 / 全文（长文可滚动）
     const back = isWord
       ? `<div class="fc-front-title">${esc(it.title)}</div>
          ${it.sub?`<div class="fc-front-sub">${esc(it.sub)}</div>`:""}
          <div class="fc-back-cn">${esc(it.body||"（无释义）")}</div>`
       : `<div class="fc-body"><b>${esc(it.title)}</b>${it.sub?`<span class="fc-src">${esc(it.sub)}</span>`:""}<br>${esc(it.body||"（无正文）").replace(/\n/g,"<br>")}</div>`;
+    const flipLabel = stage===0 ? "🔄 翻面" : (stage>=max ? "🙈 藏起答案" : "🔄 看释义");
     $("#modal-body").innerHTML = `
       <div class="fc-wrap">
         <div class="fc-top">
@@ -2778,11 +2790,11 @@
         </div>
         <div class="fc-prog"><div class="fc-prog-fill" style="width:${Math.round((i+1)/N*100)}%"></div></div>
         <div class="fc-card" data-fc-flip>
-          ${fcState.flipped?back:front}
+          ${stage===0||(emoji&&stage===1)?front:back}
         </div>
         <div class="fc-nav">
           <button class="btn" data-fc-prev>← 上一张</button>
-          <button class="btn primary" data-fc-flip-btn>${fcState.flipped?"🙈 藏起答案":"🔄 翻面"}</button>
+          <button class="btn primary" data-fc-flip-btn>${flipLabel}</button>
           <button class="btn" data-fc-next>下一张 →</button>
         </div>
         <div class="fc-nav">
