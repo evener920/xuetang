@@ -779,7 +779,7 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
   ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
   ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
-  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025ci"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cj"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
   // 实跑：英语单词卡（有配图）0→1→2 三段（注意 key 别用 ls4:/ls 前缀——ci 起听力键被闪卡过滤）
   const ctx = boot({});
   const S = ctx.window.__SITE__;
@@ -924,6 +924,30 @@ safe('⑲ ci 听力不进闪卡 + 编辑弹窗实时预览', ()=>{
   })(), '');
 });
 
+safe('⑳ cj hero 顺序提示高对比 + 编辑标题去后缀', ()=>{
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  ok('  hero 顺序提示改为半透明白（不再用灰 muted）', /color:rgba\(255,255,255,\.88\)"?[^>]*>顺序模式严格按资源导入次序/.test(code) && !/color:var\(--muted\)"[^>]*>顺序模式严格按/.test(code), '');
+  ok('  编辑弹窗标题无「（覆盖内置教材）」后缀', !/编辑内容\$\{isExtra/.test(code) && !/编辑内容（覆盖内置教材）/.test(code) && />✏️ 编辑内容</.test(code), '');
+  ok('  isExtra 覆盖说明仍保留在下方提示', /这是内置教材的「覆盖版本」/.test(code), '');
+  // 实跑：hero 渲染出高对比提示；编辑弹窗标题无后缀
+  ok('  实跑：首页 hero 含半透明白提示', (()=>{
+    try{
+      const ctx = boot({}); const S = ctx.window.__SITE__;
+      S.renderHome();
+      const html = ctx.window.document.querySelector("#view-home").innerHTML;
+      return /rgba\(255,255,255,\.88\)/.test(html) && /顺序模式严格按资源导入次序/.test(html);
+    }catch(e){ return false; }
+  })(), '');
+  ok('  实跑：编辑弹窗标题为「✏️ 编辑内容」', (()=>{
+    try{
+      const ctx = boot({}); const S = ctx.window.__SITE__;
+      S.renderEditForm({key:"custom:t",subject:"语文",type:"诗词",title:"江南",sub:"汉 · 汉乐府",grade:"一年级",body:"江南可采莲"});
+      const html = ctx.document.querySelector("#modal-body").innerHTML;
+      return /✏️ 编辑内容/.test(html) && !/（覆盖内置教材）/.test(html);
+    }catch(e){ return false; }
+  })(), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -941,6 +965,7 @@ safe('⑦ 版本号', ()=>{
   const ca=(html.match(/20261025ca/g)||[]).length;
   const cb=(html.match(/20261025cb/g)||[]).length;
   const cc=(html.match(/20261025cc/g)||[]).length;
+  const cj=(html.match(/20261025cj/g)||[]).length;
   const ci=(html.match(/20261025ci/g)||[]).length;
   const ch=(html.match(/20261025ch/g)||[]).length;
   const cg=(html.match(/20261025cg/g)||[]).length;
@@ -952,8 +977,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  11 处 ci（听力不进闪卡 + 编辑实时预览）', ci===11, 'ci='+ci);
-  ok('  0 处 ca/cb/cc/cd/bv/cg/ch（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0&&cg===0&&ch===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv+' cg='+cg+' ch='+ch);
+  ok('  11 处 cj（hero 顺序提示高对比 + 编辑标题去后缀）', cj===11, 'cj='+cj);
+  ok('  0 处 ca/cb/cc/cd/bv/cg/ch/ci（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0&&cg===0&&ch===0&&ci===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv+' cg='+cg+' ch='+ch+' ci='+ci);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 

@@ -1774,7 +1774,7 @@
             <span class="badge" style="background:#eef2ff;color:#3730a3">📐 卡片顺序</span>
             <button class="chip ${state.orderMode!=="smart"?"on":""}" data-order-toggle="seq">顺序（按导入序）</button>
             <button class="chip ${state.orderMode==="smart"?"on":""}" data-order-toggle="smart">智能（弱项优先）</button>
-            <span style="font-size:12px;color:var(--muted)">顺序模式严格按资源导入次序，前后感更清晰；智能模式会把没掌握好的往前排</span>
+            <span style="font-size:12px;color:rgba(255,255,255,.88)">顺序模式严格按资源导入次序，前后感更清晰；智能模式会把没掌握好的往前排</span>
           </div>
         </div>
         <div class="done" style="min-width:180px;">
@@ -3199,7 +3199,7 @@
     const grades = GRADES.map(g=>`<option ${g===cg?"selected":""}>${g}</option>`).join("");
     $("#modal-body").innerHTML = `
       <div class="m-type">${badge(it.type)} <span class="badge" style="background:#fef3c7;color:#b45309">✏️ 编辑</span></div>
-      <h3 class="m-title">编辑内容${isExtra?"（覆盖内置教材）":""}</h3>
+      <h3 class="m-title">✏️ 编辑内容</h3>
       <div class="edit-form">
         <label class="ef-row">标题<input id="efTitle" value="${esc(cur.title||"")}" /></label>
         <label class="ef-row">副标题 / 来源<input id="efSub" value="${esc(cur.sub||"")}" /></label>
