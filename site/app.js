@@ -3326,11 +3326,11 @@
       if(biView.q){ const q=biView.q.toLowerCase(); if(!(x.title+" "+(x.sub||"")).toLowerCase().includes(q)) return false; }
       return true;
     });
-    // 导入/自添加的素材排在最前；同组内按添加顺序倒序，最近导入的排最前（刚导入即刻可见，无需展开「显示更多」）
+    // 导入/自添加的素材排在最前；同组内按导入顺序正序（先导入的在前，不倒序）——保持内容的前后顺序感
     const custIdx = new Map(state.custom.map((x,i)=>[x.key, i]));
     filtered.sort((a,b)=>{
       const ca=custIdx.has(a.key), cb=custIdx.has(b.key);
-      if(ca && cb) return custIdx.get(b.key) - custIdx.get(a.key); // 最近添加在前
+      if(ca && cb) return custIdx.get(a.key) - custIdx.get(b.key); // 按导入顺序正序
       return (cb?1:0) - (ca?1:0);
     });
     return {
