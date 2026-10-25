@@ -776,7 +776,7 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
   ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
   ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
-  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025ce"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cf"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
   // 实跑：英语单词卡（有配图）0→1→2 三段
   const ctx = boot({});
   const S = ctx.window.__SITE__;
@@ -840,7 +840,7 @@ safe('⑦ 版本号', ()=>{
   const ca=(html.match(/20261025ca/g)||[]).length;
   const cb=(html.match(/20261025cb/g)||[]).length;
   const cc=(html.match(/20261025cc/g)||[]).length;
-  const cbx=(html.match(/20261025ce/g)||[]).length;
+  const cbx=(html.match(/20261025cf/g)||[]).length;
   const cd=(html.match(/20261025cd/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
@@ -849,7 +849,7 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  11 处 ce（新增 word_emoji.js 脚本）', cbx===11, 'ce='+cbx);
+  ok('  11 处 cf（新增 word_emoji.js 脚本）', cbx===11, 'cf='+cbx);
   ok('  0 处 ca/cb/cc/cd/bv（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
