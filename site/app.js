@@ -388,7 +388,7 @@
             <button class="btn ${inP?"":"primary"}" data-plan-toggle="${esc(k)}" title="${planInTitle(s.subject,s.type)}" ${planAddDisabled(s.subject,s.type)?"disabled":""}>${planInLabel(s.subject,s.type)}</button>
           </div>`;
         }).join("")}
-        ${secs.length?"":`<div class="placeholder" style="padding:14px 16px">暂无任何有内容的板块，去科目页或后台添加。</div>`}
+        ${secs.length?"":`<div class="placeholder" style="padding:14px 16px">暂无任何有内容的板块，去「📚 资源中心」添加内容。</div>`}
       </div>
       <p class="af-tip" style="margin-top:12px">移出只是从每周排程里去掉，内容与学习目标不受影响；「↺ 恢复推荐」可随时回到 WB 推荐版本。</p>
     `;
@@ -2220,7 +2220,7 @@
             <div class="lib-meta">${allDone?`<span style="color:#15803d">✓ 全部学会</span>`:`已学 ${s.done}${s.inPlan?` · <span style="color:#7c3aed">🗓 计划中</span>`:` · <span style="color:#94a3b8">未加入计划</span>`}`}</div>
             <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${allDone?`已全部学会（记录保留）`:ck?`已排进本周计划，正处学习目标范围 · 点击进去管理`:"还没有排进本周计划 · 点击进去选择（排进后才进入学习目标）"}">${allDone?"✓ 全部学会":(ck?"✓ 已排计划":"＋ 加入本周计划")}</button>
           </div>`;}).join("")}
-        ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前学段暂无学习内容；去科目页 / 后台添加内容后（哪怕 1 条）会自动归集到这里。</div>`}
+        ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前学段暂无学习内容；去「📚 资源中心」添加内容后（哪怕 1 条）会自动归集到这里。</div>`}
       </div>
 
       <div class="sec-title">📊 学习看板 <small>打卡与积分概览（今日 / 本周）· 积分按净分展示，行为扣分已减入今日/本周总分，扣分明细见下方记录区</small></div>
@@ -2357,8 +2357,8 @@
     const listCnt = pool.filter(x=>x.key!=="practice:maththought").length;
     el._gnPool = pool; // 闪卡入口用：当前筛选出的卡片池
     const desc = (hasCustom || isEngWord)
-      ? `${subject}内容由「🛠 后台」添加的素材与内置教材自动归类到对应学科 / 类型 / 年级。`
-      : `该栏目规划中。可在「🛠 后台」添加素材，系统自动归类到这里。`;
+      ? `${subject}内容由「📚 资源中心」添加的素材与内置教材自动归类到对应学科 / 类型 / 年级。`
+      : `该栏目规划中。可在「📚 资源中心 · ＋ 添加素材」添加素材，系统自动归类到这里。`;
     el.innerHTML = `
       <div class="subj-head"><h2>${esc(subject)} · ${esc(v.type)}</h2><span class="cnt">${isEngWord?`${esc(state.grade)} 共 ${engTotal} 个 · 当前${esc(v.volume==="全部"?"全部册":v.volume)} ${pool.length} 个`:(hasCustom?listCnt+" 条":"规划中")}</span></div>
       <p class="subj-desc">${desc}</p>
@@ -2384,7 +2384,7 @@
       ${pool.length?`<div class="task-grid">${pool.map(x=>cardHTML(x)).join("")}</div>`
         :(basePool.length
           ? `<div class="placeholder"><div class="big">🔍</div><h3>没有匹配的内容</h3><p>当前筛选条件下没有内容，换个条件或清除上方筛选看看。</p></div>`
-          : `<div class="placeholder"><div class="big">📥</div><h3>${esc(subject)} · ${esc(v.type)} 暂无内容</h3><p>在「🛠 后台」添加该类型素材，将自动归位于此。</p></div>`)}
+          : `<div class="placeholder"><div class="big">📥</div><h3>${esc(subject)} · ${esc(v.type)} 暂无内容</h3><p>在「📚 资源中心」添加该类型素材，将自动归位于此。</p></div>`)}
     `;
     el._gnRefresh = function(){
       const keep = document.activeElement && document.activeElement.id==="gnSearch";
@@ -2670,7 +2670,7 @@
           <h3>${esc(cnView.type)}内容待导入</h3>
           <p>整年级的${esc(cnView.type)}内容批量导入后，系统将自动匹配年级与上下册并归入本类型。</p>
           <p>导入即可上线，结构无需改动。</p>
-          <p style="margin-top:8px"><b>想现在就上线？</b>去「🛠 后台」添加${esc(cnView.type)}素材，或在「📚 资源 · 批量导入」整批粘贴，会自动归位于此。</p>
+          <p style="margin-top:8px"><b>想现在就上线？</b>去「📚 资源中心 · ＋ 添加素材」添加${esc(cnView.type)}素材，或在「📚 资源 · 批量导入」整批粘贴，会自动归位于此。</p>
         </div>
       `;
       return;
@@ -3289,7 +3289,7 @@
     else if(view.name==="tag") renderTag(view.param);
   }
 
-  /* ---------- 内容后台（添加素材 · 自动归类筛选） ---------- */
+  /* ---------- 内容后台（奖励 / 扣分 / 积分规则 / 同步 / 备份） ---------- */
   /* ---------- 后台登录 / 修改口令（口令存本机，防止随手改动后台内容） ---------- */
   /* ---------- 奖励页：积分账户 · 规则 · 奖励商城 · 流水 ---------- */
   function renderReward(){
@@ -3400,7 +3400,7 @@
     const el = $("#view-admin");
     el.innerHTML = `
       <div class="subj-head"><h2>🔒 后台登录</h2><span class="cnt">内容后台需验证口令</span></div>
-      <p class="subj-desc">后台可以添加 / 修改学习素材，所以加了一道口令。默认账号 <b>admin</b>、密码 <b>123456</b>；登录后点后台顶部「🔑 修改密码」即可改成你自己的。</p>
+      <p class="subj-desc">后台可以修改学习素材、管理奖励 / 扣分 / 积分规则与云端同步、数据备份，所以加了一道口令。默认账号 <b>admin</b>、密码 <b>123456</b>；登录后点后台顶部「🔑 修改密码」即可改成你自己的。</p>
       <div class="admin-form" style="max-width:460px">
         <div class="af-row"><label class="af-grow">账号<input id="lgUser" value="${esc(state.admin.user)}" placeholder="admin" /></label></div>
         <div class="af-row"><label class="af-grow">密码<input id="lgPwd" type="password" placeholder="请输入密码" /></label></div>
@@ -3523,7 +3523,7 @@
     el.innerHTML = `
       <div class="subj-head"><h2>📚 资源中心</h2><span class="cnt">站内全部内容 · 按 学科 板块合并 · 再按 年级 × 类型 × 册 × 标签 交叉筛选</span></div>
 
-      <p class="subj-desc">这里汇总站内所有内容，<b>全部合并进下方学科板块</b>：你在「后台」导入或添加的素材（如英语阅读练习、历史学习指南）排在各板块最前，卡片会<b>自动打上内容标签</b>（如「英语阅读」「历史知识」，紫色即本机添加，可删除；蓝色「内置」为站内自带）。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。下方五维分面（<b>学科 / 年级 / 类型 / 册 / 标签</b>）可任意叠加交叉筛选——例如「语文 → 诗词 → 四年级 → 写景」，或「英语 → 单词 → 三年级上册」。后台只负责增删改的管理，正常浏览就在这里。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
+      <p class="subj-desc">这里汇总站内所有内容，<b>全部合并进下方学科板块</b>：你在本机导入或添加的素材（如英语阅读练习、历史学习指南）排在各板块最前，卡片会<b>自动打上内容标签</b>（如「英语阅读」「历史知识」，紫色即本机添加，可删除；蓝色「内置」为站内自带）。点卡片上的「查看」即可打开阅读，「✏️ 修改」改内容（改过的标「已改」，点「⤺」还原）。下方五维分面（<b>学科 / 年级 / 类型 / 册 / 标签</b>）可任意叠加交叉筛选——例如「语文 → 诗词 → 四年级 → 写景」，或「英语 → 单词 → 三年级上册」。新增素材用上方「📥 批量导入」或「＋ 添加素材」，管理设置（奖励 / 扣分 / 积分规则 / 云端同步 / 数据备份）在「🛠 后台」。所有改动只存本机浏览器，不写回代码仓库；重要数据（如七年级英语词库）记得在后台「💾 数据备份」导出保存，防止清缓存丢失。</p>
 
       <details class="res-import" ${D.customCnt?"":"open"}>
         <summary>📥 批量导入素材（粘贴 JSON）<small>从「后台」移来 · 整批添加内容</small></summary>
@@ -3531,7 +3531,34 @@
           <textarea id="biBulk" class="af-block" rows="4" placeholder='粘贴 JSON 数组，例如 [{"subject":"语文","type":"文言","grade":"四年级","title":"xx","body":"..."}]'></textarea>
           <div class="af-actions">
             <button class="btn primary" id="biBulkBtn">批量导入</button>
-            <span class="af-tip">支持整年级内容的数组（自动归类到 学科 / 类型 / 年级）；也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。导入的内容会自动按内容打上标签（如「英语阅读」「语文诗词」）、并入对应学科板块且排在最前。单条逐条添加请到「🛠 后台」。</span>
+            <span class="af-tip">支持整年级内容的数组（自动归类到 学科 / 类型 / 年级）；也可直接粘贴原始 data.json 结构（含 poems / idioms / words 字段）一次性导入。导入的内容会自动按内容打上标签（如「英语阅读」「语文诗词」）、并入对应学科板块且排在最前。单条逐条添加请用上方「＋ 添加素材」。</span>
+          </div>
+        </div>
+      </details>
+
+      <details class="res-import">
+        <summary>＋ 添加素材（单条）<small>从「🛠 后台」移来 · 系统自动归类到 学科 / 类型 / 年级 / 册</small></summary>
+        <div class="res-import-body">
+          <div class="af-row">
+            <label>学科<select id="raSubject">${Object.keys(SUBJECT_TYPES).map(s=>`<option>${s}</option>`).join("")}</select></label>
+            <label>类型<select id="raType"></select></label>
+            <label>年级<select id="raGrade"><option>—</option>${GRADES.map(g=>`<option>${g}</option>`).join("")}</select></label>
+            <label>册<select id="raVolume"><option>—</option><option>上册</option><option>下册</option></select></label>
+            <label>单元<input id="raUnit" placeholder="可空"/></label>
+          </div>
+          <div class="af-row">
+            <label class="af-grow">标题<input id="raTitle" placeholder="必填"/></label>
+            <label>作者 / 朝代<input id="raSub" placeholder="可空"/></label>
+          </div>
+          <label class="af-block">正文 / 内容<textarea id="raBody" rows="3" placeholder="请输入内容"></textarea></label>
+          <div class="af-row">
+            <label class="af-grow">标签（逗号分隔）<input id="raTags" placeholder="多个标签用逗号分隔，可空"/></label>
+            <label class="af-grow">视频链接（逗号 / 换行分隔，可空）<input id="raVideos" placeholder="B站 / 腾讯 / YouTube / 本地 videos/xxx.mp4"/></label>
+          </div>
+          <div class="af-actions">
+            <button class="btn primary" id="raSubmit">＋ 添加素材</button>
+            <button class="btn" id="raClear">清空表单</button>
+            <span class="af-tip">提示：年级留「—」且类型为诗词时，系统会按诗题自动匹配部编版年级。</span>
           </div>
         </div>
       </details>
@@ -3595,7 +3622,7 @@
         : '<div class="placeholder"><div class="big">🔍</div>没有匹配的资源，换个筛选条件试试</div>'}
       </div>
       ${D.filtered.length>biView.limit?`<div style="margin-top:12px"><button class="btn" id="biMore">显示更多（当前 ${D.show.length} / ${D.filtered.length}）</button></div>`:""}
-      <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 想新增素材可展开上方「📥 批量导入」，单条添加请到「🛠 后台」—— 添加后都会<b>直接归位到本页</b>（自动内容标签 + 删除按钮也在这里）。</p>
+      <p class="af-tip">说明：① 数学「公式 / 每日一练」已按小节拆散，这里改的是<b>单条小节</b>（如「一、口算」），改原整篇请搜单元名；② 想新增素材可展开上方「📥 批量导入」或「＋ 添加素材」—— 添加后都会<b>直接归位到本页</b>（自动内容标签 + 删除按钮也在这里）。</p>
     `;
     bindResEvents(el);
   }
@@ -3614,6 +3641,27 @@
       const added=runBulkImport($("#biBulk").value);
       if(added>0){ renderRes(); refreshView(); }
     });
+    // 单条添加素材（从后台移来）
+    const raSubject=$("#raSubject"), raType=$("#raType");
+    if(raSubject && raType){
+      const fillRaTypes=()=>{ const t=SUBJECT_TYPES[raSubject.value]||[]; raType.innerHTML=t.map(x=>`<option>${x}</option>`).join(""); };
+      fillRaTypes(); raSubject.onchange=fillRaTypes;
+      const raSubmit=$("#raSubmit");
+      if(raSubmit) raSubmit.onclick=()=>{
+        const title=$("#raTitle").value.trim();
+        if(!title){ toast("请填写标题"); return; }
+        const item=makeCustomItem({
+          subject:raSubject.value, type:raType.value,
+          grade:$("#raGrade").value, volume:$("#raVolume").value,
+          unit:$("#raUnit").value.trim(), title, sub:$("#raSub").value.trim(),
+          body:$("#raBody").value.trim(), tags:$("#raTags").value, videos:$("#raVideos").value
+        });
+        state.custom.push(item); save(); rebuildAll(); cnView=null; gnView[raSubject.value]=gnView[raSubject.value]||{};
+        toast("已添加并自动归类 🎉"); renderRes(); refreshView();
+      };
+      const raClear=$("#raClear");
+      if(raClear) raClear.onclick=()=>{ ["raTitle","raSub","raBody","raTags","raVideos","raUnit"].forEach(i=>{ const e=$("#"+i); if(e) e.value=""; }); };
+    }
     // 查看：打开内容弹窗
     el.querySelectorAll("[data-res-open]").forEach(b=>b.addEventListener("click", ()=>{
       const k=b.dataset.resOpen;
@@ -3642,39 +3690,13 @@
 
   function renderAdmin(){
     const el = $("#view-admin");
-    const subjects = Object.keys(SUBJECT_TYPES);
     el.innerHTML = `
-      <div class="subj-head"><h2>🛠 内容后台</h2><span class="cnt">添加素材，系统自动归类到 学科 / 类型 / 年级</span></div>
+      <div class="subj-head"><h2>🛠 内容后台</h2><span class="cnt">管理奖励 · 扣分 · 积分规则 · 云端同步 · 数据备份（添加素材已移至「📚 资源中心」）</span></div>
       <div class="chips">
         <span class="badge" style="background:#eef2ff;color:#3730a3">🔒 已登录：${esc(state.admin.user)}</span>
         <button class="btn" id="btnChgPwd">🔑 修改密码</button>
         <button class="btn" id="btnLogout">退出登录</button>
       </div>
-      <p class="subj-desc">填写下表即可新增一条素材；系统会按你选择的「学科 + 类型 + 年级 + 册」自动归入对应栏目与筛选，并在首页、标签、搜索中同步出现。已添加的内容保存在本机浏览器（localStorage）。</p>
-      <div class="admin-form">
-        <div class="af-row">
-          <label>学科<select id="afSubject">${subjects.map(s=>`<option>${s}</option>`).join("")}</select></label>
-          <label>类型<select id="afType"></select></label>
-          <label>年级<select id="afGrade"><option>—</option>${GRADES.map(g=>`<option>${g}</option>`).join("")}</select></label>
-          <label>册<select id="afVolume"><option>—</option><option>上册</option><option>下册</option></select></label>
-          <label>单元<input id="afUnit" placeholder="可空"/></label>
-        </div>
-        <div class="af-row">
-          <label class="af-grow">标题<input id="afTitle" placeholder="必填"/></label>
-          <label>作者 / 朝代<input id="afSub" placeholder="可空"/></label>
-        </div>
-        <label class="af-block">正文 / 内容<textarea id="afBody" rows="3" placeholder="请输入内容"></textarea></label>
-        <div class="af-row">
-          <label class="af-grow">标签（逗号分隔）<input id="afTags" placeholder="多个标签用逗号分隔，可空"/></label>
-          <label class="af-grow">视频链接（逗号 / 换行分隔，可空）<input id="afVideos" placeholder="B站 / 腾讯 / YouTube / 本地 videos/xxx.mp4"/></label>
-        </div>
-        <div class="af-actions">
-          <button class="btn primary" id="afSubmit">＋ 添加素材</button>
-          <button class="btn" id="afClear">清空表单</button>
-          <span class="af-tip">提示：年级留「—」且类型为诗词时，系统会按诗题自动匹配部编版年级。</span>
-        </div>
-      </div>
-
       <div class="sec-title">🛍 兑换审核 · 奖励设置 <small>孩子提交的兑换需家长在这里确认兑现；可自定义奖励目录</small></div>
       <div class="admin-list">
         ${(state.redeems||[]).length? (state.redeems||[]).map((r,i)=>`<div class="admin-item">
@@ -3904,25 +3926,6 @@
     const bLogout=$("#btnLogout"), bPwd=$("#btnChgPwd");
     if(bLogout) bLogout.onclick=()=>{ state.adminAuthed=false; save(); toast("已退出登录"); go("home"); };
     if(bPwd) bPwd.onclick=()=>renderAdminPwdForm();
-    // 类型联动
-    const subSel=$("#afSubject"), typeSel=$("#afType");
-    function fillTypes(){ const t=SUBJECT_TYPES[subSel.value]||[]; typeSel.innerHTML=t.map(x=>`<option>${x}</option>`).join(""); }
-    fillTypes(); subSel.onchange=fillTypes;
-    // 添加
-    $("#afSubmit").onclick=()=>{
-      const title=$("#afTitle").value.trim();
-      if(!title){ toast("请填写标题"); return; }
-      const item=makeCustomItem({
-        subject:subSel.value, type:typeSel.value,
-        grade:$("#afGrade").value, volume:$("#afVolume").value,
-        unit:$("#afUnit").value.trim(), title, sub:$("#afSub").value.trim(),
-        body:$("#afBody").value.trim(), tags:$("#afTags").value, videos:$("#afVideos").value
-      });
-      state.custom.push(item); save(); rebuildAll(); cnView=null; gnView[subSel.value]=gnView[subSel.value]||{};
-      toast("已添加并自动归类 🎉"); renderAdmin();
-      refreshView();
-    };
-    $("#afClear").onclick=()=>{ ["afTitle","afSub","afBody","afTags","afVideos","afUnit"].forEach(i=>$("#"+i).value=""); };
     // 还原被覆盖的内置内容
     el.querySelectorAll("[data-revert-custom]").forEach(b=>b.onclick=()=>{
       const k=b.dataset.revertCustom; if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原内置内容 ⤺"); renderAdmin(); }

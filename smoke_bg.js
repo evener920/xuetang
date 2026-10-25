@@ -272,16 +272,19 @@ safe('④ 后台移除我的素材', ()=>{
   S.renderAdmin();
   const admin = ctx.window.document.getElementById('view-admin').innerHTML;
   ok('  后台页不含「我的素材」区', !admin.includes('我的素材'), '');
-  ok('  后台仍含批量导入/添加表单', admin.includes('admin-form'), '');
+  ok('  后台已无单条添加素材表单（添加已移至资源中心）', !admin.includes('afSubmit'), '');
+  ok('  后台保留管理类表单（奖励/扣分/规则/同步）', admin.includes('rwAdd') && admin.includes('pnAdd') && admin.includes('rulesSave') && admin.includes('syncNow'), '');
   ok('  后台不再含「行为扣分记录」区（已移至本周页）', !admin.includes('行为扣分记录'), '');
   ok('  后台保留「扣分项设置」表单', admin.includes('扣分项设置') && admin.includes('pnAdd'), '');
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
   ok('  源码无 goRes 残留处理器', !/id="goRes"|goRes\(/.test(code), '');
   ok('  全站无 data-checkin 元素（打卡范围改由加入学习决定）', !code.includes('data-checkin'), '');
   ok('  penaltyLogWeek 辅助函数存在', code.includes('function penaltyLogWeek()'), '');
-  // bm：后台添加表单示范文字中性化（与主题无关的示例会误导）
-  ok('  后台添加表单无语文向示范文字（春夜喜雨/杜甫/诗词正文）', !admin.includes('春夜喜雨') && !admin.includes('杜甫') && !admin.includes('诗词正文'), '');
-  ok('  后台添加表单占位符为中性提示', admin.includes('placeholder="必填"') && admin.includes('placeholder="可空"') && admin.includes('placeholder="请输入内容"') && admin.includes('placeholder="多个标签用逗号分隔，可空"'), '');
+  // ch：单条添加表单已移至资源中心，示范文字中性化检查改在资源页
+  S.renderRes();
+  const resHtml = ctx.window.document.getElementById('view-res').innerHTML;
+  ok('  资源中心添加表单无语文向示范文字（春夜喜雨/杜甫/诗词正文）', !resHtml.includes('春夜喜雨') && !resHtml.includes('杜甫') && !resHtml.includes('诗词正文'), '');
+  ok('  资源中心添加表单占位符为中性提示', resHtml.includes('placeholder="必填"') && resHtml.includes('placeholder="可空"') && resHtml.includes('placeholder="请输入内容"') && resHtml.includes('placeholder="多个标签用逗号分隔，可空"'), '');
 });
 
 /* ---------- ⑤ 科目页「＋ 添加」（诉求2） ---------- */
@@ -776,7 +779,7 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
   ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
   ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
-  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cg"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025ch"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
   // 实跑：英语单词卡（有配图）0→1→2 三段
   const ctx = boot({});
   const S = ctx.window.__SITE__;
@@ -857,6 +860,33 @@ safe('⑰ cg 自定义配图（闪卡 🖼 加图片）', ()=>{
   })(), '');
 });
 
+safe('⑱ ch 添加素材板块从后台移至资源中心', ()=>{
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  ok('  后台 renderAdmin 已移除单条添加表单（无 afSubmit）', !/id="afSubmit"/.test(code), '');
+  ok('  资源页 renderRes 已新增单条添加表单（有 raSubmit）', /id="raSubmit"/.test(code), '');
+  ok('  资源页绑定 raSubmit / raClear / 学科-类型联动', /const raSubmit=\$\("#raSubmit"\)/.test(code) && /const raClear=\$\("#raClear"\)/.test(code) && /fillRaTypes/.test(code), '');
+  ok('  旧提示已改（不再指向后台添加）', !/单条添加请到「🛠 后台」/.test(code) && !/单条逐条添加请到「🛠 后台」/.test(code), '');
+  ok('  后台副标题改为指向资源中心', /添加素材已移至「📚 资源中心」/.test(code), '');
+  // 实跑：后台渲染不含添加表单；资源页渲染含添加表单
+  ok('  实跑：后台渲染无 afSubmit', (()=>{
+    try{
+      const ctx = boot({}); const S = ctx.window.__SITE__;
+      S.state.adminAuthed = true;
+      S.renderAdmin();
+      const html = ctx.document.querySelector("#view-admin").innerHTML;
+      return !/afSubmit/.test(html);
+    }catch(e){ return false; }
+  })(), '');
+  ok('  实跑：资源页渲染含 raSubmit 表单', (()=>{
+    try{
+      const ctx = boot({}); const S = ctx.window.__SITE__;
+      S.renderRes();
+      const html = ctx.document.querySelector("#view-res").innerHTML;
+      return /raSubmit/.test(html) && /raSubject/.test(html);
+    }catch(e){ return false; }
+  })(), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -874,7 +904,8 @@ safe('⑦ 版本号', ()=>{
   const ca=(html.match(/20261025ca/g)||[]).length;
   const cb=(html.match(/20261025cb/g)||[]).length;
   const cc=(html.match(/20261025cc/g)||[]).length;
-  const cbx=(html.match(/20261025cg/g)||[]).length;
+  const ch=(html.match(/20261025ch/g)||[]).length;
+  const cg=(html.match(/20261025cg/g)||[]).length;
   const cd=(html.match(/20261025cd/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
@@ -883,8 +914,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  11 处 cg（新增 word_emoji.js 脚本）', cbx===11, 'cg='+cbx);
-  ok('  0 处 ca/cb/cc/cd/bv（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv);
+  ok('  11 处 ch（添加素材移至资源中心）', ch===11, 'ch='+ch);
+  ok('  0 处 ca/cb/cc/cd/bv/cg（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0&&cg===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv+' cg='+cg);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 
