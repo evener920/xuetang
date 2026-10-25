@@ -733,6 +733,36 @@ safe('⑬ 三处联动 学习目标=本周计划', ()=>{
   ok('  旧迁移标志 planGoalLink2026 已清除', !code.includes('planGoalLink2026'), '');
 });
 
+/* ---------- ⑭ 学习板块排程移到「本周」页底部 + 全部板块列出（cb） ---------- */
+safe('⑭ 排程移到本周页底部（cb）', ()=>{
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  // schedSectionHTML / bindSchedSave 独立成函数
+  ok('  app.js 定义 schedSectionHTML', code.includes('function schedSectionHTML()'), '');
+  ok('  app.js 定义 bindSchedSave', code.includes('function bindSchedSave()'), '');
+  // renderWeek 调用（排程渲染在本周页模板里）
+  ok('  renderWeek 模板末尾挂载排程', /\$\{schedSectionHTML\(\)\}/.test(code), '');
+  ok('  renderWeek 绑定排程保存', /bindSchedSave\(\)/.test(code), '');
+  // 后台不再出现排程入口（sec-title 完整标题只在 schedSectionHTML 里出现一次）
+  const n=(code.match(/学习板块排程（学习的始终）/g)||[]).length;
+  ok('  「学习板块排程」sec-title 仅 schedSectionHTML 一处', n===1, 'n='+n);
+  ok('  后台模板无排程块（移出注释标记存在）', code.includes('已移到「本周」页最下面'), '');
+  // 所有板块直接列出：不再用 <details> 折叠
+  ok('  排程不再折叠（无 <details class="sched-group">）', !code.includes('<details class="sched-group">'), '');
+  ok('  分组头用 sg-head（始终展开）', code.includes('class="sg-head"'), '');
+  // 保存后刷新当前视图（本周页）
+  ok('  保存排程后 refreshView', /toast\("已保存学习板块排程 📅"\); renderHome\(\); refreshView\(\)/.test(code), '');
+  // 实跑：renderWeek 输出包含排程区块，且穷举板块全部列出
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  S.renderWeek ? S.renderWeek() : null;
+  const wk = ctx.document.getElementById('view-week');
+  const html = wk ? wk.innerHTML : '';
+  ok('  本周页渲染出排程区块', html.includes('学习板块排程'), '');
+  ok('  本周页排程含保存按钮', html.includes('id="schedSave"'), '');
+  ok('  排程列出全部学科分组（语文/数学/英语…）', html.includes('sg-head') && html.includes('sg-body'), '');
+  ok('  排程板块卡片带频次输入', html.includes('data-sched-freq'), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -747,7 +777,8 @@ safe('⑦ 版本号', ()=>{
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
-  const bw=(html.match(/20261025ca/g)||[]).length;
+  const ca=(html.match(/20261025ca/g)||[]).length;
+  const cbx=(html.match(/20261025cb/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -755,8 +786,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 ca', bw===10, 'bw='+bw);
-  ok('  0 处 bv（旧版本已全部替换）', bv===0, 'bv='+bv);
+  ok('  10 处 cb', cbx===10, 'cb='+cbx);
+  ok('  0 处 ca/bv（旧版本已全部替换）', ca===0&&bv===0, 'ca='+ca+' bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 

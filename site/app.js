@@ -2055,6 +2055,65 @@
     $("#modal").hidden=false; document.body.style.overflow="hidden";
   }
 
+  // —— 📅 学习板块排程（cb：从后台移到「本周」页最下面；所有板块直接列出、不再折叠）——
+  function schedSectionHTML(){
+    return `
+      <div class="sec-title">📅 学习板块排程（学习的始终）<small>为每个「学科·类型」设定开启、开始日、结束日与每周频次 · 所有板块直接列出 · 含自定义素材（如 英语·阅读、历史·知识）</small></div>
+      <div class="sched-groups">
+        ${(()=>{
+          // 穷举所有真实存在的「学科·类型」板块（含自定义素材），而非仅内置 CHECKIN_TYPES
+          const boardMap = {};
+          ALL.forEach(x=>{ if(x.subject && x.type && gradeOk(x)){ const key=x.subject+"||"+x.type; (boardMap[key]=boardMap[key]||{subject:x.subject,type:x.type,count:0}).count++; } });
+          const subs = [...new Set([...allSubjects(), ...Object.values(boardMap).map(b=>b.subject)])]
+            .filter(s=>Object.values(boardMap).some(b=>b.subject===s));
+          return subs.map(sub=>{
+            const boards = Object.values(boardMap).filter(b=>b.subject===sub).sort((a,b)=>a.type.localeCompare(b.type,"zh"));
+            if(!boards.length) return "";
+            return `<div class="sched-group">
+              <div class="sg-head"><span class="sg-subj">${esc(sub)}</span><span class="sg-cnt">${boards.length} 个板块</span></div>
+              <div class="sg-body">
+                ${boards.map(({subject,type,count})=>{
+                  const k=checkinKey(subject,type);
+                  const sp=sectionPlanOf(k);
+                  const on=checkinOn(subject,type);
+                  return `<div class="sched-item">
+                    <label class="sched-on"><input type="checkbox" data-sched-on="${esc(k)}" ${on?"checked":""}/> <b>${esc(subject)}·${esc(type)}</b><span class="sg-count">共 ${count} 条</span></label>
+                    <label>开始<input type="date" data-sched-start="${esc(k)}" value="${esc(sp.start||"")}"/></label>
+                    <label>结束<input type="date" data-sched-end="${esc(k)}" value="${esc(sp.end||"")}"/></label>
+                    <label>每周频次<input type="number" min="1" max="7" data-sched-freq="${esc(k)}" value="${sp.freq||weekFreqOf(subject,type)}"/></label>
+                  </div>`;
+                }).join("")}
+              </div>
+            </div>`;
+          }).join("");
+        })()}
+      </div>
+      <div class="chips"><button class="btn primary" id="schedSave">💾 保存排程</button></div>
+      <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>`;
+  }
+  function bindSchedSave(){
+    const schedSave=$("#schedSave");
+    if(!schedSave) return;
+    schedSave.onclick=()=>{
+      state.sectionPlan = state.sectionPlan || {};
+      state.checkin = state.checkin || {};
+      document.querySelectorAll("[data-sched-on]").forEach(cb=>{
+        const k=cb.dataset.schedOn;
+        const start=(document.querySelector('[data-sched-start="'+CSS.escape(k)+'"]')||{}).value||"";
+        const end=(document.querySelector('[data-sched-end="'+CSS.escape(k)+'"]')||{}).value||"";
+        const freqRaw=(document.querySelector('[data-sched-freq="'+CSS.escape(k)+'"]')||{}).value||"";
+        const freq=parseInt(freqRaw,10);
+        state.checkin[k] = !!cb.checked;                 // 开启/关闭
+        if(!start && !end && (!freq||isNaN(freq))){ delete state.sectionPlan[k]; }
+        else { state.sectionPlan[k] = {
+          start: start||"", end: end||"",
+          freq: (freq>=1&&freq<=7)?freq:undefined
+        }; }
+      });
+      save(); toast("已保存学习板块排程 📅"); renderHome(); refreshView();
+    };
+  }
+
   function renderWeek(){
     const el = $("#view-week");
     const d = new Date();
@@ -2205,6 +2264,8 @@
           </div>`).join("")
         : '<div class="placeholder" style="padding:14px 16px"><div class="big">🌟</div>本周还没有行为扣分，表现不错 👍</div>'}
       </div>
+
+      ${schedSectionHTML()}
     `;
     const wgCard = $("#wkGoalCard");
     if(wgCard) wgCard.addEventListener("click", openWeekGoal);
@@ -2235,6 +2296,8 @@
     el.querySelectorAll("[data-pen-undo]").forEach(b=>b.addEventListener("click", ()=>{
       requireAdmin(()=>confirmUndo("pen", b.dataset.penUndo));
     }));
+    // 学习板块排程（cb：入口移到本周页底部）：保存每个板块的开启 / 起止日 / 每周频次
+    bindSchedSave();
     renderCalGrid();
   }
 
@@ -3580,38 +3643,7 @@
       </div>
       <p class="af-tip">存档内容：学习进度、打卡、习惯、复习记录、后台素材与所有内容修改。最多保留 ${ARCHIVE_MAX} 份，超出时自动淘汰最早的「自动」存档；手动存档优先保留。每天首次打开网站会自动存一份。</p>
 
-      <div class="sec-title">📅 学习板块排程（学习的始终）<small>为每个「学科·类型」设定开启、开始日、结束日与每周频次；按学科分组、可折叠 · 已穷举全部板块（含自定义素材，如 英语·阅读、历史·知识）</small></div>
-      <div class="sched-groups">
-        ${(()=>{
-          // 穷举所有真实存在的「学科·类型」板块（含自定义素材），而非仅内置 CHECKIN_TYPES
-          const boardMap = {};
-          ALL.forEach(x=>{ if(x.subject && x.type && gradeOk(x)){ const key=x.subject+"||"+x.type; (boardMap[key]=boardMap[key]||{subject:x.subject,type:x.type,count:0}).count++; } });
-          const subs = [...new Set([...allSubjects(), ...Object.values(boardMap).map(b=>b.subject)])]
-            .filter(s=>Object.values(boardMap).some(b=>b.subject===s));
-          return subs.map(sub=>{
-            const boards = Object.values(boardMap).filter(b=>b.subject===sub).sort((a,b)=>a.type.localeCompare(b.type,"zh"));
-            if(!boards.length) return "";
-            return `<details class="sched-group">
-              <summary><span class="sg-subj">${esc(sub)}</span><span class="sg-cnt">${boards.length} 个板块 · 点击折叠</span></summary>
-              <div class="sg-body">
-                ${boards.map(({subject,type,count})=>{
-                  const k=checkinKey(subject,type);
-                  const sp=sectionPlanOf(k);
-                  const on=checkinOn(subject,type);
-                  return `<div class="sched-item">
-                    <label class="sched-on"><input type="checkbox" data-sched-on="${esc(k)}" ${on?"checked":""}/> <b>${esc(subject)}·${esc(type)}</b><span class="sg-count">共 ${count} 条</span></label>
-                    <label>开始<input type="date" data-sched-start="${esc(k)}" value="${esc(sp.start||"")}"/></label>
-                    <label>结束<input type="date" data-sched-end="${esc(k)}" value="${esc(sp.end||"")}"/></label>
-                    <label>每周频次<input type="number" min="1" max="7" data-sched-freq="${esc(k)}" value="${sp.freq||weekFreqOf(subject,type)}"/></label>
-                  </div>`;
-                }).join("")}
-              </div>
-            </details>`;
-          }).join("");
-        })()}
-      </div>
-      <div class="chips"><button class="btn primary" id="schedSave">💾 保存排程</button></div>
-      <p class="af-tip">「开始日」之前该板块不排课；「结束日」之后视为已结课；「每周频次」覆盖系统默认排课密度（1~7 次/周）。留空则沿用系统默认。首页每个板块会显示「已学 N/总 M · 开始日 · 预计完成日」的进度条。</p>
+      <!-- cb：📅 学习板块排程已移到「本周」页最下面（schedSectionHTML），后台不再重复展示 -->
 
       <div class="sec-title">🏆 自定义积分规则<small>当前学生（${esc(curStudentName())}）独立生效 · 留空即恢复内置默认值</small></div>
       <div class="admin-form">
@@ -3719,26 +3751,7 @@
     const btnImport=$("#btnImport"), impFile=$("#impFile");
     if(btnImport) btnImport.onclick=()=>{ if(impFile) impFile.click(); };
     if(impFile) impFile.onchange=()=>{ const f=impFile.files&&impFile.files[0]; if(f) importBackupFile(f); if(impFile) impFile.value=""; };
-    // 学习板块排程：保存每个板块的开启 / 起止日 / 每周频次
-    const schedSave=$("#schedSave");
-    if(schedSave) schedSave.onclick=()=>{
-      state.sectionPlan = state.sectionPlan || {};
-      state.checkin = state.checkin || {};
-      document.querySelectorAll("[data-sched-on]").forEach(cb=>{
-        const k=cb.dataset.schedOn;
-        const start=(document.querySelector('[data-sched-start="'+CSS.escape(k)+'"]')||{}).value||"";
-        const end=(document.querySelector('[data-sched-end="'+CSS.escape(k)+'"]')||{}).value||"";
-        const freqRaw=(document.querySelector('[data-sched-freq="'+CSS.escape(k)+'"]')||{}).value||"";
-        const freq=parseInt(freqRaw,10);
-        state.checkin[k] = !!cb.checked;                 // 开启/关闭
-        if(!start && !end && (!freq||isNaN(freq))){ delete state.sectionPlan[k]; }
-        else { state.sectionPlan[k] = {
-          start: start||"", end: end||"",
-          freq: (freq>=1&&freq<=7)?freq:undefined
-        }; }
-      });
-      save(); toast("已保存学习板块排程 📅"); renderAdmin(); renderHome(); if(view.name==="week") renderWeek();
-    };
+    // 学习板块排程（cb：移到「本周」页，见 bindSchedSave / schedSectionHTML）
     // 自定义积分规则：保存 / 恢复默认
     const rulesSave=$("#rulesSave");
     if(rulesSave) rulesSave.onclick=()=>{
