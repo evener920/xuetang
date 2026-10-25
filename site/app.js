@@ -1846,14 +1846,18 @@
       done: out.reduce((a,s)=>a+s.done,0)
     };
   }
-  /* ---------- 学习库数据：本学期（当前年级）全部「学科·类型」板块 ---------- */
-  // 板块来源：内置穷举（SUBJECT_TYPES）+ 后台自定义素材实际用到的「学科·类型」；只列有内容的板块
+  /* ---------- 学习库数据：当前学段（按年级动态）有内容的「学科·类型」板块 ---------- */
+  // 板块来源：仅当前学段活跃学科——小学=语数英+科学/人文，初中=语数英+生物/地理/政治/历史/物理/化学
+  //            （extraSubjects() 按年级切换，避免小学出现初中学科、反之亦然）+ 后台自定义素材实际用到的「学科·类型」。
+  // 只列「有内容」的板块：0 内容的板块不进库（一旦有内容哪怕 1 条也要进）；
+  // 已学会的板块保留记录（learned/mastery 不删），仅不再计入待学，并标「✓ 全部学会」。
   // 每板块：total=该年级内容池总数（与科目页数字同源 poolFor）、done=已学、inPlan=是否已排进本周计划（即纳入学习目标）
   function studyLibData(){
+    const activeSubjects = ["语文","数学","英语", ...extraSubjects()];
     const secs = [];
-    const push = (subject,type)=>{ if(!secs.some(x=>x.subject===subject&&x.type===type)) secs.push({subject,type}); };
+    const push = (subject,type)=>{ if(activeSubjects.includes(subject) && !secs.some(x=>x.subject===subject&&x.type===type)) secs.push({subject,type}); };
     CHECKIN_TYPES.forEach(({subject,type})=>push(subject,type));
-    [...CUSTOM, ...EXTRA].forEach(c=>{ if(c.subject && c.type) push(c.subject, c.type); });
+    [...CUSTOM, ...EXTRA].forEach(c=>{ if(c.subject && c.type && activeSubjects.includes(c.subject)) push(c.subject, c.type); });
     const isDone = key => !!state.learned[key] || !!(state.mastery && state.mastery[key]!==undefined);
     const out = secs.map(sec=>{
       let pool=[]; try{ pool=poolFor(sec.subject, sec.type); }catch(e){ pool=[]; }
@@ -1869,7 +1873,9 @@
       if(ia!==ib) return (ia<0?98:ia)-(ib<0?98:ib);
       return a.subject===b.subject ? a.type.localeCompare(b.type,"zh") : a.subject.localeCompare(b.subject,"zh");
     });
-    return { sections: out, total: out.reduce((a,s)=>a+s.total,0), done: out.reduce((a,s)=>a+s.done,0) };
+    // 只列有内容的板块（0 内容不进库；有内容哪怕 1 条都要进）；空板块由内容导入决定，不在此占位
+    const filtered = out.filter(s=>s.total>0);
+    return { sections: filtered, total: filtered.reduce((a,s)=>a+s.total,0), done: filtered.reduce((a,s)=>a+s.done,0) };
   }
   // 明细弹窗：按板块分组列出已排进本周计划（即学习目标）的条目（已学/未学）；点击条目可打开卡片详情
   function openWeekGoal(){
@@ -2134,21 +2140,19 @@
       ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
         :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
-      <div class="sec-title">📖 学习库 <small>穷举该时间段全部模块（与科目页数字一致）· 点卡片进管理，主操作「加入本周计划」即把板块排进每周任务、成为上方「🎯 学习目标」· 卡片标「🗓 计划中」的已排进本周计划</small></div>
+      <div class="sec-title">📖 学习库 <small>当前学段（小学=科学/人文，初中=生物·地理等）有内容的全部模块 · 点卡片进管理，主操作「加入本周计划」即把板块排进每周任务、成为上方「🎯 学习目标」· 卡片标「🗓 计划中」的已排进本周计划 · 已全学会的标「✓ 全部学会」（记录保留）</small></div>
       <div class="stat-strip">
         ${lib.sections.map(s=>{
-          const ck = s.inPlan && s.total>0; // 是否已排进本周计划（仅在有内容的板块生效）
-          const empty = s.total===0;
+          const ck = s.inPlan; // 是否已排进本周计划
+          const allDone = s.total>0 && s.done===s.total; // 已全部学会：可忽略（不计入待学），但保留记录
           return `
-          <div class="stat lib-sec ${empty?"lib-empty":""}" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
+          <div class="stat lib-sec ${allDone?"lib-done":""}" style="cursor:pointer" data-lib-sec="${esc(s.subject)}·${esc(s.type)}" title="点击管理「${esc(s.subject)}·${esc(s.type)}」的学习内容">
             <div class="num">${s.total}</div>
             <div class="lbl">${esc(s.subject)}·${esc(s.type)}</div>
-            <div class="lib-meta">${empty?`<span style="color:#94a3b8">暂无内容 · 去科目页/后台添加</span>`:`已学 ${s.done}${s.inPlan?` · <span style="color:#7c3aed">🗓 计划中</span>`:` · <span style="color:#94a3b8">未加入计划</span>`}`}</div>
-            ${empty
-              ? `<button class="chip lib-ck" disabled style="opacity:.5;cursor:not-allowed" title="该板块当前年级暂无内容，去科目页或后台添加内容后可排进计划">暂无内容</button>`
-              : `<button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${ck?`已排进本周计划，正处学习目标范围 · 点击进去管理`:"还没有排进本周计划 · 点击进去选择（排进后才进入学习目标）"}">${ck?"✓ 已排计划":"＋ 加入本周计划"}</button>`}
+            <div class="lib-meta">${allDone?`<span style="color:#15803d">✓ 全部学会</span>`:`已学 ${s.done}${s.inPlan?` · <span style="color:#7c3aed">🗓 计划中</span>`:` · <span style="color:#94a3b8">未加入计划</span>`}`}</div>
+            <button class="chip lib-ck" style="${subjectStyle(s.subject, ck)}" title="${allDone?`已全部学会（记录保留）`:ck?`已排进本周计划，正处学习目标范围 · 点击进去管理`:"还没有排进本周计划 · 点击进去选择（排进后才进入学习目标）"}">${allDone?"✓ 全部学会":(ck?"✓ 已排计划":"＋ 加入本周计划")}</button>
           </div>`;}).join("")}
-        ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前年级暂无学习内容；内容由科目页 / 后台添加后自动归集到这里。</div>`}
+        ${lib.sections.length?"":`<div class="placeholder" style="padding:14px 16px;width:100%">当前学段暂无学习内容；去科目页 / 后台添加内容后（哪怕 1 条）会自动归集到这里。</div>`}
       </div>
 
       <div class="sec-title">📊 学习看板 <small>打卡与积分概览（今日 / 本周）· 积分按净分展示，行为扣分已减入今日/本周总分，扣分明细见下方记录区</small></div>

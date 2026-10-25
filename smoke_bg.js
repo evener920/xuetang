@@ -143,26 +143,34 @@ safe('① 学习库与学习目标', ()=>{
   // 源码守卫
   const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
   ok('  weekGoalData 聚合 planSecs（无 studySet 门槛）', /function weekGoalData\(\)\{[\s\S]{0,200}planSecs\(\)/.test(code), '');
-  ok('  studyLibData 用 poolFor 取总量', /function studyLibData\(\)\{[\s\S]{0,600}poolFor\(sec\.subject, sec\.type\)/.test(code), '');
+  ok('  studyLibData 用 poolFor 取总量', /function studyLibData\(\)\{[\s\S]{0,2000}poolFor\(sec\.subject, sec\.type\)/.test(code), '');
   ok('  PER_STUDENT_FIELDS 含 migGoalPlanMerge2026（迁移标志）', code.includes('"migGoalPlanMerge2026"'), '');
   ok('  PER_STUDENT_FIELDS 不再含 studySet', !code.includes('"studySet"'), '');
 
-  // ===== bw：学习库必须列出所有板块（含无内容的空板块），不再被 .filter(s=>s.total>0) 滤掉 =====
-  const libAll = S.studyLibData();
-  const mathAll = libAll.sections.filter(s=>s.subject==='数学');
-  ok('  数学 5 个类型板块全部列出（不因空内容被删）', mathAll.length===5, 'n='+mathAll.length);
-  ok('  数学含 total===0 的空板块（如计算题/应用题）', mathAll.some(s=>s.total===0), JSON.stringify(mathAll.map(s=>s.type+':'+s.total)));
-  const wkMath = (S.renderWeek(), ctx.window.document.getElementById('view-week').innerHTML);
-  ok('  学习库空板块显示「暂无内容 · 去科目页/后台添加」', wkMath.includes('暂无内容'), '');
-  ok('  学习库仍列出数学板块卡（data-lib-sec="数学·）', /data-lib-sec="数学·/.test(wkMath), '');
-  ok('  空板块「加入本周计划」按钮禁用（disabled）', /data-lib-sec="数学·[\s\S]*?disabled/.test(wkMath), '');
-  // 学习目标卡片量化：已完成/待学 标签 + 本周计划胶囊每板块「已学 X/共 Y」
-  ok('  学习目标卡含「已完成」标签', wkMath.includes('已完成'), '');
-  ok('  学习目标卡含「待学」标签（替代旧「未学习」）', wkMath.includes('待学') && !wkMath.includes('未学习'), '');
-  ok('  本周计划胶囊含「已学 X/Y」字样', /已学 \d+\/\d+/.test(wkMath), '');
-  // 源码守卫：studyLibData 函数体内不再含 .filter(s=>s.total>0)
+  // ===== bw(续)：学习库按学段列学科 + 只列有内容板块（0 内容不进库）=====
+  const libE = S.studyLibData(); // 默认 四年级（小学）
+  const subjE = [...new Set(libE.sections.map(s=>s.subject))];
+  ok('  小学阶段不列初中学科（生物/地理/政治/历史/物理/化学）', !['生物','地理','政治','历史','物理','化学'].some(x=>subjE.includes(x)), JSON.stringify(subjE));
+  ok('  小学阶段含 科学/人文（而非初中学科）', subjE.includes('科学') && subjE.includes('人文'), JSON.stringify(subjE));
+  ok('  只列有内容的板块（0 内容不进库）', libE.sections.length>0 && libE.sections.every(s=>s.total>0), 'n='+libE.sections.length);
+  ok('  有内容哪怕 1 条也进库（四年级数学含公式/每日一练/思维母题）', libE.sections.some(s=>s.subject==='数学'&&s.total>0), '');
+  const wkE = (S.renderWeek(), ctx.window.document.getElementById('view-week').innerHTML);
+  ok('  学习库列出学科·类型板块卡（data-lib-sec）', /data-lib-sec="/.test(wkE), '');
+  ok('  学习目标卡含「已完成」标签', wkE.includes('已完成'), '');
+  ok('  学习目标卡含「待学」且不含「未学习」', wkE.includes('待学') && !wkE.includes('未学习'), '');
+  ok('  本周计划胶囊含「已学 X/Y」字样', /已学 \d+\/\d+/.test(wkE), '');
+  // 切到初中（七年级）验证学科随学段切换
+  S.state.grade = '七年级';
+  const libM = S.studyLibData();
+  const subjM = [...new Set(libM.sections.map(s=>s.subject))];
+  ok('  初中阶段不含 科学/人文（只列语数英+生物地理等）', !subjM.includes('科学') && !subjM.includes('人文'), JSON.stringify(subjM));
+  ok('  初中阶段学科切换生效（含 历史 等初中学科）', subjM.includes('历史') || subjM.some(s=>['生物','地理','政治','物理','化学'].includes(s)), JSON.stringify(subjM));
+  const wkM = (S.renderWeek(), ctx.window.document.getElementById('view-week').innerHTML);
+  ok('  初中阶段学习目标卡仍含 已完成/待学', wkM.includes('已完成') && wkM.includes('待学'), '');
+  // 源码守卫
   const m = code.match(/function studyLibData\(\)\{[\s\S]*?\n  \}/);
-  ok('  studyLibData 不再按 total>0 过滤（空板块保留）', m && !m[0].includes('.filter(s=>s.total>0)'), m?(m[0].includes('.filter(s=>s.total>0)')?'仍含filter':''):'未匹配到函数');
+  ok('  studyLibData 按 total>0 过滤（0 内容不进库）', m && m[0].includes('.filter(s=>s.total>0)'), m?'':'未匹配到函数');
+  ok('  studyLibData 用 extraSubjects() 做学段学科作用域', m && m[0].includes('extraSubjects()'), m?'':'未匹配到函数');
 });
 
 /* ---------- ② 首页扣分（诉求3） ---------- */
@@ -730,7 +738,7 @@ safe('⑦ 版本号', ()=>{
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
-  const bw=(html.match(/20261025bw/g)||[]).length;
+  const bw=(html.match(/20261025bx/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -738,7 +746,7 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bw', bw===10, 'bw='+bw);
+  ok('  10 处 bx', bw===10, 'bw='+bw);
   ok('  0 处 bv（旧版本已全部替换）', bv===0, 'bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
