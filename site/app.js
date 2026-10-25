@@ -2140,7 +2140,7 @@
       ${reviews.length?`<div class="task-grid">${reviews.map(r=>cardHTML(r,`<span class="badge" style="background:#fff7ed;color:#ea580c">🔁 到期复习</span>`)).join("")}</div>`
         :`<div class="placeholder" style="padding:14px 16px">先学新内容，之后这里会自动安排复习 📈</div>`}
 
-      <div class="sec-title">📖 学习库 <small>当前学段（小学=科学/人文，初中=生物·地理等）有内容的全部模块 · 点卡片进管理，主操作「加入本周计划」即把板块排进每周任务、成为上方「🎯 学习目标」· 卡片标「🗓 计划中」的已排进本周计划 · 已全学会的标「✓ 全部学会」（记录保留）</small></div>
+      <div class="sec-title">📖 学习库 <small>只列当前学段有内容的板块（0 内容不进）· 点卡片管理，「加入本周计划」即纳入上方 🎯 学习目标 · 已全学会的标「✓ 全部学会」（记录保留）</small></div>
       <div class="stat-strip">
         ${lib.sections.map(s=>{
           const ck = s.inPlan; // 是否已排进本周计划

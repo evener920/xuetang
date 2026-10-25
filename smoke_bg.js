@@ -711,7 +711,7 @@ safe('⑬ 三处联动 学习目标=本周计划', ()=>{
   // 源码守卫：三处文案与迁移
   ok('  renderWeek 学习目标 sec-title 说明「计划即目标」', code.includes('计划即目标'), '');
   ok('  renderWeek 本周计划 sec-title 说明「加入本周计划」并成为学习目标', code.includes('计划里的板块即成为「🎯 学习目标」'), '');
-  ok('  renderWeek 学习库 sec-title 说明「加入本周计划」与「🎯 学习目标」', code.includes('主操作「加入本周计划」') && code.includes('成为上方「🎯 学习目标」'), '');
+  ok('  renderWeek 学习库 sec-title 说明「加入本周计划」与「🎯 学习目标」', code.includes('「加入本周计划」即纳入上方') && code.includes('🎯 学习目标') && code.includes('0 内容不进'), '');
   ok('  学习库卡 lib-meta 三态（计划中/未加入计划）', code.includes('🗓 计划中') && code.includes('未加入计划'), '');
   // 本周页不再残留「加入学习」「目标内」「打卡中」
   S.renderWeek();
@@ -738,7 +738,7 @@ safe('⑦ 版本号', ()=>{
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
-  const bw=(html.match(/20261025bx/g)||[]).length;
+  const bw=(html.match(/20261025by/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -746,7 +746,7 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  10 处 bx', bw===10, 'bw='+bw);
+  ok('  10 处 by', bw===10, 'bw='+bw);
   ok('  0 处 bv（旧版本已全部替换）', bv===0, 'bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });

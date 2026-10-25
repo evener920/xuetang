@@ -92,7 +92,7 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 60px;}
 }
 .hero .pbar{background:#ede9fe;}
 .sec-title{
-  display:flex;justify-content:space-between;align-items:baseline;
+  display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 12px;
   font-size:15px;font-weight:700;margin:22px 0 12px;
 }
 .sec-title small{color:var(--muted);font-weight:400;font-size:12px;}
