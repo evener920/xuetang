@@ -2314,7 +2314,7 @@
   const gnView = {};
   function renderGeneric(el, subject){
     const types = subjectTypesOf(subject);
-    if(!gnView[subject]) gnView[subject] = {type:types[0]||"", grade:"全部", q:"", volume:"全部", unit:"全部", tag:""};
+    if(!gnView[subject]) gnView[subject] = {type:types[0]||"", grade:(state.grade||"全部"), q:"", volume:"全部", unit:"全部", tag:""};
     const v = gnView[subject];
     const isEngWord = (subject==="英语" && v.type==="单词");
     let basePool, pool;
@@ -2360,20 +2360,20 @@
         <button class="chip" data-gn-add title="自定义添加板块或板块下的内容，添加后归集到「📚 资源」页">＋ 添加</button>
         ${isEngWord?`<span style="width:14px"></span><span class="lbl">年级语境：</span><span class="badge" style="background:#eef2ff;color:#1e40af">${esc(state.grade)}</span>`:""}
         <span style="flex:1"></span>
-        ${listCnt?`<button class="chip" data-gn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案" style="background:#e0e7ff;color:#3730a3;border-color:#c7d2fe;font-weight:600">闪卡</button>`:""}
         <input id="gnSearch" class="search-input" style="width:200px" placeholder="搜索…" value="${esc(v.q)}" />
       </div>
       ${(grades.length && !isEngWord)?`<div class="chips"><span class="lbl">年级：</span><button class="chip ${v.grade==="全部"?"on":""}" data-gn-grade="全部">全部</button>${grades.map(g=>`<button class="chip ${v.grade===g?"on":""}" data-gn-grade="${esc(g)}">${esc(g)}</button>`).join("")}</div>`:""}
       ${hasVolume?`<div class="chips"><span class="lbl">册：</span><button class="chip ${v.volume==="全部"?"on":""}" data-gn-volume="全部">全部</button>${VOLUMES.map(vol=>`<button class="chip ${v.volume===vol?"on":""}" data-gn-volume="${esc(vol)}">${esc(vol)}</button>`).join("")}</div>`:""}
       ${isEngWord&&units.length?`<div class="chips"><span class="lbl">单元：</span><button class="chip ${v.unit==="全部"?"on":""}" data-gn-unit="全部">全部</button>${units.map(u=>`<button class="chip ${v.unit===u?"on":""}" data-gn-unit="${esc(u)}">${esc(u)}</button>`).join("")}</div>`:""}
       ${topTags.length?`<div class="chips"><span class="lbl">热门主题：</span><button class="tag ${!v.tag?"on":""}" data-gn-tag="">全部</button>${topTags.map(t=>`<button class="tag ${v.tag===t?"on":""}" data-gn-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>`:""}
-      ${isEngWord?`
-      <div class="sec-title">🎮 单词游戏 <small>用 ${esc(state.grade)}${esc(v.volume==="全部"?"全部册":v.volume)} 的单词玩 · 完成一轮 +5 分（每天每项限一次）</small></div>
+      <div class="sec-title">🎮 学习工具 <small>${isEngWord?`用 ${esc(state.grade)}${esc(v.volume==="全部"?"全部册":v.volume)} 的单词 · 完成一轮游戏 +5 分（每天每项限一次）`:`把当前筛选的卡片做成闪卡，翻面背释义`}</small></div>
       <div class="game-row">
+        <button class="game-card" data-gn-flash title="把当前筛选的卡片变成一副闪卡：看图/看词，点卡翻面对答案"><span class="gi">📇</span><b>闪卡</b><span class="gd">翻面背释义</span></button>
+        ${isEngWord?`
         <button class="game-card" data-word-game="match"><span class="gi">🃏</span><b>配对翻牌</b><span class="gd">单词 ↔ 释义 · 记忆配对</span></button>
         <button class="game-card" data-word-game="spell"><span class="gi">🔤</span><b>拼写挑战</b><span class="gd">看释义 · 点字母拼单词</span></button>
-        <button class="game-card" data-word-game="quiz"><span class="gi">🎯</span><b>选义闯关</b><span class="gd">看单词 · 四选一挑释义</span></button>
-      </div>`:""}
+        <button class="game-card" data-word-game="quiz"><span class="gi">🎯</span><b>选义闯关</b><span class="gd">看单词 · 四选一挑释义</span></button>`:""}
+      </div>
       ${pool.length?`<div class="task-grid">${pool.map(x=>cardHTML(x)).join("")}</div>`
         :(basePool.length
           ? `<div class="placeholder"><div class="big">🔍</div><h3>没有匹配的内容</h3><p>当前筛选条件下没有内容，换个条件或清除上方筛选看看。</p></div>`
@@ -3118,10 +3118,11 @@
         <label class="ef-row">副标题 / 来源<input id="efSub" value="${esc(cur.sub||"")}" /></label>
         <label class="ef-row">年级<select id="efGrade"><option ${cg===""?"selected":""}>—</option>${grades}</select></label>
         <label class="ef-block">正文 / 题目<textarea id="efBody" rows="12" placeholder="题目、公式或课文内容…">${esc(cur.body||"")}</textarea></label>
-        <p class="af-tip">${isExtra?"这是内置教材的「覆盖版本」，仅保存在本机浏览器；可随时点弹窗里的「⤺ 还原内置」或后台「✏️ 已修改的内置内容」恢复原文。":"这是后台自定义内容，修改将直接保存本机（也可在后台删除后重加）。"}</p>
+        <p class="af-tip">${isExtra?"这是内置教材的「覆盖版本」，仅保存在本机浏览器；可随时点弹窗里的「⤺ 还原内置」或后台「✏️ 已修改的内置内容」恢复原文。":"这是后台自定义内容，修改将直接保存本机；不再需要时可在下方「🗑 删除该素材」（删除后不可恢复）。"}</p>
         <div class="af-actions">
           <button class="btn primary" data-act="saveedit">💾 保存修改</button>
           <button class="btn" data-act="canceledit">取消</button>
+          ${!isExtra?`<button class="btn" data-act="delcustom" style="color:#b91c1c;border-color:#fecaca">🗑 删除该素材</button>`:""}
         </div>
       </div>`;
     $("#modal").hidden=false; document.body.style.overflow="hidden";
@@ -3129,6 +3130,12 @@
       btn.addEventListener("click", ()=>{
         const act=btn.dataset.act;
         if(act==="canceledit"){ modalEdit=false; openModal(it); return; }
+        if(act==="delcustom"){
+          if(!confirm("删除素材《"+((it&&it.title)||it.key)+"》？删除后不可恢复（内置教材不受影响）。")) return;
+          state.custom=(state.custom||[]).filter(x=>x.key!==it.key); save(); rebuildAll();
+          toast("已删除该素材 🗑"); modalEdit=false; closeModal(); refreshIfVisible(); renderRes();
+          return;
+        }
         if(act==="saveedit"){
           const title=$("#efTitle").value.trim();
           if(!title){ toast("请填写标题"); return; }
@@ -3496,7 +3503,6 @@
               <button class="btn" data-res-open="${esc(x.key)}">查看</button>
               <button class="btn" data-bi-edit="${esc(x.key)}">✏️ 修改</button>
               ${ov?`<button class="btn" data-bi-revert="${esc(x.key)}" title="还原原文">⤺</button>`:""}
-              ${isCustom?`<button class="btn" data-bi-del="${esc(x.key)}" title="删除该素材">🗑 删除</button>`:""}
             </div>
           </div>`;
         }).join("")
@@ -3538,14 +3544,6 @@
     el.querySelectorAll("[data-bi-revert]").forEach(b=>b.addEventListener("click", ()=>{
       const k=b.dataset.biRevert;
       if(state.overrides && state.overrides[k]){ delete state.overrides[k]; save(); rebuildAll(); toast("已还原原文 ⤺"); renderRes(); }
-    }));
-    // 删除我的素材（后台添加 / 批量导入的条目；管理入口在资源页）
-    el.querySelectorAll("[data-bi-del]").forEach(b=>b.addEventListener("click", ()=>{
-      const k=b.dataset.biDel;
-      const it=INDEX[k];
-      if(!confirm("删除素材《"+((it&&it.title)||k)+"》？删除后不可恢复（内置教材不受影响）。")) return;
-      state.custom=(state.custom||[]).filter(x=>x.key!==k); save(); rebuildAll();
-      toast("已删除该素材 🗑"); renderRes(); refreshView();
     }));
     const biReset=$("#biReset");
     if(biReset) biReset.addEventListener("click", ()=>{
@@ -3888,6 +3886,7 @@
   gs.innerHTML = GRADES.map(g=>`<option ${g===state.grade?"selected":""}>${g}</option>`).join("");
   gs.addEventListener("change", ()=>{
     state.grade=gs.value; save(); cnView=null;
+    for(const k in gnView) delete gnView[k]; // 清学科页筛选缓存，按新年级重新界定（防止旧年级内容泄漏）
     toast("学习年级已切换为："+state.grade);
     render();
   });
@@ -3923,6 +3922,7 @@
     if(!state.students[id]) return;
     syncPerStudent();   // 先把「当前」学生的最新状态写入其快照
     applyPerStudent(id);// 再载入目标学生的数据
+    for(const k in gnView) delete gnView[k]; // 清学科页筛选缓存，按新学生/年级重新界定
     const gs=$("#gradeSelect"); if(gs) gs.value=state.grade;
     setStudentLabel(); renderStudentsMenu();
     if(!keepMenu) toggleStudentMenu(false);

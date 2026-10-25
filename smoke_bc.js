@@ -126,7 +126,7 @@ safe('④ 版本号', ()=>{
   const br=(html.match(/20261024br/g)||[]).length;
   const bs=(html.match(/20261024bs/g)||[]).length;
   const bv=(html.match(/20261025bv/g)||[]).length;
-  const bw=(html.match(/20261025cd/g)||[]).length;
+  const bw=(html.match(/20261025ce/g)||[]).length;
   ok('  0 处 ba', ba===0, 'ba='+ba);
   ok('  0 处 bc', bc===0, 'bc='+bc);
   ok('  0 处 bd（已升级至 bt）', bd===0, 'bd='+bd);

@@ -776,7 +776,7 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
   ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
   ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
-  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cd"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025ce"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
   // 实跑：英语单词卡（有配图）0→1→2 三段
   const ctx = boot({});
   const S = ctx.window.__SITE__;
@@ -807,6 +807,22 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  非英语卡保持两段（翻面出全文）', mb.innerHTML.includes('江南可采莲'), '');
 });
 
+/* ---------- ⑯ 资源页删除移入修改 + 闪卡并入学习工具行 + 学科页按当前年级界定（ce） ---------- */
+safe('⑯ ce 三处调整', ()=>{
+  const code = fs.readFileSync(path.join(SITE_DIR,'app.js'),'utf8');
+  // 1) 资源页卡片「删除」按钮移入「修改」弹窗：卡片操作区不再有独立删除按钮
+  ok('  资源卡片操作区无独立删除按钮（data-bi-del 已移除）', !code.includes('data-bi-del="${esc(x.key)}"') && !/🗑 删除<\/button>/.test(code), '');
+  ok('  修改弹窗对自定义素材含「删除该素材」(delcustom)', /data-act="delcustom"/.test(code) && /🗑 删除该素材/.test(code), '');
+  ok('  年级切换清空学科页筛选缓存（防旧年级泄漏）', /for\(const k in gnView\) delete gnView\[k\]/.test(code), '');
+  // 2) 闪卡按钮从顶部 chips 移出，并入「学习工具」行（与单词游戏并列）
+  ok('  顶部 chips 行不再含 data-gn-flash 闪卡按钮（仅保留 game-card 行）', !/"chip" data-gn-flash/.test(code), '');
+  ok('  学习工具行含 闪卡(game-card data-gn-flash) 与 单词游戏(data-word-game)', /"game-card" data-gn-flash/.test(code) && /data-word-game="match"/.test(code), '');
+  ok('  原「单词游戏」独立 section 标题已合并（无 🎮 单词游戏 小节）', !/🎮 单词游戏 <small>/.test(code), '');
+  // 3) 学科页年级筛选默认取学生当前年级（不再默认「全部」泄漏低龄内容）
+  ok('  renderGeneric 默认年级=state.grade', /grade:\(state\.grade\|\|"全部"\)/.test(code), '');
+  ok('  grade!=全部 时才按年级过滤（保留「全部」手动查看）', /if\(v\.grade!=="全部" && !isEngWord\) pool = pool\.filter\(x=>x\.grade===v\.grade\)/.test(code), '');
+});
+
 /* ---------- ⑦ 版本号 ---------- */
 safe('⑦ 版本号', ()=>{
   const html = fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8');
@@ -824,7 +840,8 @@ safe('⑦ 版本号', ()=>{
   const ca=(html.match(/20261025ca/g)||[]).length;
   const cb=(html.match(/20261025cb/g)||[]).length;
   const cc=(html.match(/20261025cc/g)||[]).length;
-  const cbx=(html.match(/20261025cd/g)||[]).length;
+  const cbx=(html.match(/20261025ce/g)||[]).length;
+  const cd=(html.match(/20261025cd/g)||[]).length;
   const bi=(html.match(/20261024bi/g)||[]).length;
   const bh=(html.match(/20261024bh/g)||[]).length;
   const bg=(html.match(/20261024bg/g)||[]).length;
@@ -832,8 +849,8 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  11 处 cd（新增 word_emoji.js 脚本）', cbx===11, 'cd='+cbx);
-  ok('  0 处 ca/cb/cc/bv（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&bv===0, 'ca='+ca+' cb='+cb+' cc='+cc+' bv='+bv);
+  ok('  11 处 ce（新增 word_emoji.js 脚本）', cbx===11, 'ce='+cbx);
+  ok('  0 处 ca/cb/cc/cd/bv（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
 });
 
