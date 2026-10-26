@@ -779,7 +779,7 @@ safe('⑮ 闪卡图片三段翻转（cc）', ()=>{
   ok('  翻面按钮三态标签（翻面/看释义/藏起答案）', /stage>=max \? "🙈 藏起答案" : "🔄 看释义"/.test(code), '');
   ok('  css 有 .fc-emoji 大图样式', fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8').includes('.fc-emoji'), '');
   ok('  css fc-top 右侧留出 × 位置（padding-right）', /\.fc-top\{[^}]*padding-right:44px/.test(fs.readFileSync(path.join(SITE_DIR,'styles.css'),'utf8')), '');
-  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025ck"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
+  ok('  index.html 引入 word_emoji.js', /<script src="word_emoji\.js\?v=20261025cl"><\/script>/.test(fs.readFileSync(path.join(SITE_DIR,'index.html'),'utf8')), '');
   // 实跑：英语单词卡（有配图）0→1→2 三段（注意 key 别用 ls4:/ls 前缀——ci 起听力键被闪卡过滤）
   const ctx = boot({});
   const S = ctx.window.__SITE__;
@@ -965,7 +965,7 @@ safe('⑦ 版本号', ()=>{
   const ca=(html.match(/20261025ca/g)||[]).length;
   const cb=(html.match(/20261025cb/g)||[]).length;
   const cc=(html.match(/20261025cc/g)||[]).length;
-  const cj=(html.match(/20261025ck/g)||[]).length;
+  const cj=(html.match(/20261025cl/g)||[]).length;
   const ci=(html.match(/20261025ci/g)||[]).length;
   const ch=(html.match(/20261025ch/g)||[]).length;
   const cg=(html.match(/20261025cg/g)||[]).length;
@@ -977,9 +977,86 @@ safe('⑦ 版本号', ()=>{
   const be=(html.match(/20261024be/g)||[]).length;
   const bd=(html.match(/20261024bd/g)||[]).length;
   const ba=(html.match(/20261024ba/g)||[]).length;
-  ok('  11 处 ck（hero 顺序提示高对比 + 编辑标题去后缀）', cj===11, 'cj='+cj);
+  ok('  11 处 cl（hero 顺序提示高对比 + 编辑标题去后缀）', cj===11, 'cj='+cj);
   ok('  0 处 ca/cb/cc/cd/bv/cg/ch/ci（旧版本已全部替换）', ca===0&&cb===0&&cc===0&&cd===0&&bv===0&&cg===0&&ch===0&&ci===0, 'ca='+ca+' cb='+cb+' cc='+cc+' cd='+cd+' bv='+bv+' cg='+cg+' ch='+ch+' ci='+ci);
   ok('  0 处 bq/bp/bo/bn/bm/bl/bk/bi/bh/bg/bf/be/bd/ba/bj/br/bs', bq===0&&bp===0&&bo===0&&bn===0&&bm===0&&bl===0&&bk===0&&bi===0&&bh===0&&bg===0&&bf===0&&be===0&&bd===0&&ba===0&&bj===0&&br===0&&bs===0, 'bq='+bq+' bp='+bp+' bo='+bo+' bn='+bn+' bm='+bm+' bl='+bl+' bk='+bk+' bi='+bi+' bh='+bh+' bg='+bg+' bf='+bf+' be='+be+' bd='+bd+' ba='+ba+' bj='+bj+' br='+br+' bs='+bs);
+});
+
+/* ---------- ⑮ BKT 掌握度闭环（cl：掌握度+BKT） ---------- */
+safe('⑮ BKT 掌握度闭环', ()=>{
+  // 导出契约
+  const ctx0 = boot({});
+  const S0 = ctx0.window.__SITE__;
+  ok('  BKT 函数已导出', typeof S0.bktP==='function' && typeof S0.bktCorrect==='function' && typeof S0.bktWrong==='function' && typeof S0.bktStars==='function' && typeof S0.bktSeedLearn==='function' && typeof S0.bktDecay==='function' && typeof S0.ensureBkt==='function' && S0.BKT_MASTERED!==undefined && S0.BKT_WEAK!==undefined, '');
+
+  // 全新键：未学 → bktP 返回 null
+  const ctx = boot({});
+  const S = ctx.window.__SITE__;
+  S.ensureBkt();
+  ok('  全新键 bktP=null（未学）', S.bktP('word:BKTtest')===null, 'p='+S.bktP('word:BKTtest'));
+
+  // 第一次答对：从先验 0.25 上升
+  S.bktCorrect('word:BKTtest');
+  const p1 = S.bktP('word:BKTtest');
+  ok('  答对后 p 上升且 > 先验', p1!==null && p1>0.25, 'p1='+p1);
+
+  // 连续答对趋近掌握（≥ BKT_MASTERED）
+  for(let i=0;i<6;i++) S.bktCorrect('word:BKTtest');
+  const pHi = S.bktP('word:BKTtest');
+  ok('  连续答对趋近掌握（≥0.9）', pHi>=0.9, 'pHi='+pHi);
+
+  // 连续答错趋近薄弱（≤ BKT_WEAK）
+  for(let i=0;i<8;i++) S.bktWrong('word:BKTtest');
+  const pLo = S.bktP('word:BKTtest');
+  ok('  连续答错趋近薄弱（≤0.4）', pLo<=0.4, 'pLo='+pLo);
+
+  // bktStars 落在 0..5
+  S.bktCorrect('word:BKTtest');
+  const st = S.bktStars('word:BKTtest');
+  ok('  bktStars ∈ [0,5]', st!==null && st>=0 && st<=5, 'st='+st);
+
+  // bktSeedLearn：未学键 seed 后落在 [0.25,0.999]
+  S.bktSeedLearn('word:BKTseed');
+  const pSeed = S.bktP('word:BKTseed');
+  ok('  bktSeedLearn 落到 [0.25,0.999]', pSeed!==null && pSeed>=0.25 && pSeed<=0.999, 'pSeed='+pSeed);
+
+  // bktDecay：高掌握度随天数下降
+  S.state.masteryP['word:BKTdecay']=0.95;
+  S.state.masterySeen['word:BKTdecay']=S.fmt(new Date(Date.now()-3*86400000));
+  const beforeD = S.bktP('word:BKTdecay');
+  S.bktDecay();
+  const afterD = S.bktP('word:BKTdecay');
+  ok('  bktDecay 降低高掌握度 p（遗忘）', afterD<beforeD, 'before='+beforeD+' after='+afterD);
+
+  // practicePriority：薄弱 > 扎实
+  S.bktSeedLearn('word:priWeak');   S.state.masteryP['word:priWeak']=0.2;   S.state.masterySeen['word:priWeak']=S.fmt(new Date());
+  S.bktSeedLearn('word:priStrong'); S.state.masteryP['word:priStrong']=0.98; S.state.masterySeen['word:priStrong']=S.fmt(new Date());
+  const priWeak = S.practicePriority('word:priWeak');
+  const priStrong = S.practicePriority('word:priStrong');
+  ok('  薄弱优先级 > 扎实', priWeak>priStrong, 'weak='+priWeak+' strong='+priStrong);
+
+  // 阈值常量合理
+  ok('  BKT_MASTERED=0.9 / BKT_WEAK=0.4', S.BKT_MASTERED===0.9 && S.BKT_WEAK===0.4, 'm='+S.BKT_MASTERED+' w='+S.BKT_WEAK);
+
+  // 迁移：已学会 → masteryP（applyPerStudent 平滑接入模型）
+  const ctx2 = boot({});
+  const S2 = ctx2.window.__SITE__;
+  const sid2 = S2.state.currentStudent;
+  S2.state.students[sid2].data.learned['word:mig1'] = S2.fmt(new Date());
+  S2.applyPerStudent(sid2);
+  ok('  迁移：learned → masteryP 已建（默认0.45）', S2.state.masteryP['word:mig1']!==undefined && S2.state.masteryP['word:mig1']>=0.25, 'p='+S2.state.masteryP['word:mig1']);
+
+  // renderWeek 渲染 掌握度 看板（mast-card + 🧠 掌握度）
+  try {
+    S.renderWeek();
+    const html = ctx.window.document.getElementById('view-week').innerHTML;
+    ok('  renderWeek 渲染 掌握度 看板（mast-card/🧠 掌握度）', html.includes('mast-card') && html.includes('🧠 掌握度'), 'len='+html.length);
+  } catch(e){ ok('  renderWeek 渲染 掌握度 看板（mast-card/🧠 掌握度）', false, 'THROW '+e.message); }
+
+  // getMastery 与 BKT 兼容：已建 masteryP 返回对应星
+  S.bktSeedLearn('word:gmv');
+  const gmv = S.getMastery('word:gmv');
+  ok('  getMastery 对 BKT 键返回整数星', gmv!==null && gmv>=0 && gmv<=5, 'gmv='+gmv);
 });
 
 let pass=0;

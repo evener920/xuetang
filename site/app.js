@@ -422,23 +422,26 @@
   /* ---------- 掌握度星级（0~5）与学习调度增强 ---------- */
   // getMastery：返回 0~5；旧数据「已学会但无星级」视为 5（全会）；从未学过返回 null（未学）
   function getMastery(key){
+    if(state.masteryP && state.masteryP[key]!==undefined) return bktStars(key); // BKT 优先
     if(state.mastery && state.mastery[key]!==undefined) return state.mastery[key];
-    if(state.learned[key]) return 5; // 旧数据兼容：已会即全会
+    if(state.learned[key]) return 3; // 已学会但未巩固：诚实给 3 星（由 BKT 随练习升降）
     return null;
   }
   function setMastery(key, n){
-    state.mastery = state.mastery || {};
+    ensureBkt();
     n = Math.max(0, Math.min(5, parseInt(n,10)||0));
-    state.mastery[key] = n; // 显式评星即记录（含 0★ 不会/零星）
+    state.mastery[key] = n;            // 保留星级字段（兼容/手动覆盖）
+    state.masteryP[key] = Math.max(BKT_P_INIT*0.5, Math.min(0.999, n/5)); // 手动评星直接驱动模型
+    state.masterySeen[key] = fmt(new Date());
     save();
   }
   // practicePriority：越高越优先排入今日练习（不会的加强、已会的降频）
   function practicePriority(key){
-    const m = getMastery(key);
-    if(m===null) return 2.5;   // 未学：需要学习
-    if(m>=5)    return 0.15;   // 全会：降频
-    if(m<=2)    return 3;      // 不会/弱：加强
-    return 1;                  // 中等：正常
+    const p = bktP(key);
+    if(p===null) return 3;            // 未学：需要学习
+    if(p>=BKT_MASTERED) return 0.15;  // 扎实：降频
+    if(p<=BKT_WEAK) return 3;         // 薄弱：加强
+    return 1 + (1-p);                // 中等：越弱越优先
   }
   function addDays(dateStr, n){
     const d = new Date(dateStr + "T00:00:00");
@@ -454,20 +457,93 @@
     if(p.end   && t > p.end)   return false; // 已结课
     return true;
   }
-  // 艾宾浩斯间隔按掌握度调整：不会的更密、全会的更稀
+  // 艾宾浩斯间隔按掌握度调整：薄弱的更密、扎实的更稀
   function ebIntervalsFor(key){
-    const m = getMastery(key);
-    if(m===null) return EB_INTERVALS;
-    if(m<=2) return [1,2,3,5,8,15]; // 弱：更密集跟进
-    if(m>=5) return [2,7,15];        // 全会：减少打扰
+    const p = bktP(key);
+    if(p===null) return EB_INTERVALS;
+    if(p<=BKT_WEAK) return [1,2,3,5,8,15]; // 薄弱：更密集跟进
+    if(p>=BKT_MASTERED) return [2,7,15];   // 扎实：减少打扰
     return EB_INTERVALS;
   }
+  /* ---------- 概率化掌握度（BKT 式 学·练·测 闭环） ----------
+     每条内容维护 masteryP（0~1 掌握概率）与 masterySeen（最近一次学习/练习日期），按学生独立。
+     "学"=标记学会 → 先验 0.45；"练/测"=小测/游戏对错 → BKT 后验 + 学习转移；
+     每天未复习则按留存率向先验收缩（遗忘），自动把薄弱项重新推上前台与复习队列。
+     纯本地、零成本，不依赖任何外部服务。 */
+  const BKT_P_INIT = 0.25;   // 未学习先验（低）
+  const BKT_TRANSIT = 0.12;  // 每次练习后"又学会一点"的转移概率
+  const BKT_GUESS = 0.2;     // 不会也蒙对（猜对）概率
+  const BKT_SLIP = 0.1;      // 会了也答错（失误）概率
+  const BKT_RETENTION = 0.9; // 每日记忆留存率（遗忘）
+  const BKT_MASTERED = 0.9;  // 掌握阈值（≥ 视为扎实，降频/跳过）
+  const BKT_WEAK = 0.4;      // 薄弱阈值（≤ 视为薄弱，加强/密集复习）
+  function ensureBkt(){
+    state.masteryP = state.masteryP || {};
+    state.masterySeen = state.masterySeen || {};
+  }
+  function bktP(key){
+    ensureBkt();
+    if(state.masteryP[key]!==undefined) return state.masteryP[key];
+    if(state.learned[key]) return 0.5;       // 已学会但未练过：中等先验
+    if(state.mastery && state.mastery[key]!==undefined) return Math.max(0.05, state.mastery[key]/5);
+    return null;                            // 从未接触
+  }
+  function bktStars(key){
+    const p = bktP(key);
+    if(p===null) return null;
+    return Math.max(0, Math.min(5, Math.round(p*5)));
+  }
+  function bktTouch(key){
+    ensureBkt();
+    state.masterySeen[key] = fmt(new Date());
+  }
+  function bktObserve(key, correct){
+    ensureBkt();
+    let p = bktP(key); if(p===null) p = BKT_P_INIT;
+    let post;
+    if(correct){
+      const num = p*(1-BKT_SLIP);
+      const den = p*(1-BKT_SLIP) + (1-p)*BKT_GUESS;
+      post = den>0 ? num/den : p;
+    } else {
+      const num = p*BKT_SLIP;
+      const den = p*BKT_SLIP + (1-p)*(1-BKT_GUESS);
+      post = den>0 ? num/den : p;
+    }
+    p = post + (1-post)*BKT_TRANSIT; // 学习转移
+    state.masteryP[key] = Math.max(BKT_P_INIT*0.5, Math.min(0.999, p));
+    bktTouch(key);
+  }
+  function bktCorrect(key){ bktObserve(key, true); }
+  function bktWrong(key){ bktObserve(key, false); }
+  function bktSeedLearn(key){
+    ensureBkt();
+    if(state.masteryP[key]===undefined){
+      const s = (state.mastery && state.mastery[key]!==undefined) ? state.mastery[key]/5 : 0.45;
+      state.masteryP[key] = Math.max(BKT_P_INIT, Math.min(0.999, s));
+      state.masterySeen[key] = state.learned[key] || fmt(new Date());
+    }
+  }
+  function bktDecay(){
+    ensureBkt();
+    const t = fmt(new Date());
+    for(const k in state.masteryP){
+      const seen = state.masterySeen[k] || state.learned[k] || t;
+      const d = dayDiff(seen);
+      if(d>0){
+        const p = state.masteryP[k];
+        state.masteryP[k] = BKT_P_INIT + (p - BKT_P_INIT) * Math.pow(BKT_RETENTION, d);
+        state.masterySeen[k] = t;
+      }
+    }
+  }
+
   // 从序列中取 quota 条，跳过「全会(5★)」条目（已会降频），不足再回退补足
   function seqSkipMastered(pool, off, q){
     const out=[], seen=new Set(); let i=off, guard=0;
     while(out.length<q && guard<pool.length){
       const it=pool[i%pool.length]; i++; guard++;
-      if(getMastery(it.key)>=5) continue;        // 全会跳过
+      if(bktP(it.key)>=BKT_MASTERED) continue;  // 已扎实跳过（BKT 掌握度≥阈值）
       if(seen.has(it.key)) continue;
       seen.add(it.key); out.push(it);
     }
@@ -1073,11 +1149,11 @@
   }
   /* ---------- 多学生：结构/内容共用，学习数据各自独立 ---------- */
   // 随学生切换而独立保存的字段（进度、打卡范围、年级、习惯等）；custom/videos 等为共享内容
-  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","sectionPlan","rules","orderMode","planSecs","migGoalPlanMerge2026"];
+  const PER_STUDENT_FIELDS = ["grade","learned","fav","checkin","habits","habitLog","reviewed","semesterStart","wordQuiz","points","pointLog","redeems","mastery","masteryP","masterySeen","sectionPlan","rules","orderMode","planSecs","migGoalPlanMerge2026"];
   function defaultPerStudent(){
     return { grade:"四年级", learned:{}, fav:{}, checkin:{},
       habits:["房间卫生","早睡早起","学校作业"], habitLog:{}, reviewed:{}, semesterStart:fmt(new Date()), wordQuiz:{},
-      points:0, pointLog:[], redeems:[], mastery:{}, sectionPlan:{}, rules:{}, orderMode:"seq", planSecs:{add:{},del:{}}, migGoalPlanMerge2026:false };
+      points:0, pointLog:[], redeems:[], mastery:{}, masteryP:{}, masterySeen:{}, sectionPlan:{}, rules:{}, orderMode:"seq", planSecs:{add:{},del:{}}, migGoalPlanMerge2026:false };
   }
   function capturePerStudent(){
     const d={}; PER_STUDENT_FIELDS.forEach(f=>{ const v=state[f]; d[f]=(v===undefined?null:JSON.parse(JSON.stringify(v))); });
@@ -1087,6 +1163,16 @@
     const s=state.students[id]; const d=(s&&s.data)||defaultPerStudent();
     PER_STUDENT_FIELDS.forEach(f=>{ state[f]=(d[f]!==undefined && d[f]!==null)?d[f]:defaultPerStudent()[f]; });
     state.currentStudent=id;
+    // BKT：把既有"已学会/星级"平滑同步成掌握概率（存量数据接入模型，不丢历史）
+    ensureBkt();
+    for(const k in state.learned){
+      if(state.masteryP[k]===undefined){
+        const s = (state.mastery && state.mastery[k]!==undefined) ? state.mastery[k]/5 : 0.45;
+        state.masteryP[k] = Math.max(BKT_P_INIT, Math.min(0.999, s));
+        state.masterySeen[k] = state.learned[k] || fmt(new Date());
+      }
+    }
+    bktDecay(); // 每日遗忘衰减（当天已衰减条目 masterySeen=今天，幂等）
   }
   function syncPerStudent(){
     if(!state.students[state.currentStudent]) state.students[state.currentStudent]={name:""};
@@ -2156,6 +2242,12 @@
     const penWkTotal = penWeek.reduce((a,b)=>a-b.n,0); // 本周共扣（净分用）
     const ptNet = pointTodayNet(), pwNet = pointWeekNet(); // 今日/本周净分（正分-扣分）
 
+    // 🧠 掌握度看板（BKT）：统计各掌握区间数量 + 薄弱 Top
+    const mk = Object.keys(state.masteryP).map(k=>({k, it:INDEX[k], p:state.masteryP[k]})).filter(x=>x.it && typeof x.p==="number");
+    const bands={red:0,orange:0,yellow:0,green:0};
+    mk.forEach(x=>{ if(x.p<BKT_WEAK) bands.red++; else if(x.p<0.7) bands.orange++; else if(x.p<BKT_MASTERED) bands.yellow++; else bands.green++; });
+    const weakTop = mk.filter(x=>x.p<0.7).sort((a,b)=>a.p-b.p).slice(0,8);
+
     el.innerHTML = `
       <div class="hero">
         <div>
@@ -2178,6 +2270,17 @@
           <div class="lbl" style="margin-bottom:4px">目标完成率 ${goal.total?Math.round(goal.done/goal.total*100):0}% · 本周计划 ${caps.length} 个板块</div>
           <div class="pbar" style="margin:0"><div class="pfill" style="width:${goal.total?Math.round(goal.done/goal.total*100):0}%"></div></div>
         </div>
+      </div>
+
+      <div class="sec-title">🧠 掌握度 <small>BKT 模型（学·练·测 闭环）：每次小测 / 游戏对错都会更新掌握概率，并按遗忘曲线自动把薄弱项推回复习 · 红=未掌握 橙=薄弱 黄=良好 绿=扎实</small></div>
+      <div class="mast-card">
+        <div class="mast-bars">
+          <div class="mast-band"><div class="mast-fill" style="height:${mk.length?Math.round(bands.red/mk.length*100):0}%;background:#dc2626"></div><span class="mast-c">${bands.red}</span><span class="mast-l">未掌握</span></div>
+          <div class="mast-band"><div class="mast-fill" style="height:${mk.length?Math.round(bands.orange/mk.length*100):0}%;background:#ea580c"></div><span class="mast-c">${bands.orange}</span><span class="mast-l">薄弱</span></div>
+          <div class="mast-band"><div class="mast-fill" style="height:${mk.length?Math.round(bands.yellow/mk.length*100):0}%;background:#ca8a04"></div><span class="mast-c">${bands.yellow}</span><span class="mast-l">良好</span></div>
+          <div class="mast-band"><div class="mast-fill" style="height:${mk.length?Math.round(bands.green/mk.length*100):0}%;background:#16a34a"></div><span class="mast-c">${bands.green}</span><span class="mast-l">扎实</span></div>
+        </div>
+        ${weakTop.length?`<div class="mast-weak"><div class="mast-weak-t">🔻 薄弱 Top（优先练 / 测）</div>${weakTop.map(x=>`<button class="chip mast-weak-it" data-mast-key="${esc(x.k)}" title="点击查看 / 练习">${esc(stripTags(x.it.title||x.k)).slice(0,18)} · ${Math.round(x.p*100)}%</button>`).join("")}</div>`:`<div class="mast-weak"><div class="mast-weak-t">暂无薄弱项 🎉</div></div>`}
       </div>
 
       <div class="sec-title">🗓 本周计划 <small>从「📖 学习库」把板块排进来（WB 推荐已按主课多、副课少排好）· 胶囊可增删 · 计划里的板块即成为「🎯 学习目标」· 增删后自动重排</small></div>
@@ -2305,6 +2408,8 @@
     el.querySelectorAll("[data-pen-undo]").forEach(b=>b.addEventListener("click", ()=>{
       requireAdmin(()=>confirmUndo("pen", b.dataset.penUndo));
     }));
+    // 掌握度：薄弱 Top 点击进弹窗练习
+    el.querySelectorAll("[data-mast-key]").forEach(b=>b.addEventListener("click", ()=>{ const it=INDEX[b.dataset.mastKey]; if(it) openModal(it); }));
     // 学习板块排程（cb：入口移到本周页底部）：保存每个板块的开启 / 起止日 / 每周频次
     bindSchedSave();
     renderCalGrid();
@@ -2558,6 +2663,7 @@
         if(built.length===w.text.length){
           if(built.join("")===w.text.toLowerCase()){
             score++;
+            bktCorrect(w.key); // BKT：拼写正确 → 掌握度上升
             wgShell("拼写挑战", `看释义，点字母拼出单词（第 ${idx+1}/${total} 题）`, `
               <div class="wg-stats">得分 <b>${score}</b></div>
               <div class="wg-clue"><div class="wg-cn">${esc(w.cn)}</div></div>
@@ -2565,6 +2671,7 @@
             setTimeout(nextWord, 900);
           }else{
             wrongFlash=true; draw();
+            bktWrong(w.key); // BKT：拼写错误 → 掌握度下降
             setTimeout(()=>{ built=[]; builtKeys=[]; usedKeys=new Set(); wrongFlash=false; if(list[idx]) draw(); }, 850);
           }
           return;
@@ -2598,7 +2705,7 @@
       const b=e.target.closest("[data-o]"); if(!b||picked>=0) return;
       picked=+b.dataset.o;
       const q=qs[idx];
-      if(q.opts[picked]===q.answer) score++;
+      if(q.opts[picked]===q.answer){ score++; bktCorrect(q.w.key); } else { bktWrong(q.w.key); } // BKT：选义对错 → 掌握度升降
       draw();
       setTimeout(()=>{
         idx++; picked=-1;
@@ -2991,6 +3098,7 @@
         const st2=wordQuizToday();
         if(o.ok){
           b.classList.add("ok"); st2.right++;
+          bktCorrect(it.key); // BKT：小测答对 → 掌握度上升
           speak(it.title, "en-US");
           toast("答对了 🎉 "+it.title);
           // 答对给分（每日小测积分上限）
@@ -2998,6 +3106,7 @@
           if(got < quizCapDay()) awardQuiet(pointRules().quizRight, "小测答对 "+it.title, "", true);
         }else{
           b.classList.add("no"); st2.wrong++;
+          bktWrong(it.key); // BKT：小测答错 → 掌握度下降
           opts.forEach((x,i)=>{ if(x.ok) all[i].classList.add("ok"); });
           toast("记住啦："+it.title+" = "+it.body);
         }
@@ -3117,7 +3226,7 @@
           }
           else {
             state.learned[it.key]=fmt(new Date());
-            if(getMastery(it.key)===null) setMastery(it.key, 5); // 新学会默认 5 星（全会），可手动下调
+            bktSeedLearn(it.key); save(); // 新学会 → BKT 先验 0.45（随练习升降）
             if(inTodayGoal(it.key)){
               awardQuiet(pointRules().learn, "学会《"+it.title+"》", "learn:"+it.key, true);
               toast("已标记为学会 +"+pointRules().learn+" 分（今日目标）🔁 明天将按遗忘曲线安排复习");
@@ -4164,6 +4273,7 @@
       openFlashcards, fcFlip, fcNav, fcShuffle, fcKnown, get fcState(){ return fcState; }, renderEditForm,
       fcWordEmoji, fcCustomImg, fcHasPic, fcNormKey, fcMaxStage, openImgDialog, downscaleImage,
       getMastery, setMastery, practicePriority, addDays, sectionPlanOf, sectionActive, ebIntervalsFor, sectionItems, seqSkipMastered, dueReview, weekFreqOf, dayDiff, fmt,
+      ensureBkt, bktP, bktStars, bktCorrect, bktWrong, bktSeedLearn, bktDecay, BKT_MASTERED, BKT_WEAK,
       cloudSyncEnabled, sha256Hex, syncPush, syncPull, initCloudSync, syncNow, applyStateDefaults, get state(){ return state; }, weekGoalData, openWeekGoal,
       pointRules, quizCapDay, streakMilestones, penaltyCapDay, penaltyFloor, renderCalGrid, openCalDay, openLibSection,
       inTodayGoal, undoLearn, isLearnedKey,
