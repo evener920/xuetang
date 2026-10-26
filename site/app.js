@@ -1301,9 +1301,9 @@
   }
   function badge(type){
     const map={
-      "诗词":["#f5f3ff","#7c3aed"],"成语":["#fdf2f8","#db2777"],"课文":["#eff6ff","#2563eb"],
+      "诗词":["#f5f3ff","#7c3aed"],"成语":["#fdf2f8","#db2777"],"课文":["#f5f3ff","#7c3aed"],
       "文言":["#fff7ed","#ea580c"],"成语动画廊":["#fef3c7","#d97706"],"作文":["#ecfeff","#0891b2"],
-      "故事":["#f0fdf4","#16a34a"],"阅读":["#eef2ff","#4f46e5"],
+      "故事":["#f0fdf4","#16a34a"],"阅读":["#f5f3ff","#7c3aed"],
       "单词":["#ecfdf5","#0d9488"],"应用题":["#fdf2f8","#db2777"],"计算题":["#ecfdf5","#0d9488"],
       "知识":["#ecfdf5","#059669"],"地理动画":["#fff7ed","#d97706"],"练习":["#fff7ed","#ea580c"],
       "史实":["#faf5ff","#9333ea"],"人物":["#fef2f2","#dc2626"]
@@ -1317,12 +1317,12 @@
     "数学":["#fdf2f8","#db2777"],
     "英语":["#ecfdf5","#0d9488"],
     "科学":["#fff7ed","#ea580c"],
-    "人文":["#eef2ff","#4f46e5"],
+    "人文":["#faf5ff","#9333ea"],
     "生物":["#ecfdf5","#059669"],
     "地理":["#f0fdfa","#0d9488"],
     "政治":["#fef2f2","#dc2626"],
     "历史":["#faf5ff","#9333ea"],
-    "物理":["#eff6ff","#2563eb"],
+    "物理":["#f5f3ff","#6d28d9"],
     "化学":["#fdf4ff","#c026d3"]
   };
   function subjectStyle(subject, on){
@@ -1769,9 +1769,9 @@
         <div>
           <h2>今日学习</h2>
           <p>${d.getMonth()+1} 月 ${d.getDate()} 日 星期${WEEK[d.getDay()]} · 🙋 ${esc(curStudentName())} · ${esc(state.grade)} · 学期第 ${semDay} 天 / ${SEMESTER_DAYS}（第 ${semWeek} 周） · 共 ${total} 项任务</p>
-          <div style="margin-top:6px"><span class="badge" style="${ptNet<0?"background:#fee2e2;color:#b91c1c":"background:#fef3c7;color:#b45309"}">🏆 今日 ${sgn(ptNet)} 分</span>${penaltyToday()?` <span class="badge" style="background:#fee2e2;color:#b91c1c">⚠️ 今日扣分 -${penaltyToday()} 分</span>`:""} <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#eef2ff;color:#3730a3">🎁 兑奖在「奖励」页</span></div>
+          <div style="margin-top:6px"><span class="badge" style="${ptNet<0?"background:#fee2e2;color:#b91c1c":"background:#fef3c7;color:#b45309"}">🏆 今日 ${sgn(ptNet)} 分</span>${penaltyToday()?` <span class="badge" style="background:#fee2e2;color:#b91c1c">⚠️ 今日扣分 -${penaltyToday()} 分</span>`:""} <span class="badge" style="background:#f1f5f9;color:#475569">累计 ${state.points} 分</span> <span class="badge" style="background:#f1f5f9;color:#475569">连续 ${currentStreak()} 天</span> <span class="badge" style="background:#f5f3ff;color:#5b21b6">🎁 兑奖在「奖励」页</span></div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="badge" style="background:#eef2ff;color:#3730a3">📐 卡片顺序</span>
+            <span class="badge" style="background:#f5f3ff;color:#5b21b6">📐 卡片顺序</span>
             <button class="chip ${state.orderMode!=="smart"?"on":""}" data-order-toggle="seq">顺序（按导入序）</button>
             <button class="chip ${state.orderMode==="smart"?"on":""}" data-order-toggle="smart">智能（弱项优先）</button>
             <span style="font-size:12px;color:rgba(255,255,255,.88)">顺序模式严格按资源导入次序，前后感更清晰；智能模式会把没掌握好的往前排</span>
@@ -2173,7 +2173,7 @@
         <div class="stat"><div class="num">${goal.total}</div><div class="lbl">目标总量</div></div>
         <div class="stat"><div class="num" style="color:#15803d">${goal.done}</div><div class="lbl">已完成</div></div>
         <div class="stat"><div class="num" style="color:#be123c">${goal.total-goal.done}</div><div class="lbl">待学</div></div>
-        <div class="stat"><div class="num" style="color:#4f46e5">${caps.length}</div><div class="lbl">计划板块</div></div>
+        <div class="stat"><div class="num" style="color:#7c3aed">${caps.length}</div><div class="lbl">计划板块</div></div>
         <div class="stat" style="flex:2;min-width:220px">
           <div class="lbl" style="margin-bottom:4px">目标完成率 ${goal.total?Math.round(goal.done/goal.total*100):0}% · 本周计划 ${caps.length} 个板块</div>
           <div class="pbar" style="margin:0"><div class="pfill" style="width:${goal.total?Math.round(goal.done/goal.total*100):0}%"></div></div>
@@ -2264,7 +2264,7 @@
       <div class="chips" style="margin:6px 0 10px">
         <span class="badge" style="background:#fee2e2;color:#b91c1c">本周共扣 -${penWeek.reduce((a,b)=>a-b.n,0)} 分</span>
         <span class="badge" style="background:#f1f5f9;color:#475569">今日 -${penaltyToday()} / 上限 ${penaltyCapDay()}</span>
-        <span class="badge" style="background:#eef2ff;color:#3730a3">当前积分 ${state.points}</span>
+        <span class="badge" style="background:#f5f3ff;color:#5b21b6">当前积分 ${state.points}</span>
       </div>
       <div class="admin-list">
         ${penWeek.length? penWeek.map(e=>`<div class="admin-item">
@@ -2365,7 +2365,7 @@
       <div class="chips">
         ${types.map(t=>`<button class="chip ${v.type===t?"on":""}" data-gn-type="${esc(t)}">${esc(t)}</button>`).join("")}
         <button class="chip" data-gn-add title="自定义添加板块或板块下的内容，添加后归集到「📚 资源」页">＋ 添加</button>
-        ${isEngWord?`<span style="width:14px"></span><span class="lbl">年级语境：</span><span class="badge" style="background:#eef2ff;color:#1e40af">${esc(state.grade)}</span>`:""}
+        ${isEngWord?`<span style="width:14px"></span><span class="lbl">年级语境：</span><span class="badge" style="background:#f5f3ff;color:#6d28d9">${esc(state.grade)}</span>`:""}
         <span style="flex:1"></span>
         <input id="gnSearch" class="search-input" style="width:200px" placeholder="搜索…" value="${esc(v.q)}" />
       </div>
@@ -2457,7 +2457,7 @@
   function wgBind(fn){ const mb=$("#modal-body"); if(wgBound) mb.removeEventListener("click", wgBound); wgBound=fn; mb.addEventListener("click", wgBound); }
   function wgShell(title, sub, html){
     $("#modal-body").innerHTML = `
-      <div class="m-type"><span class="badge" style="background:#ecfdf5;color:#047857">🎮 单词游戏</span> <span class="badge" style="background:#eef2ff;color:#4f46e5">${esc(title)}</span></div>
+      <div class="m-type"><span class="badge" style="background:#ecfdf5;color:#047857">🎮 单词游戏</span> <span class="badge" style="background:#f5f3ff;color:#7c3aed">${esc(title)}</span></div>
       <h3 class="m-title">${esc(sub)}</h3>
       <div class="wg">${html}</div>`;
   }
@@ -2692,7 +2692,7 @@
         ${cnTypes.map(t=>`<button class="chip ${cnView.type===t?"on":""}" data-cn-type="${t}">${t}</button>`).join("")}
         <button class="chip" data-cn-add title="自定义添加板块或板块下的内容，添加后归集到「📚 资源」页">＋ 添加</button>
         <span style="flex:1"></span>
-        <button class="chip" data-cn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案" style="background:#e0e7ff;color:#3730a3;border-color:#c7d2fe;font-weight:600">闪卡</button>
+        <button class="chip" data-cn-flash title="把当前筛选的卡片变成一副闪卡：看正面猜意思，点卡翻面对答案" style="background:#ede9fe;color:#5b21b6;border-color:#ddd6fe;font-weight:600">闪卡</button>
         <input id="cnSearch" class="search-input" style="width:200px" placeholder="在语文内搜索…" value="${esc(cnView.q)}" />
       </div>
       ${grades.length?`
@@ -3256,7 +3256,7 @@
     body.innerHTML = `
       <div class="m-type">${badge("思维母题")}
         <span class="badge" style="background:#fff7ed;color:#ea580c">🧠 练习模式</span>
-        <span class="badge" style="background:#eef2ff;color:#4f46e5">共 ${total} 题 · 均匀打散自 ${topics} 个专题</span>
+        <span class="badge" style="background:#f5f3ff;color:#7c3aed">共 ${total} 题 · 均匀打散自 ${topics} 个专题</span>
       </div>
       <h3 class="m-title">数学思维母题 · 每日打散练习</h3>
       <p class="m-sub">题目来自${topics}大重点思维母题，已按天确定性打乱并跨专题均匀交错分布；每题配「💡 答案提示」按钮，先自己思考再对照提示。</p>
@@ -3701,7 +3701,7 @@
     el.innerHTML = `
       <div class="subj-head"><h2>🛠 内容后台</h2><span class="cnt">管理奖励 · 扣分 · 积分规则 · 云端同步 · 数据备份（添加素材已移至「📚 资源中心」）</span></div>
       <div class="chips">
-        <span class="badge" style="background:#eef2ff;color:#3730a3">🔒 已登录：${esc(state.admin.user)}</span>
+        <span class="badge" style="background:#f5f3ff;color:#5b21b6">🔒 已登录：${esc(state.admin.user)}</span>
         <button class="btn" id="btnChgPwd">🔑 修改密码</button>
         <button class="btn" id="btnLogout">退出登录</button>
       </div>
@@ -3761,7 +3761,7 @@
       <div class="chips"><button class="btn primary" id="arcNow">💾 立即存档</button></div>
       <div class="admin-list">
         ${(()=>{ const arcs=loadArchives(); return arcs.length? arcs.map((a,i)=>`<div class="admin-item">
-            <div class="ai-main"><b>${esc(a.t)}</b> <span class="badge" style="background:${a.auto?"#f1f5f9":"#eef2ff"};color:${a.auto?"#475569":"#3730a3"}">${a.auto?"自动":"手动"}</span> <span style="font-size:13px;color:var(--muted)">${esc(a.note||"")}</span> <span style="font-size:12px;color:var(--muted)">${(a.size/1024).toFixed(1)} KB</span></div>
+            <div class="ai-main"><b>${esc(a.t)}</b> <span class="badge" style="background:${a.auto?"#f1f5f9":"#f5f3ff"};color:${a.auto?"#475569":"#5b21b6"}">${a.auto?"自动":"手动"}</span> <span style="font-size:13px;color:var(--muted)">${esc(a.note||"")}</span> <span style="font-size:12px;color:var(--muted)">${(a.size/1024).toFixed(1)} KB</span></div>
             <div style="display:flex;gap:6px;flex:0 0 auto">
               <button class="btn" data-arc-restore="${i}">⤺ 还原此版本</button>
               <button class="va-del" data-arc-del="${i}" title="删除存档">✕</button>
